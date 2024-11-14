@@ -20,6 +20,8 @@ Non-exhaustive list of some of the biggest and most important features planned:
 
 ## Syntax and Grammar
 
+[Current Grammar](https://bnfplayground.pauliankline.com/?bnf=%3CDIGIT%3E%20::%3D%20%5B0-9%5D%0A%3CALPHA%3E%20::%3D%20%5Ba-z%5D%20%7C%20%5BA-Z%5D%20%7C%20%22_%22%0A%3CNUMBER%3E%20::%3D%20%3CDIGIT%3E+%20(%22.%22%20%3CDIGIT%3E+)?%0A%3CIDENTIFIER%3E%20::%3D%20%3CALPHA%3E%20(%3CALPHA%3E%20%7C%20%3CDIGIT%3E)*%0A/*%20Any%20character%20between%20the%20quotes%20*/%0A%3CSTRING%3E%20::%3D%20%22%5C%22%22%20(%5Ba-z%5D%20%7C%20%5BA-Z%5D%20%7C%20%5B0-9%5D)*%20%22%5C%22%22%0A%3CBOOL%3E%20::%3D%20%22true%22%20%7C%20%22false%22%0A%3CNULL%3E%20::%3D%20%22null%22%0A%0A%3Cprimary%3E%20::%3D%20%3CIDENTIFIER%3E%20%7C%20%3CSTRING%3E%20%7C%20%3CBOOL%3E%20%7C%20%3CNULL%3E%20%7C%20%22this%22%20%7C%20%22(%22%20%3Cexpression%3E%20%22)%22%0A%3Cunary%3E%20::%3D%20(%22!%22%20%7C%20%22-%22)?%20%3Cprimary%3E%0A%3Cfactor%3E%20::%3D%20%3Cunary%3E%20((%22/%22%20%7C%20%22*%22)%20%3Cunary%3E)*%0A%3Cterm%3E%20::%3D%20%3Cfactor%3E%20((%22+%22%20%7C%20%22-%22)%20%3Cfactor%3E)*%0A%3Ccomparison%3E%20::%3D%20%3Cterm%3E%20((%22%3C%22%20%7C%20%22%3C%3D%22%20%7C%20%22%3E%3D%22%20%7C%20%22%3E%22)%20%3Cterm%3E)*%0A%3Cequality%3E%20::%3D%20%3Ccomparison%3E%20((%22%3D%3D%22%20%7C%20%22!%3D%22)%20%3Ccomparison%3E)*%0A%3Cand%3E%20::%3D%20%3Cequality%3E%20(%22and%22%20%3Cequality%3E)*%0A%3Cor%3E%20::%3D%20%3Cand%3E%20(%22or%22%20%3Cand%3E)*%0A%3Cassignment%3E%20::%3D%20(%3CIDENTIFIER%3E%20%22%3D%22%20%3Cassignment%3E)%20%7C%20%3Cor%3E%0A%0A%3Cexpression%3E%20::%3D%20%3Cassignment%3E%0A&name=)
+
 ### Types
 
 - bool
@@ -48,6 +50,9 @@ Non-exhaustive list of some of the biggest and most important features planned:
 
 // Logical
 and, or
+
+// Unary
+!, -
 ```
 
 ### Control Structures
