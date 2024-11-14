@@ -76,10 +76,6 @@ while (condition) block
 
 ---
 
-while (condition) : (continue-expr) block
-
----
-
 for (initializer;condition;continue-expr) block
 ```
 
