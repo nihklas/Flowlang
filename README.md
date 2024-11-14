@@ -20,14 +20,136 @@ Non-exhaustive list of some of the biggest and most important features planned:
 
 ## Syntax and Grammar
 
-TODO:
+### Types
+
+- bool
+- int
+- float
+- string
+- channel
+- struct (later)
+- array (later)
+
+### Literals
+
+- Digits/Numbers (`1`, `1234`, `12.34`)
+- String Literals (`"String"`) 
+- `true`/`false`
+- `null`
+
+### Operators
+
+```
+// arithmetic
++, -, *, /
+
+// Comparison
+==, <=, >=, != 
+
+// Logical
+and, or
+```
+
+### Control Structures
+
+Blocks:
+```
+{
+    // This is a block
+}
+```
+
+Conditionals:
+```
+if (condition) block
+
+---
+
+if (condition) block
+else block
+```
+
+Loops:
+
+```
+while (condition) block
+
+---
+
+while (condition) : (continue-expr) block
+
+---
+
+for (initializer;condition;continue-expr) block
+```
+
+Functions:
+
+```
+func identifier(parameters) returntype block
+
+---
+
+// closure / anonymous function
+func(parameters) use (closure-values) returntype block
+
+---
+
+// method on a struct
+meth identifier(parameters) returntype block
+```
+
+Channel:
+
+```
+channel identifier(options)
+
+--- 
+
+// (chn is a channel "object")
+
+// reading
+chn -> variable
+
+// writing
+chn <- value
+```
+
+### Async function-call
+
+```
+flow call()
+```
+
+### Errors
+
+`err` is a keyword, which itself is the value of the current error in a catch block. It can also be
+used to create or reference an Error
+
+```
+func() catch block
+
+try func()
+// this is the same as:
+func() catch return err
+
+//Errors must be specified in the return type with an Exclamation Mark (`!`)
+func thisMayFail() !void block
+
+//To create an error:
+var myError = err.MyErrorName
+if (myError == err.MyErrorName) block
+```
+
+
+### TODO:
 
 - types
 - primitives
 - variables, constants
 - blocks
 - compile errors
-- if/else
+- conditional
 - loops (while)
 - function
 - closures (php inspired syntax)
@@ -35,7 +157,7 @@ TODO:
 - async-/go-like keyword to execute a function concurrently
 - arrays/lists
 - structs/objects
-- methods (?), would be just syntax sugar for functions with a special parameter
+- methods, would be just syntax sugar for functions with a special parameter
 - VM Extensions
 - Error Handling (as Values? special syntax like Zig?)
 
