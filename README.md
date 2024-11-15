@@ -4,7 +4,7 @@ A language that is highly inspired by Golang's Goroutines and Channels.
 
 It will be a compiled, garbage collected language implemented in Zig. 
 
-It is primarily a personal project to learn how to implement concurrency modules on top of threads,
+It is primarily a personal project to learn how to implement concurrency models on top of threads,
 as well as how to make and design a toy language from scratch.
 
 ## Features and Details
