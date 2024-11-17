@@ -10,3 +10,7 @@ pub fn main() !void {
 test "Token" {
     _ = @import("Token.zig");
 }
+
+test "Scanner" {
+    _ = @import("Scanner.zig");
+}

@@ -16,6 +16,8 @@ pub const Type = enum {
     @")",
     @"{",
     @"}",
+    @">",
+    @"<",
 
     // Two Characters
     @"==",
@@ -72,5 +74,14 @@ pub const ReservedKeywords = std.StaticStringMap(Type).initComptime(.{
     .{ "string", .string },
     .{ "channel", .channel },
 });
+
+pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+    try writer.print("Token[{{{s}}} \"{s}\" {d}/{d}]", .{
+        @tagName(self.type),
+        self.lexeme,
+        self.location.line,
+        self.location.column,
+    });
+}
 
 const std = @import("std");
