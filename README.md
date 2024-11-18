@@ -21,9 +21,8 @@ Non-exhaustive list of some of the biggest and most important features planned:
 ## TODO:
 
 - [x] Scanner
-- [ ] Parser
+- [ ] Parser/AST
 - [ ] Input Handling (File Reading, REPL?)
-- [ ] AST
 - [ ] SeMa
 
 ## Syntax and Grammar
