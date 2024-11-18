@@ -197,7 +197,7 @@ fn expectTokensEqual(actual: []const Token, expected: []const Token) !void {
     }
 }
 
-test scan {
+test "scan variable with string, constant with float" {
     const alloc = testing.allocator;
 
     const input =
@@ -227,6 +227,40 @@ test scan {
         .{ .type = .@";", .lexeme = ";", .location = .{ .line = 2, .column = 25 } },
 
         .{ .type = .EOF, .lexeme = "", .location = .{ .line = 3, .column = 1 } },
+    };
+
+    try expectTokensEqual(tokens, expected);
+}
+
+test "scan binary operators" {
+    const alloc = testing.allocator;
+
+    const input =
+        \\const num: int = 1 + 2 - 3 * 4 / 5;
+        \\
+    ;
+
+    const tokens = try scan(alloc, input);
+    defer alloc.free(tokens);
+
+    const expected: []const Token = &.{
+        .{ .type = .@"const", .lexeme = "const", .location = .{ .line = 1, .column = 1 } },
+        .{ .type = .identifier, .lexeme = "num", .location = .{ .line = 1, .column = 7 } },
+        .{ .type = .@":", .lexeme = ":", .location = .{ .line = 1, .column = 10 } },
+        .{ .type = .int, .lexeme = "int", .location = .{ .line = 1, .column = 12 } },
+        .{ .type = .@"=", .lexeme = "=", .location = .{ .line = 1, .column = 16 } },
+        .{ .type = .number, .lexeme = "1", .location = .{ .line = 1, .column = 18 } },
+        .{ .type = .@"+", .lexeme = "+", .location = .{ .line = 1, .column = 20 } },
+        .{ .type = .number, .lexeme = "2", .location = .{ .line = 1, .column = 22 } },
+        .{ .type = .@"-", .lexeme = "-", .location = .{ .line = 1, .column = 24 } },
+        .{ .type = .number, .lexeme = "3", .location = .{ .line = 1, .column = 26 } },
+        .{ .type = .@"*", .lexeme = "*", .location = .{ .line = 1, .column = 28 } },
+        .{ .type = .number, .lexeme = "4", .location = .{ .line = 1, .column = 30 } },
+        .{ .type = .@"/", .lexeme = "/", .location = .{ .line = 1, .column = 32 } },
+        .{ .type = .number, .lexeme = "5", .location = .{ .line = 1, .column = 34 } },
+        .{ .type = .@";", .lexeme = ";", .location = .{ .line = 1, .column = 35 } },
+
+        .{ .type = .EOF, .lexeme = "", .location = .{ .line = 2, .column = 1 } },
     };
 
     try expectTokensEqual(tokens, expected);
