@@ -292,6 +292,20 @@ test "Stmt.createLoop" {
     defer testing_alloc.destroy(loop);
 }
 
+test "Stmt.createIf" {
+    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    defer testing_alloc.destroy(condition);
+
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    defer testing_alloc.destroy(expr);
+
+    const expr_stmt = Stmt.createExpr(testing_alloc, expr);
+    defer testing_alloc.destroy(expr_stmt);
+
+    const if_stmt = Stmt.createIf(testing_alloc, condition, expr_stmt, null);
+    defer testing_alloc.destroy(if_stmt);
+}
+
 test "Stmt.createVariable" {
     const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
     defer testing_alloc.destroy(condition);
