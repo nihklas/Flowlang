@@ -34,4 +34,15 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
+
+    const check_exe = b.addExecutable(.{
+        .name = "flowlang",
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const check_step = b.step("check", "Check Step for LSP");
+    check_step.dependOn(test_step);
+    check_step.dependOn(&check_exe.step);
 }
