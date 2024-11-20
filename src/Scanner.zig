@@ -15,6 +15,12 @@ pub fn scan(alloc: Allocator, input: []const u8) ![]const Token {
         .tokens = .init(alloc),
     };
     try scanner.scanTokens();
+    errdefer scanner.tokens.deinit();
+
+    if (scanner.has_error) {
+        return error.SyntaxError;
+    }
+
     return try scanner.tokens.toOwnedSlice();
 }
 
@@ -87,7 +93,8 @@ fn string(self: *Scanner) !void {
 
     if (self.isAtEnd()) {
         self.has_error = true;
-        std.debug.print("Syntax Error: unterminated string\n", .{});
+        stderr.writeAll("Syntax Error: unterminated string\n") catch {};
+        return;
     }
 
     self.advance(); // closing "
@@ -177,13 +184,6 @@ fn makeTokenWithValue(self: *Scanner, token_type: Token.Type, value: []const u8)
     });
 }
 
-const Scanner = @This();
-
-const std = @import("std");
-const Token = @import("Token.zig");
-const Allocator = std.mem.Allocator;
-const testing = std.testing;
-
 fn expectTokensEqual(actual: []const Token, expected: []const Token) !void {
     try testing.expect(actual.len == expected.len);
     if (actual.len == expected.len) {
@@ -197,16 +197,14 @@ fn expectTokensEqual(actual: []const Token, expected: []const Token) !void {
 }
 
 test "scan variable with string, constant with float" {
-    const alloc = testing.allocator;
-
     const input =
         \\var name: string = "FlowLang"; // This will be ignored
         \\const num: float = 12.34;
         \\
     ;
 
-    const tokens = try scan(alloc, input);
-    defer alloc.free(tokens);
+    const tokens = try scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
 
     const expected: []const Token = &.{
         .{ .type = .@"var", .lexeme = "var", .line = 1, .column = 1 },
@@ -232,15 +230,13 @@ test "scan variable with string, constant with float" {
 }
 
 test "scan binary operators" {
-    const alloc = testing.allocator;
-
     const input =
         \\const num: int = 1 + 2 - 3 * 4 / 5;
         \\
     ;
 
-    const tokens = try scan(alloc, input);
-    defer alloc.free(tokens);
+    const tokens = try scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
 
     const expected: []const Token = &.{
         .{ .type = .@"const", .lexeme = "const", .line = 1, .column = 1 },
@@ -264,3 +260,23 @@ test "scan binary operators" {
 
     try expectTokensEqual(tokens, expected);
 }
+
+test "Syntax Error" {
+    const input =
+        \\const num: string = "unterminated;
+        \\
+    ;
+
+    const tokens = scan(testing_alloc, input);
+    try testing.expectError(error.SyntaxError, tokens);
+}
+
+const Scanner = @This();
+
+const std = @import("std");
+const Token = @import("Token.zig");
+const Allocator = std.mem.Allocator;
+const stderr = std.io.getStdErr().writer();
+
+const testing = std.testing;
+const testing_alloc = testing.allocator;
