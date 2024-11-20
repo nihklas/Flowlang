@@ -5,10 +5,14 @@ pub fn main() !void {
     std.debug.print("🚧Under Construction🚧\n", .{});
 }
 
-test "Token" {
+test "Token.zig" {
     _ = @import("Token.zig");
 }
 
-test "Scanner" {
+test "Scanner.zig" {
     _ = @import("Scanner.zig");
+}
+
+test "ast.zig" {
+    _ = @import("ast.zig");
 }
