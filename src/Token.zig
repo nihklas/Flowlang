@@ -1,5 +1,6 @@
 type: Type,
-location: struct { line: usize, column: usize },
+line: u32,
+column: u32,
 lexeme: []const u8,
 
 pub const Type = enum {
@@ -79,8 +80,8 @@ pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, w
     try writer.print("Token[{{{s}}} \"{s}\" {d}/{d}]", .{
         @tagName(self.type),
         self.lexeme,
-        self.location.line,
-        self.location.column,
+        self.line,
+        self.column,
     });
 }
 

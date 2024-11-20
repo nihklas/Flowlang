@@ -3,9 +3,9 @@ input: []const u8,
 tokens: std.ArrayList(Token),
 start: usize = 0,
 current: usize = 0,
-line: usize = 1,
-column: usize = 1,
-lexeme_column: usize = 0,
+line: u32 = 1,
+column: u32 = 1,
+lexeme_column: u32 = 0,
 has_error: bool = false,
 
 pub fn scan(alloc: Allocator, input: []const u8) ![]const Token {
@@ -28,10 +28,8 @@ fn scanTokens(self: *Scanner) !void {
     try self.tokens.append(.{
         .type = .EOF,
         .lexeme = "",
-        .location = .{
-            .line = self.line,
-            .column = self.lexeme_column,
-        },
+        .line = self.line,
+        .column = self.lexeme_column,
     });
 }
 
@@ -161,10 +159,8 @@ fn makeToken(self: *Scanner, token_type: Token.Type) !void {
     try self.tokens.append(.{
         .type = token_type,
         .lexeme = lexeme,
-        .location = .{
-            .line = self.line,
-            .column = self.lexeme_column,
-        },
+        .line = self.line,
+        .column = self.lexeme_column,
     });
 }
 
@@ -172,10 +168,8 @@ fn makeTokenWithValue(self: *Scanner, token_type: Token.Type, value: []const u8)
     try self.tokens.append(.{
         .type = token_type,
         .lexeme = value,
-        .location = .{
-            .line = self.line,
-            .column = self.lexeme_column,
-        },
+        .line = self.line,
+        .column = self.lexeme_column,
     });
 }
 
@@ -191,7 +185,8 @@ fn expectTokensEqual(actual: []const Token, expected: []const Token) !void {
     if (actual.len == expected.len) {
         for (expected, actual) |e, a| {
             try testing.expectEqual(e.type, a.type);
-            try testing.expectEqual(e.location, a.location);
+            try testing.expectEqual(e.line, a.line);
+            try testing.expectEqual(e.column, a.column);
             try testing.expectEqualSlices(u8, e.lexeme, a.lexeme);
         }
     }
@@ -210,23 +205,23 @@ test "scan variable with string, constant with float" {
     defer alloc.free(tokens);
 
     const expected: []const Token = &.{
-        .{ .type = .@"var", .lexeme = "var", .location = .{ .line = 1, .column = 1 } },
-        .{ .type = .identifier, .lexeme = "name", .location = .{ .line = 1, .column = 5 } },
-        .{ .type = .@":", .lexeme = ":", .location = .{ .line = 1, .column = 9 } },
-        .{ .type = .string, .lexeme = "string", .location = .{ .line = 1, .column = 11 } },
-        .{ .type = .@"=", .lexeme = "=", .location = .{ .line = 1, .column = 18 } },
-        .{ .type = .string_literal, .lexeme = "FlowLang", .location = .{ .line = 1, .column = 20 } },
-        .{ .type = .@";", .lexeme = ";", .location = .{ .line = 1, .column = 30 } },
+        .{ .type = .@"var", .lexeme = "var", .line = 1, .column = 1 },
+        .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 5 },
+        .{ .type = .@":", .lexeme = ":", .line = 1, .column = 9 },
+        .{ .type = .string, .lexeme = "string", .line = 1, .column = 11 },
+        .{ .type = .@"=", .lexeme = "=", .line = 1, .column = 18 },
+        .{ .type = .string_literal, .lexeme = "FlowLang", .line = 1, .column = 20 },
+        .{ .type = .@";", .lexeme = ";", .line = 1, .column = 30 },
 
-        .{ .type = .@"const", .lexeme = "const", .location = .{ .line = 2, .column = 1 } },
-        .{ .type = .identifier, .lexeme = "num", .location = .{ .line = 2, .column = 7 } },
-        .{ .type = .@":", .lexeme = ":", .location = .{ .line = 2, .column = 10 } },
-        .{ .type = .float, .lexeme = "float", .location = .{ .line = 2, .column = 12 } },
-        .{ .type = .@"=", .lexeme = "=", .location = .{ .line = 2, .column = 18 } },
-        .{ .type = .number, .lexeme = "12.34", .location = .{ .line = 2, .column = 20 } },
-        .{ .type = .@";", .lexeme = ";", .location = .{ .line = 2, .column = 25 } },
+        .{ .type = .@"const", .lexeme = "const", .line = 2, .column = 1 },
+        .{ .type = .identifier, .lexeme = "num", .line = 2, .column = 7 },
+        .{ .type = .@":", .lexeme = ":", .line = 2, .column = 10 },
+        .{ .type = .float, .lexeme = "float", .line = 2, .column = 12 },
+        .{ .type = .@"=", .lexeme = "=", .line = 2, .column = 18 },
+        .{ .type = .number, .lexeme = "12.34", .line = 2, .column = 20 },
+        .{ .type = .@";", .lexeme = ";", .line = 2, .column = 25 },
 
-        .{ .type = .EOF, .lexeme = "", .location = .{ .line = 3, .column = 1 } },
+        .{ .type = .EOF, .lexeme = "", .line = 3, .column = 1 },
     };
 
     try expectTokensEqual(tokens, expected);
@@ -244,23 +239,23 @@ test "scan binary operators" {
     defer alloc.free(tokens);
 
     const expected: []const Token = &.{
-        .{ .type = .@"const", .lexeme = "const", .location = .{ .line = 1, .column = 1 } },
-        .{ .type = .identifier, .lexeme = "num", .location = .{ .line = 1, .column = 7 } },
-        .{ .type = .@":", .lexeme = ":", .location = .{ .line = 1, .column = 10 } },
-        .{ .type = .int, .lexeme = "int", .location = .{ .line = 1, .column = 12 } },
-        .{ .type = .@"=", .lexeme = "=", .location = .{ .line = 1, .column = 16 } },
-        .{ .type = .number, .lexeme = "1", .location = .{ .line = 1, .column = 18 } },
-        .{ .type = .@"+", .lexeme = "+", .location = .{ .line = 1, .column = 20 } },
-        .{ .type = .number, .lexeme = "2", .location = .{ .line = 1, .column = 22 } },
-        .{ .type = .@"-", .lexeme = "-", .location = .{ .line = 1, .column = 24 } },
-        .{ .type = .number, .lexeme = "3", .location = .{ .line = 1, .column = 26 } },
-        .{ .type = .@"*", .lexeme = "*", .location = .{ .line = 1, .column = 28 } },
-        .{ .type = .number, .lexeme = "4", .location = .{ .line = 1, .column = 30 } },
-        .{ .type = .@"/", .lexeme = "/", .location = .{ .line = 1, .column = 32 } },
-        .{ .type = .number, .lexeme = "5", .location = .{ .line = 1, .column = 34 } },
-        .{ .type = .@";", .lexeme = ";", .location = .{ .line = 1, .column = 35 } },
+        .{ .type = .@"const", .lexeme = "const", .line = 1, .column = 1 },
+        .{ .type = .identifier, .lexeme = "num", .line = 1, .column = 7 },
+        .{ .type = .@":", .lexeme = ":", .line = 1, .column = 10 },
+        .{ .type = .int, .lexeme = "int", .line = 1, .column = 12 },
+        .{ .type = .@"=", .lexeme = "=", .line = 1, .column = 16 },
+        .{ .type = .number, .lexeme = "1", .line = 1, .column = 18 },
+        .{ .type = .@"+", .lexeme = "+", .line = 1, .column = 20 },
+        .{ .type = .number, .lexeme = "2", .line = 1, .column = 22 },
+        .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 24 },
+        .{ .type = .number, .lexeme = "3", .line = 1, .column = 26 },
+        .{ .type = .@"*", .lexeme = "*", .line = 1, .column = 28 },
+        .{ .type = .number, .lexeme = "4", .line = 1, .column = 30 },
+        .{ .type = .@"/", .lexeme = "/", .line = 1, .column = 32 },
+        .{ .type = .number, .lexeme = "5", .line = 1, .column = 34 },
+        .{ .type = .@";", .lexeme = ";", .line = 1, .column = 35 },
 
-        .{ .type = .EOF, .lexeme = "", .location = .{ .line = 2, .column = 1 } },
+        .{ .type = .EOF, .lexeme = "", .line = 2, .column = 1 },
     };
 
     try expectTokensEqual(tokens, expected);
