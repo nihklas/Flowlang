@@ -36,7 +36,7 @@ fn scanTokens(self: *Scanner) !void {
         .type = .EOF,
         .lexeme = "",
         .line = self.line,
-        .column = self.lexeme_column,
+        .column = self.column,
     });
 }
 
@@ -302,6 +302,20 @@ test "Syntax Error" {
 
     const tokens = scan(testing_alloc, input);
     try testing.expectError(error.SyntaxError, tokens);
+}
+
+test "Unexpected Char in String" {
+    const input =
+        \\"@"
+    ;
+
+    const tokens = try scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    try expectTokensEqual(tokens, &.{
+        .{ .type = .string_literal, .lexeme = "@", .line = 1, .column = 1 },
+        .{ .type = .EOF, .lexeme = "", .line = 1, .column = 4 },
+    });
 }
 
 const Scanner = @This();
