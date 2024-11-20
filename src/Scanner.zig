@@ -9,6 +9,7 @@ lexeme_column: u32 = 0,
 has_error: bool = false,
 
 pub fn scan(alloc: Allocator, input: []const u8) ![]const Token {
+    error_reporter.source = input;
     var scanner: Scanner = .{
         .input = input,
         .alloc = alloc,
@@ -78,22 +79,42 @@ fn nextToken(self: *Scanner) !void {
                 try self.makeToken(.@"<");
             }
         },
-        else => try self.keywordOrIdentifier(),
+        else => {
+            if (std.ascii.isAlphabetic(c)) {
+                try self.keywordOrIdentifier();
+            } else {
+                self.has_error = true;
+                error_reporter.reportError(
+                    .{ .type = .string_literal, .lexeme = "", .line = self.line, .column = self.column - 1 },
+                    "SyntaxError: Unexpected character '{c}'",
+                    .{c},
+                );
+            }
+        },
     }
 }
 
 fn string(self: *Scanner) !void {
     while (!self.check('"') and !self.isAtEnd()) {
         if (self.check('\n')) {
-            self.line += 1;
-            self.column = 0;
+            self.has_error = true;
+            error_reporter.reportError(
+                .{ .type = .string_literal, .lexeme = "", .line = self.line, .column = self.column },
+                "SyntaxError: unterminated string",
+                .{},
+            );
+            return;
         }
         self.advance();
     }
 
     if (self.isAtEnd()) {
         self.has_error = true;
-        stderr.writeAll("Syntax Error: unterminated string\n") catch {};
+        error_reporter.reportError(
+            .{ .type = .string_literal, .lexeme = "", .line = self.line, .column = self.column },
+            "SyntaxError: unterminated string",
+            .{},
+        );
         return;
     }
 
@@ -261,9 +282,21 @@ test "scan binary operators" {
     try expectTokensEqual(tokens, expected);
 }
 
+test "Multiline Strings" {
+    const input =
+        \\const num: string = "we don't support
+        \\      multiline
+        \\      strings";
+        \\
+    ;
+
+    const tokens = scan(testing_alloc, input);
+    try testing.expectError(error.SyntaxError, tokens);
+}
+
 test "Syntax Error" {
     const input =
-        \\const num: string = "unterminated;
+        \\const @num: string = "we don't support";
         \\
     ;
 
@@ -275,8 +308,8 @@ const Scanner = @This();
 
 const std = @import("std");
 const Token = @import("Token.zig");
+const error_reporter = @import("error_reporter.zig");
 const Allocator = std.mem.Allocator;
-const stderr = std.io.getStdErr().writer();
 
 const testing = std.testing;
 const testing_alloc = testing.allocator;
