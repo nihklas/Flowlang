@@ -1,4 +1,4 @@
-const Expr = union(enum) {
+pub const Expr = union(enum) {
     literal: struct { value: Token },
     grouping: struct { expr: *Expr },
     unary: struct { op: Token, expr: *Expr },
@@ -55,7 +55,7 @@ const Expr = union(enum) {
     }
 };
 
-const Stmt = union(enum) {
+pub const Stmt = union(enum) {
     // NOTE: Only temporary, until there is support for a std library
     print: struct { expr: *Expr },
     expr: struct { expr: *Expr },

@@ -34,7 +34,7 @@ fn scanTokens(self: *Scanner) !void {
 }
 
 fn nextToken(self: *Scanner) !void {
-    const c = self.advance();
+    const c = self.advanceWithValue();
     switch (c) {
         ' ', '\t', '\r' => {},
         '\n' => {
@@ -58,7 +58,7 @@ fn nextToken(self: *Scanner) !void {
         '0'...'9' => try self.number(),
         '/' => {
             if (self.match('/')) {
-                while (!self.check('\n')) _ = self.advance();
+                while (!self.check('\n')) self.advance();
             } else {
                 try self.makeToken(.@"/");
             }
@@ -82,7 +82,7 @@ fn string(self: *Scanner) !void {
             self.line += 1;
             self.column = 0;
         }
-        _ = self.advance();
+        self.advance();
     }
 
     if (self.isAtEnd()) {
@@ -90,7 +90,7 @@ fn string(self: *Scanner) !void {
         std.debug.print("Syntax Error: unterminated string\n", .{});
     }
 
-    _ = self.advance(); // closing "
+    self.advance(); // closing "
 
     const value = self.input[self.start + 1 .. self.current - 1];
     try self.makeTokenWithValue(.string_literal, value);
@@ -98,13 +98,13 @@ fn string(self: *Scanner) !void {
 
 fn number(self: *Scanner) !void {
     while (std.ascii.isDigit(self.peek())) {
-        _ = self.advance();
+        self.advance();
     }
 
     if (self.check('.') and std.ascii.isDigit(self.peekNext())) {
-        _ = self.advance();
+        self.advance();
         while (std.ascii.isDigit(self.peek())) {
-            _ = self.advance();
+            self.advance();
         }
     }
 
@@ -113,7 +113,7 @@ fn number(self: *Scanner) !void {
 
 fn keywordOrIdentifier(self: *Scanner) !void {
     while (std.ascii.isAlphanumeric(self.peek())) {
-        _ = self.advance();
+        self.advance();
     }
 
     const text = self.input[self.start..self.current];
@@ -121,7 +121,11 @@ fn keywordOrIdentifier(self: *Scanner) !void {
     try self.makeToken(token_type);
 }
 
-fn advance(self: *Scanner) u8 {
+fn advance(self: *Scanner) void {
+    _ = self.advanceWithValue();
+}
+
+fn advanceWithValue(self: *Scanner) u8 {
     defer self.column += 1;
     defer self.current += 1;
     return self.input[self.current];
