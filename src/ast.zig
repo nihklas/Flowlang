@@ -53,13 +53,32 @@ pub const Expr = union(enum) {
         };
         return new_expr;
     }
+
+    pub fn destroy(self: *Expr, alloc: Allocator) void {
+        switch (self.*) {
+            .literal => {},
+            .grouping => |grouping| grouping.expr.destroy(alloc),
+            .unary => |unary| unary.expr.destroy(alloc),
+            .assignment => |assignment| assignment.value.destroy(alloc),
+            .binary => |binary| {
+                binary.lhs.destroy(alloc);
+                binary.rhs.destroy(alloc);
+            },
+            .logical => |logical| {
+                logical.lhs.destroy(alloc);
+                logical.rhs.destroy(alloc);
+            },
+        }
+
+        alloc.destroy(self);
+    }
 };
 
 pub const Stmt = union(enum) {
     // NOTE: Only temporary, until there is support for a std library
     print: struct { expr: *Expr },
     expr: struct { expr: *Expr },
-    block: struct { stmts: []const *Stmt },
+    block: struct { stmts: []*Stmt },
     loop: struct { condition: *Expr, body: *Stmt },
     @"if": struct { condition: *Expr, true_branch: *Stmt, false_branch: ?*Stmt },
     @"return": struct { value: *Expr },
@@ -75,7 +94,7 @@ pub const Stmt = union(enum) {
         name: Token,
         // TODO: Add Type information
     },
-    function: struct { name: Token, params: []const *Stmt, body: []const *Stmt },
+    function: struct { name: Token, params: []*Stmt, body: []*Stmt },
 
     pub fn createPrint(alloc: Allocator, expr: *Expr) *Stmt {
         const stmt = alloc.create(Stmt) catch @panic("OOM");
@@ -95,8 +114,9 @@ pub const Stmt = union(enum) {
 
     pub fn createBlock(alloc: Allocator, stmts: []const *Stmt) *Stmt {
         const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const duped_stmts = alloc.dupe(*Stmt, stmts) catch @panic("OOM");
         stmt.* = .{
-            .block = .{ .stmts = stmts },
+            .block = .{ .stmts = duped_stmts },
         };
         return stmt;
     }
@@ -163,110 +183,126 @@ pub const Stmt = union(enum) {
 
     pub fn createFunction(alloc: Allocator, name: Token, params: []const *Stmt, body: []const *Stmt) *Stmt {
         const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const duped_params = alloc.dupe(*Stmt, params) catch @panic("OOM");
+        const duped_body = alloc.dupe(*Stmt, body) catch @panic("OOM");
         stmt.* = .{
-            .function = .{ .name = name, .params = params, .body = body },
+            .function = .{ .name = name, .params = duped_params, .body = duped_body },
         };
         return stmt;
+    }
+
+    pub fn destroy(self: *Stmt, alloc: Allocator) void {
+        switch (self.*) {
+            .channel_read, .channel => {},
+            .print => |print| print.expr.destroy(alloc),
+            .expr => |expr| expr.expr.destroy(alloc),
+            .block => |block| {
+                for (block.stmts) |stmt| {
+                    stmt.destroy(alloc);
+                }
+                alloc.free(block.stmts);
+            },
+            .loop => |loop| {
+                loop.body.destroy(alloc);
+                loop.condition.destroy(alloc);
+            },
+            .@"if" => |if_stmt| {
+                if_stmt.condition.destroy(alloc);
+                if_stmt.true_branch.destroy(alloc);
+                if (if_stmt.false_branch) |false_branch| {
+                    false_branch.destroy(alloc);
+                }
+            },
+            .@"return" => |return_stmt| return_stmt.value.destroy(alloc),
+            .channel_write => |channel_write| channel_write.value.destroy(alloc),
+            .variable => |variable| if (variable.value) |value| value.destroy(alloc),
+            .function => |function| {
+                for (function.params) |param| {
+                    param.destroy(alloc);
+                }
+                alloc.free(function.params);
+
+                for (function.body) |stmt| {
+                    stmt.destroy(alloc);
+                }
+                alloc.free(function.body);
+            },
+        }
+        alloc.destroy(self);
     }
 };
 
 test "Expr.createLiteral" {
     const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(literal);
+    defer literal.destroy(testing_alloc);
 }
 
 test "Expr.createGrouping" {
     const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(literal);
-
     const grouping = Expr.createGrouping(testing_alloc, literal);
-    defer testing_alloc.destroy(grouping);
+    defer grouping.destroy(testing_alloc);
 }
 
 test "Expr.createUnary" {
     const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(literal);
-
     const unary = Expr.createUnary(testing_alloc, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, literal);
-    defer testing_alloc.destroy(unary);
+    defer unary.destroy(testing_alloc);
 }
 
 test "Expr.createBinary" {
     const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(left);
-
     const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(right);
-
     const binary = Expr.createBinary(testing_alloc, left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
-    defer testing_alloc.destroy(binary);
+    defer binary.destroy(testing_alloc);
 }
 
 test "Expr.createLogical" {
     const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(left);
-
     const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(right);
-
     const binary = Expr.createLogical(testing_alloc, left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
-    defer testing_alloc.destroy(binary);
+    defer binary.destroy(testing_alloc);
 }
 
 test "Expr.createAssignment" {
     const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(right);
-
     const assignment = Expr.createAssignment(testing_alloc, .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 }, right);
-    defer testing_alloc.destroy(assignment);
+    defer assignment.destroy(testing_alloc);
 }
 
 test "Stmt.createExpr" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    defer testing_alloc.destroy(expr_stmt);
+    defer expr_stmt.destroy(testing_alloc);
 }
 
 test "Stmt.createPrint" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const print = Stmt.createPrint(testing_alloc, expr);
-    defer testing_alloc.destroy(print);
+    defer print.destroy(testing_alloc);
 }
 
 test "Stmt.createBlock" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    defer testing_alloc.destroy(expr_stmt);
-
     const block = Stmt.createBlock(testing_alloc, &.{expr_stmt});
-    defer testing_alloc.destroy(block);
+    defer block.destroy(testing_alloc);
 }
 
 test "Stmt.createReturn" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const return_stmt = Stmt.createReturn(testing_alloc, expr);
-    defer testing_alloc.destroy(return_stmt);
+    defer return_stmt.destroy(testing_alloc);
 }
 
 test "Stmt.createChannel" {
     const channel = Stmt.createChannel(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(channel);
+    defer channel.destroy(testing_alloc);
 }
 
 test "Stmt.createChannelWrite" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const channel_write = Stmt.createChannelWrite(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 }, expr);
-    defer testing_alloc.destroy(channel_write);
+    defer channel_write.destroy(testing_alloc);
 }
 
 test "Stmt.createChannelRead" {
@@ -275,70 +311,47 @@ test "Stmt.createChannelRead" {
         .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 },
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
     );
-    defer testing_alloc.destroy(channel_read);
+    defer channel_read.destroy(testing_alloc);
 }
 
 test "Stmt.createLoop" {
     const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(condition);
-
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    defer testing_alloc.destroy(expr_stmt);
-
     const loop = Stmt.createLoop(testing_alloc, condition, expr_stmt);
-    defer testing_alloc.destroy(loop);
+    defer loop.destroy(testing_alloc);
 }
 
 test "Stmt.createIf" {
     const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(condition);
-
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    defer testing_alloc.destroy(expr_stmt);
-
     const if_stmt = Stmt.createIf(testing_alloc, condition, expr_stmt, null);
-    defer testing_alloc.destroy(if_stmt);
+    defer if_stmt.destroy(testing_alloc);
 }
 
 test "Stmt.createVariable" {
-    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(condition);
-
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const loop = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
         false,
         expr,
     );
-    defer testing_alloc.destroy(loop);
+    defer loop.destroy(testing_alloc);
 }
 
 test "Stmt.createFunction" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    defer testing_alloc.destroy(expr);
-
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    defer testing_alloc.destroy(expr_stmt);
-
     const variable = Stmt.createVariable(testing_alloc, .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 }, true, null);
-    defer testing_alloc.destroy(variable);
-
-    const loop = Stmt.createFunction(
+    const function = Stmt.createFunction(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
         &.{variable},
         &.{expr_stmt},
     );
-    defer testing_alloc.destroy(loop);
+    defer function.destroy(testing_alloc);
 }
 
 const testing = std.testing;
