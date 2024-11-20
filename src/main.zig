@@ -16,3 +16,7 @@ test "Scanner.zig" {
 test "ast.zig" {
     _ = @import("ast.zig");
 }
+
+test "Parser.zig" {
+    _ = @import("Parser.zig");
+}
