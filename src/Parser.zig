@@ -3,7 +3,7 @@ alloc: Allocator,
 current: usize = 0,
 has_error: bool = false,
 
-pub fn createAST(alloc: Allocator, tokens: []const Token) ParserError![]const *Stmt {
+pub fn createAST(alloc: Allocator, tokens: []const Token) ![]const *Stmt {
     var parser: Parser = .{
         .tokens = tokens,
         .alloc = alloc,
@@ -11,7 +11,7 @@ pub fn createAST(alloc: Allocator, tokens: []const Token) ParserError![]const *S
     return try parser.parse();
 }
 
-fn parse(self: *Parser) ParserError![]const *Stmt {
+fn parse(self: *Parser) ![]const *Stmt {
     var stmt_list: std.ArrayList(*Stmt) = .init(self.alloc);
     errdefer {
         for (stmt_list.items) |stmt| {
@@ -24,11 +24,16 @@ fn parse(self: *Parser) ParserError![]const *Stmt {
         if (self.declaration()) |stmt| {
             stmt_list.append(stmt) catch @panic("OOM");
         } else |_| {
-            try self.recover();
+            self.has_error = true;
+            self.recover();
         }
     }
 
     try self.consume(.EOF, "Expected EOF");
+
+    if (self.has_error) {
+        return error.ParseError;
+    }
 
     return stmt_list.toOwnedSlice() catch @panic("OOM");
 }
@@ -43,6 +48,8 @@ fn statement(self: *Parser) ParserError!*Stmt {
 
 fn expressionStatement(self: *Parser) ParserError!*Stmt {
     const expr = try self.expression();
+    errdefer expr.destroy(self.alloc);
+
     try self.consume(.@";", "Expected ';' after statement");
 
     return Stmt.createExpr(self.alloc, expr);
@@ -83,6 +90,7 @@ fn factor(self: *Parser) ParserError!*Expr {
 fn unary(self: *Parser) ParserError!*Expr {
     if (self.matchEither(.@"-", .@"!")) |op| {
         const expr = try self.unary();
+        errdefer expr.destroy(self.alloc);
         return Expr.createUnary(self.alloc, op, expr);
     }
 
@@ -127,21 +135,20 @@ fn primary(self: *Parser) ParserError!*Expr {
     return ParserError.UnexpectedToken;
 }
 
-fn recover(self: *Parser) !void {
-    while (!self.check(.EOF)) {
-        if (self.previous().type == .@";") break;
-        switch (self.peek().type) {
-            else => {},
-            .@"if",
-            .@"for",
-            .@"var",
-            .func,
-            .@"return",
-            .print,
-            => break,
-        }
-
-        _ = self.advance();
+fn recover(self: *Parser) void {
+    recover: switch (self.advance().type) {
+        .@";" => {},
+        .@"if",
+        .@"for",
+        .@"var",
+        .func,
+        .@"return",
+        .print,
+        .EOF,
+        => self.current -= 1,
+        else => {
+            continue :recover self.advance().type;
+        },
     }
 }
 
@@ -195,7 +202,7 @@ const testing = std.testing;
 const testing_alloc = testing.allocator;
 const Scanner = @import("Scanner.zig");
 
-test "Expression Statement" {
+test "Expression Statement with Literals" {
     const input =
         \\1;
         \\1.2;
@@ -240,6 +247,34 @@ test "Expression Statement" {
 
     try testing.expect(program[5].expr.expr.literal.value == .null);
     try testing.expect(program[5].expr.expr.literal.value.null == {});
+}
+
+test "Expression Statement with Unary" {
+    const input =
+        \\!false;
+        \\-5;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(2, program.len);
+
+    // We only have expression statements
+    for (program) |stmt| {
+        try testing.expect(stmt.* == .expr);
+        try testing.expect(stmt.expr.expr.* == .unary);
+    }
+
+    try testing.expect(program[0].expr.expr.unary.op.type == .@"!");
+    try testing.expect(program[1].expr.expr.unary.op.type == .@"-");
 }
 
 const ParserError = error{
