@@ -80,7 +80,15 @@ fn comparison(self: *Parser) ParserError!*Expr {
 }
 
 fn term(self: *Parser) ParserError!*Expr {
-    return self.factor();
+    var lhs = try self.factor();
+    errdefer lhs.destroy(self.alloc);
+
+    while (self.matchEither(.@"+", .@"-")) |op| {
+        const rhs = try self.factor();
+        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+    }
+
+    return lhs;
 }
 
 fn factor(self: *Parser) ParserError!*Expr {
@@ -138,6 +146,8 @@ fn primary(self: *Parser) ParserError!*Expr {
     if (self.match(.string_literal)) |token| {
         return Expr.createLiteral(self.alloc, token, .{ .string = token.lexeme });
     }
+
+    // TODO: Identifier
 
     if (self.match(.@"(")) |_| {
         const expr = try self.expression();
@@ -384,6 +394,73 @@ test "Expression Statement with Factors" {
             const lhs = program[2].expr.expr.binary.lhs;
             try testing.expect(lhs.* == .binary);
             try testing.expect(lhs.binary.op.type == .@"*");
+            try testing.expect(lhs.binary.rhs.* == .literal);
+            try testing.expect(lhs.binary.rhs.literal.value == .int);
+            try testing.expect(lhs.binary.rhs.literal.value.int == 3);
+
+            try testing.expect(lhs.binary.lhs.* == .literal);
+            try testing.expect(lhs.binary.lhs.literal.value == .int);
+            try testing.expect(lhs.binary.lhs.literal.value.int == 12);
+        }
+    }
+}
+
+test "Expression Statement with Terms" {
+    const input =
+        \\4 - 2;
+        \\3 + 3;
+        \\12 + 3 - 6;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(3, program.len);
+
+    for (program) |stmt| {
+        // We only have expression statements
+        try testing.expect(stmt.* == .expr);
+        // ...and all of them are binary
+        try testing.expect(stmt.expr.expr.* == .binary);
+    }
+
+    {
+        try testing.expect(program[0].expr.expr.binary.op.type == .@"-");
+        try testing.expect(program[0].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value.int == 4);
+        try testing.expect(program[0].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value.int == 2);
+    }
+
+    {
+        try testing.expect(program[1].expr.expr.binary.op.type == .@"+");
+        try testing.expect(program[1].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value.int == 3);
+        try testing.expect(program[1].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value.int == 3);
+    }
+
+    {
+        try testing.expect(program[2].expr.expr.binary.op.type == .@"-");
+        try testing.expect(program[2].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[2].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[2].expr.expr.binary.rhs.literal.value.int == 6);
+
+        {
+            const lhs = program[2].expr.expr.binary.lhs;
+            try testing.expect(lhs.* == .binary);
+            try testing.expect(lhs.binary.op.type == .@"+");
             try testing.expect(lhs.binary.rhs.* == .literal);
             try testing.expect(lhs.binary.rhs.literal.value == .int);
             try testing.expect(lhs.binary.rhs.literal.value.int == 3);
