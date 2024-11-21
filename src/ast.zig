@@ -21,6 +21,7 @@ pub const Expr = union(enum) {
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr },
+    variable: struct { name: Token },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -70,9 +71,17 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
+    pub fn createVariable(alloc: Allocator, name: Token) *Expr {
+        const new_expr = Expr.create(alloc);
+        new_expr.* = .{
+            .variable = .{ .name = name },
+        };
+        return new_expr;
+    }
+
     pub fn destroy(self: *Expr, alloc: Allocator) void {
         switch (self.*) {
-            .literal => {},
+            .literal, .variable => {},
             .grouping => |grouping| grouping.expr.destroy(alloc),
             .unary => |unary| unary.expr.destroy(alloc),
             .assignment => |assignment| assignment.value.destroy(alloc),
@@ -292,6 +301,11 @@ test "Expr.createAssignment" {
     const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const assignment = Expr.createAssignment(testing_alloc, .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 }, right);
     defer assignment.destroy(testing_alloc);
+}
+
+test "Expr.createVariable" {
+    const variable = Expr.createVariable(testing_alloc, .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 });
+    defer variable.destroy(testing_alloc);
 }
 
 test "Stmt.createExpr" {

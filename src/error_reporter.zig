@@ -21,5 +21,6 @@ fn getLineAt(line_num: usize) ?[]const u8 {
 
 const std = @import("std");
 const builtin = @import("builtin");
-const stderr = if (builtin.is_test) std.io.null_writer else std.io.getStdErr().writer();
+const testing_options = @import("testing_options");
+const stderr = if (builtin.is_test and !testing_options.use_stderr) std.io.null_writer else std.io.getStdErr().writer();
 const Token = @import("Token.zig");

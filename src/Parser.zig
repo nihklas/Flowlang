@@ -60,19 +60,50 @@ fn expression(self: *Parser) ParserError!*Expr {
 }
 
 fn assignment(self: *Parser) ParserError!*Expr {
+    if (self.match(.identifier)) |identifier| {
+        try self.consume(.@"=", "Expected '=' after Identifier");
+
+        const expr = try self.expression();
+        return Expr.createAssignment(self.alloc, identifier, expr);
+    }
+
     return self.orExpr();
 }
 
 fn orExpr(self: *Parser) ParserError!*Expr {
-    return self.andExpr();
+    var lhs = try self.andExpr();
+    errdefer lhs.destroy(self.alloc);
+
+    while (self.match(.@"or")) |op| {
+        const rhs = try self.andExpr();
+        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+    }
+
+    return lhs;
 }
 
 fn andExpr(self: *Parser) ParserError!*Expr {
-    return self.equality();
+    var lhs = try self.equality();
+    errdefer lhs.destroy(self.alloc);
+
+    while (self.match(.@"and")) |op| {
+        const rhs = try self.equality();
+        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+    }
+
+    return lhs;
 }
 
 fn equality(self: *Parser) ParserError!*Expr {
-    return self.comparison();
+    var lhs = try self.comparison();
+    errdefer lhs.destroy(self.alloc);
+
+    while (self.matchEither(.@"!=", .@"==")) |op| {
+        const rhs = try self.comparison();
+        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+    }
+
+    return lhs;
 }
 
 fn comparison(self: *Parser) ParserError!*Expr {
@@ -156,7 +187,9 @@ fn primary(self: *Parser) ParserError!*Expr {
         return Expr.createLiteral(self.alloc, token, .{ .string = token.lexeme });
     }
 
-    // TODO: Identifier
+    if (self.match(.identifier)) |token| {
+        return Expr.createVariable(self.alloc, token);
+    }
 
     if (self.match(.@"(")) |_| {
         const expr = try self.expression();
@@ -274,7 +307,7 @@ test "Expression Statement with Literals" {
     try testing.expect(program[1].expr.expr.literal.value.float == 1.2);
 
     try testing.expect(program[2].expr.expr.literal.value == .string);
-    try testing.expectEqualSlices(u8, "test", program[2].expr.expr.literal.value.string);
+    try testing.expectEqualStrings("test", program[2].expr.expr.literal.value.string);
 
     try testing.expect(program[3].expr.expr.literal.value == .bool);
     try testing.expect(program[3].expr.expr.literal.value.bool == true);
@@ -547,6 +580,124 @@ test "Expression Statement with Comparisons" {
         try testing.expect(program[3].expr.expr.binary.rhs.literal.value == .int);
         try testing.expect(program[3].expr.expr.binary.rhs.literal.value.int == 2);
     }
+}
+
+test "Expression Statement with Equality" {
+    const input =
+        \\4 != 2;
+        \\4 == 2;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(2, program.len);
+
+    for (program) |stmt| {
+        // We only have expression statements
+        try testing.expect(stmt.* == .expr);
+        // ...and all of them are binary
+        try testing.expect(stmt.expr.expr.* == .binary);
+    }
+
+    {
+        try testing.expect(program[0].expr.expr.binary.op.type == .@"!=");
+        try testing.expect(program[0].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value.int == 4);
+        try testing.expect(program[0].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value.int == 2);
+    }
+
+    {
+        try testing.expect(program[1].expr.expr.binary.op.type == .@"==");
+        try testing.expect(program[1].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value.int == 4);
+        try testing.expect(program[1].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value.int == 2);
+    }
+}
+
+test "Expression Statement with Logical" {
+    const input =
+        \\4 and 2;
+        \\4 or 2;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(2, program.len);
+
+    for (program) |stmt| {
+        // We only have expression statements
+        try testing.expect(stmt.* == .expr);
+        // ...and all of them are binary
+        try testing.expect(stmt.expr.expr.* == .binary);
+    }
+
+    {
+        try testing.expect(program[0].expr.expr.binary.op.type == .@"and");
+        try testing.expect(program[0].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value.int == 4);
+        try testing.expect(program[0].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value.int == 2);
+    }
+
+    {
+        try testing.expect(program[1].expr.expr.binary.op.type == .@"or");
+        try testing.expect(program[1].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value.int == 4);
+        try testing.expect(program[1].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value.int == 2);
+    }
+}
+
+test "Expression Statement with Assignment" {
+    const input =
+        \\name = "Hello";
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(1, program.len);
+
+    try testing.expect(program[0].* == .expr);
+    try testing.expect(program[0].expr.expr.* == .assignment);
+
+    try testing.expectEqualStrings("name", program[0].expr.expr.assignment.name.lexeme);
+    try testing.expect(program[0].expr.expr.assignment.value.* == .literal);
+    try testing.expect(program[0].expr.expr.assignment.value.literal.value == .string);
+    try testing.expectEqualStrings("Hello", program[0].expr.expr.assignment.value.literal.value.string);
 }
 
 const ParserError = error{
