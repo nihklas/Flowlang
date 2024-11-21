@@ -1,15 +1,31 @@
+pub const Integer = i64;
+pub const Float = f64;
+
+pub const ValueType = enum { null, bool, int, float, string };
+
 pub const Expr = union(enum) {
-    literal: struct { value: Token },
+    pub const Literal = union(ValueType) {
+        null: void,
+        bool: bool,
+        int: Integer,
+        float: Float,
+        string: []const u8,
+    };
+
+    literal: struct {
+        token: Token,
+        value: Literal,
+    },
     grouping: struct { expr: *Expr },
     unary: struct { op: Token, expr: *Expr },
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr },
 
-    pub fn createLiteral(alloc: Allocator, value: Token) *Expr {
+    pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
-            .literal = .{ .value = value },
+            .literal = .{ .token = token, .value = value },
         };
         return new_expr;
     }
@@ -92,11 +108,11 @@ pub const Stmt = union(enum) {
         name: Token,
         constant: bool,
         value: ?*Expr,
-        // TODO: Add Type information
+        type: ValueType,
     },
     channel: struct {
         name: Token,
-        // TODO: Add Type information
+        type: ValueType,
     },
     function: struct { name: Token, params: []*Stmt, body: []*Stmt },
 
@@ -165,22 +181,23 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createVariable(alloc: Allocator, name: Token, constant: bool, value: ?*Expr) *Stmt {
+    pub fn createVariable(alloc: Allocator, name: Token, type_hint: ValueType, constant: bool, value: ?*Expr) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .variable = .{
                 .name = name,
                 .constant = constant,
                 .value = value,
+                .type = type_hint,
             },
         };
         return stmt;
     }
 
-    pub fn createChannel(alloc: Allocator, name: Token) *Stmt {
+    pub fn createChannel(alloc: Allocator, name: Token, type_hint: ValueType) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
-            .channel = .{ .name = name },
+            .channel = .{ .name = name, .type = type_hint },
         };
         return stmt;
     }
@@ -241,74 +258,74 @@ pub const Stmt = union(enum) {
 };
 
 test "Expr.createLiteral" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     defer literal.destroy(testing_alloc);
 }
 
 test "Expr.createGrouping" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const grouping = Expr.createGrouping(testing_alloc, literal);
     defer grouping.destroy(testing_alloc);
 }
 
 test "Expr.createUnary" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const unary = Expr.createUnary(testing_alloc, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, literal);
     defer unary.destroy(testing_alloc);
 }
 
 test "Expr.createBinary" {
-    const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const binary = Expr.createBinary(testing_alloc, left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
     defer binary.destroy(testing_alloc);
 }
 
 test "Expr.createLogical" {
-    const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const binary = Expr.createLogical(testing_alloc, left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
     defer binary.destroy(testing_alloc);
 }
 
 test "Expr.createAssignment" {
-    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const assignment = Expr.createAssignment(testing_alloc, .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 }, right);
     defer assignment.destroy(testing_alloc);
 }
 
 test "Stmt.createExpr" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
     defer expr_stmt.destroy(testing_alloc);
 }
 
 test "Stmt.createPrint" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const print = Stmt.createPrint(testing_alloc, expr);
     defer print.destroy(testing_alloc);
 }
 
 test "Stmt.createBlock" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
     const block = Stmt.createBlock(testing_alloc, &.{expr_stmt});
     defer block.destroy(testing_alloc);
 }
 
 test "Stmt.createReturn" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const return_stmt = Stmt.createReturn(testing_alloc, expr);
     defer return_stmt.destroy(testing_alloc);
 }
 
 test "Stmt.createChannel" {
-    const channel = Stmt.createChannel(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 });
+    const channel = Stmt.createChannel(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 }, .int);
     defer channel.destroy(testing_alloc);
 }
 
 test "Stmt.createChannelWrite" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const channel_write = Stmt.createChannelWrite(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 }, expr);
     defer channel_write.destroy(testing_alloc);
 }
@@ -323,26 +340,27 @@ test "Stmt.createChannelRead" {
 }
 
 test "Stmt.createLoop" {
-    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
     const loop = Stmt.createLoop(testing_alloc, condition, expr_stmt);
     defer loop.destroy(testing_alloc);
 }
 
 test "Stmt.createIf" {
-    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
     const if_stmt = Stmt.createIf(testing_alloc, condition, expr_stmt, null);
     defer if_stmt.destroy(testing_alloc);
 }
 
 test "Stmt.createVariable" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const loop = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
+        .string,
         false,
         expr,
     );
@@ -350,9 +368,9 @@ test "Stmt.createVariable" {
 }
 
 test "Stmt.createFunction" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 });
+    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    const variable = Stmt.createVariable(testing_alloc, .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 }, true, null);
+    const variable = Stmt.createVariable(testing_alloc, .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 }, .int, true, null);
     const function = Stmt.createFunction(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },

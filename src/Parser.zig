@@ -24,12 +24,12 @@ fn parse(self: *Parser) ParserError![]const *Stmt {
         // TODO: Catch Errors and get into workable state
         const stmt = try self.declaration();
 
-        try stmt_list.append(stmt);
+        stmt_list.append(stmt) catch @panic("OOM");
     }
 
     try self.consume(.EOF, "Expected EOF");
 
-    return try stmt_list.toOwnedSlice();
+    return stmt_list.toOwnedSlice() catch @panic("OOM");
 }
 
 fn declaration(self: *Parser) ParserError!*Stmt {
@@ -93,9 +93,37 @@ fn call(self: *Parser) ParserError!*Expr {
 }
 
 fn primary(self: *Parser) ParserError!*Expr {
-    // TODO: Need to create some kind of typing for ast
-    _ = self;
-    return ParserError.NotImplementedYet;
+    if (self.match(.null)) |token| {
+        return Expr.createLiteral(self.alloc, token, .null);
+    }
+    if (self.matchEither(.true, .false)) |token| {
+        return Expr.createLiteral(self.alloc, token, .{ .bool = token.type == .true });
+    }
+
+    if (self.match(.number)) |token| {
+        if (std.fmt.parseInt(ast.Integer, token.lexeme, 10)) |value| {
+            return Expr.createLiteral(self.alloc, token, .{ .int = value });
+        } else |err| switch (err) {
+            error.InvalidCharacter => {
+                const value = std.fmt.parseFloat(ast.Float, token.lexeme) catch {
+                    error_reporter.reportError(token, "Could not convert '{s}' to float", .{token.lexeme});
+                    return ParserError.SyntaxError;
+                };
+                return Expr.createLiteral(self.alloc, token, .{ .float = value });
+            },
+            error.Overflow => {
+                error_reporter.reportError(token, "Could not convert '{s}' to int", .{token.lexeme});
+                return ParserError.SyntaxError;
+            },
+        }
+    }
+
+    if (self.match(.string_literal)) |token| {
+        return Expr.createLiteral(self.alloc, token, .{ .string = token.lexeme });
+    }
+
+    error_reporter.reportError(self.peek(), "Unexpected Token. Expected Literal, got {}", .{self.peek().type});
+    return ParserError.UnexpectedToken;
 }
 
 fn consume(self: *Parser, expected: Token.Type, msg: []const u8) ParserError!void {
@@ -104,7 +132,7 @@ fn consume(self: *Parser, expected: Token.Type, msg: []const u8) ParserError!voi
         return ParserError.SyntaxError;
     }
 
-    self.advance();
+    _ = self.advance();
 }
 
 fn match(self: *Parser, expected: Token.Type) ?Token {
@@ -124,7 +152,6 @@ fn matchEither(self: *Parser, expected1: Token.Type, expected2: Token.Type) ?Tok
 }
 
 fn check(self: *Parser, expected: Token.Type) bool {
-    if (self.isAtEnd()) return false;
     return self.peek().type == expected;
 }
 
@@ -145,8 +172,60 @@ fn previous(self: *Parser) Token {
     return self.tokens[self.current - 1];
 }
 
+const testing = std.testing;
+const testing_alloc = testing.allocator;
+const Scanner = @import("Scanner.zig");
+
+test "Expression Statement" {
+    const input =
+        \\1;
+        \\1.2;
+        \\"test";
+        \\true;
+        \\false;
+        \\null;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(6, program.len);
+
+    // We only have expression statements
+    for (program) |stmt| {
+        try testing.expect(stmt.* == .expr);
+        try testing.expect(stmt.expr.expr.* == .literal);
+    }
+
+    try testing.expect(program[0].expr.expr.literal.value == .int);
+    try testing.expect(program[0].expr.expr.literal.value.int == 1);
+
+    try testing.expect(program[1].expr.expr.literal.value == .float);
+    try testing.expect(program[1].expr.expr.literal.value.float == 1.2);
+
+    try testing.expect(program[2].expr.expr.literal.value == .string);
+    try testing.expectEqualSlices(u8, "test", program[2].expr.expr.literal.value.string);
+
+    try testing.expect(program[3].expr.expr.literal.value == .bool);
+    try testing.expect(program[3].expr.expr.literal.value.bool == true);
+
+    try testing.expect(program[4].expr.expr.literal.value == .bool);
+    try testing.expect(program[4].expr.expr.literal.value.bool == false);
+
+    try testing.expect(program[5].expr.expr.literal.value == .null);
+    try testing.expect(program[5].expr.expr.literal.value.null == {});
+}
+
 const ParserError = error{
     SyntaxError,
+    UnexpectedToken,
     NotImplementedYet,
 };
 
