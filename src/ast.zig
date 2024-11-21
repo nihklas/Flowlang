@@ -80,6 +80,7 @@ pub const Expr = union(enum) {
     }
 
     pub fn destroy(self: *Expr, alloc: Allocator) void {
+        defer alloc.destroy(self);
         switch (self.*) {
             .literal, .variable => {},
             .grouping => |grouping| grouping.expr.destroy(alloc),
@@ -94,8 +95,6 @@ pub const Expr = union(enum) {
                 logical.rhs.destroy(alloc);
             },
         }
-
-        alloc.destroy(self);
     }
 
     fn create(alloc: Allocator) *Expr {
@@ -141,11 +140,10 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createBlock(alloc: Allocator, stmts: []const *Stmt) *Stmt {
+    pub fn createBlock(alloc: Allocator, stmts: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
-        const duped_stmts = alloc.dupe(*Stmt, stmts) catch @panic("OOM");
         stmt.* = .{
-            .block = .{ .stmts = duped_stmts },
+            .block = .{ .stmts = stmts },
         };
         return stmt;
     }
@@ -211,17 +209,16 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createFunction(alloc: Allocator, name: Token, params: []const *Stmt, body: []const *Stmt) *Stmt {
+    pub fn createFunction(alloc: Allocator, name: Token, params: []*Stmt, body: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
-        const duped_params = alloc.dupe(*Stmt, params) catch @panic("OOM");
-        const duped_body = alloc.dupe(*Stmt, body) catch @panic("OOM");
         stmt.* = .{
-            .function = .{ .name = name, .params = duped_params, .body = duped_body },
+            .function = .{ .name = name, .params = params, .body = body },
         };
         return stmt;
     }
 
     pub fn destroy(self: *Stmt, alloc: Allocator) void {
+        defer alloc.destroy(self);
         switch (self.*) {
             .channel_read, .channel => {},
             .print => |print| print.expr.destroy(alloc),
@@ -258,7 +255,6 @@ pub const Stmt = union(enum) {
                 alloc.free(function.body);
             },
         }
-        alloc.destroy(self);
     }
 
     fn create(alloc: Allocator) *Stmt {
@@ -323,7 +319,11 @@ test "Stmt.createPrint" {
 test "Stmt.createBlock" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    const block = Stmt.createBlock(testing_alloc, &.{expr_stmt});
+
+    const stmts = try testing_alloc.alloc(*Stmt, 1);
+    stmts[0] = expr_stmt;
+
+    const block = Stmt.createBlock(testing_alloc, stmts);
     defer block.destroy(testing_alloc);
 }
 
@@ -385,11 +385,17 @@ test "Stmt.createFunction" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
     const variable = Stmt.createVariable(testing_alloc, .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 }, .int, true, null);
+
+    const params = try testing_alloc.alloc(*Stmt, 1);
+    params[0] = variable;
+    const body = try testing_alloc.alloc(*Stmt, 1);
+    body[0] = expr_stmt;
+
     const function = Stmt.createFunction(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        &.{variable},
-        &.{expr_stmt},
+        params,
+        body,
     );
     defer function.destroy(testing_alloc);
 }
