@@ -21,10 +21,11 @@ fn parse(self: *Parser) ParserError![]const *Stmt {
     }
 
     while (!self.check(.EOF)) {
-        // TODO: Catch Errors and get into workable state
-        const stmt = try self.declaration();
-
-        stmt_list.append(stmt) catch @panic("OOM");
+        if (self.declaration()) |stmt| {
+            stmt_list.append(stmt) catch @panic("OOM");
+        } else |_| {
+            try self.recover();
+        }
     }
 
     try self.consume(.EOF, "Expected EOF");
@@ -124,6 +125,24 @@ fn primary(self: *Parser) ParserError!*Expr {
 
     error_reporter.reportError(self.peek(), "Unexpected Token. Expected Literal, got {s}", .{@tagName(self.peek().type)});
     return ParserError.UnexpectedToken;
+}
+
+fn recover(self: *Parser) !void {
+    while (!self.check(.EOF)) {
+        if (self.previous().type == .@";") break;
+        switch (self.peek().type) {
+            else => {},
+            .@"if",
+            .@"for",
+            .@"var",
+            .func,
+            .@"return",
+            .print,
+            => break,
+        }
+
+        _ = self.advance();
+    }
 }
 
 fn consume(self: *Parser, expected: Token.Type, msg: []const u8) ParserError!void {
@@ -227,6 +246,7 @@ const ParserError = error{
     SyntaxError,
     UnexpectedToken,
     NotImplementedYet,
+    Panic,
 };
 
 const Parser = @This();
