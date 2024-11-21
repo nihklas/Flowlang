@@ -131,6 +131,15 @@ fn primary(self: *Parser) ParserError!*Expr {
         return Expr.createLiteral(self.alloc, token, .{ .string = token.lexeme });
     }
 
+    if (self.match(.@"(")) |_| {
+        const expr = try self.expression();
+        errdefer expr.destroy(self.alloc);
+
+        try self.consume(.@")", "Expected ')' after Expression");
+
+        return Expr.createGrouping(self.alloc, expr);
+    }
+
     error_reporter.reportError(self.peek(), "Unexpected Token. Expected Literal, got {s}", .{@tagName(self.peek().type)});
     return ParserError.UnexpectedToken;
 }
@@ -154,7 +163,7 @@ fn recover(self: *Parser) void {
 
 fn consume(self: *Parser, expected: Token.Type, msg: []const u8) ParserError!void {
     if (!self.check(expected)) {
-        error_reporter.reportError(self.peek(), "Syntax Error: {s}", .{msg});
+        error_reporter.reportError(self.peek(), "SyntaxError: {s}", .{msg});
         return ParserError.SyntaxError;
     }
 
@@ -224,9 +233,10 @@ test "Expression Statement with Literals" {
 
     try testing.expectEqual(6, program.len);
 
-    // We only have expression statements
     for (program) |stmt| {
+        // We only have expression statements
         try testing.expect(stmt.* == .expr);
+        // ...and all of them are literals
         try testing.expect(stmt.expr.expr.* == .literal);
     }
 
@@ -249,6 +259,38 @@ test "Expression Statement with Literals" {
     try testing.expect(program[5].expr.expr.literal.value.null == {});
 }
 
+test "Expression Statement with Grouping" {
+    const input =
+        \\(1);
+        \\2;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(2, program.len);
+
+    for (program) |stmt| {
+        // We only have expression statements
+        try testing.expect(stmt.* == .expr);
+    }
+
+    try testing.expect(program[0].expr.expr.* == .grouping);
+    try testing.expect(program[0].expr.expr.grouping.expr.* == .literal);
+    try testing.expect(program[0].expr.expr.grouping.expr.literal.value == .int);
+
+    try testing.expect(program[1].expr.expr.* == .literal);
+    try testing.expect(program[1].expr.expr.literal.value == .int);
+    try testing.expect(program[1].expr.expr.literal.value.int == 2);
+}
+
 test "Expression Statement with Unary" {
     const input =
         \\!false;
@@ -267,9 +309,10 @@ test "Expression Statement with Unary" {
 
     try testing.expectEqual(2, program.len);
 
-    // We only have expression statements
     for (program) |stmt| {
+        // We only have expression statements
         try testing.expect(stmt.* == .expr);
+        // ...and all of them are unary
         try testing.expect(stmt.expr.expr.* == .unary);
     }
 
