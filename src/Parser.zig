@@ -148,7 +148,7 @@ fn primary(self: *Parser) ParserError!*Expr {
         return Expr.createGrouping(self.alloc, expr);
     }
 
-    error_reporter.reportError(self.peek(), "Unexpected Token. Expected Literal, got {s}", .{@tagName(self.peek().type)});
+    error_reporter.reportError(self.peek(), "UnexpectedToken: Expected Expression, got '{s}'", .{@tagName(self.peek().type)});
     return ParserError.UnexpectedToken;
 }
 
