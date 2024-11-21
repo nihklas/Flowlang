@@ -84,7 +84,15 @@ fn term(self: *Parser) ParserError!*Expr {
 }
 
 fn factor(self: *Parser) ParserError!*Expr {
-    return self.unary();
+    var lhs = try self.unary();
+    errdefer lhs.destroy(self.alloc);
+
+    while (self.matchEither(.@"/", .@"*")) |op| {
+        const rhs = try self.unary();
+        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+    }
+
+    return lhs;
 }
 
 fn unary(self: *Parser) ParserError!*Expr {
@@ -318,6 +326,73 @@ test "Expression Statement with Unary" {
 
     try testing.expect(program[0].expr.expr.unary.op.type == .@"!");
     try testing.expect(program[1].expr.expr.unary.op.type == .@"-");
+}
+
+test "Expression Statement with Factors" {
+    const input =
+        \\4 / 2;
+        \\3 * 3;
+        \\12 * 3 / 6;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(3, program.len);
+
+    for (program) |stmt| {
+        // We only have expression statements
+        try testing.expect(stmt.* == .expr);
+        // ...and all of them are binary
+        try testing.expect(stmt.expr.expr.* == .binary);
+    }
+
+    {
+        try testing.expect(program[0].expr.expr.binary.op.type == .@"/");
+        try testing.expect(program[0].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.lhs.literal.value.int == 4);
+        try testing.expect(program[0].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.binary.rhs.literal.value.int == 2);
+    }
+
+    {
+        try testing.expect(program[1].expr.expr.binary.op.type == .@"*");
+        try testing.expect(program[1].expr.expr.binary.lhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.lhs.literal.value.int == 3);
+        try testing.expect(program[1].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.binary.rhs.literal.value.int == 3);
+    }
+
+    {
+        try testing.expect(program[2].expr.expr.binary.op.type == .@"/");
+        try testing.expect(program[2].expr.expr.binary.rhs.* == .literal);
+        try testing.expect(program[2].expr.expr.binary.rhs.literal.value == .int);
+        try testing.expect(program[2].expr.expr.binary.rhs.literal.value.int == 6);
+
+        {
+            const lhs = program[2].expr.expr.binary.lhs;
+            try testing.expect(lhs.* == .binary);
+            try testing.expect(lhs.binary.op.type == .@"*");
+            try testing.expect(lhs.binary.rhs.* == .literal);
+            try testing.expect(lhs.binary.rhs.literal.value == .int);
+            try testing.expect(lhs.binary.rhs.literal.value.int == 3);
+
+            try testing.expect(lhs.binary.lhs.* == .literal);
+            try testing.expect(lhs.binary.lhs.literal.value == .int);
+            try testing.expect(lhs.binary.lhs.literal.value.int == 12);
+        }
+    }
 }
 
 const ParserError = error{
