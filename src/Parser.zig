@@ -43,14 +43,51 @@ fn declaration(self: *Parser) ParserError!*Stmt {
 }
 
 fn statement(self: *Parser) ParserError!*Stmt {
+    if (self.match(.print)) |_| {
+        return self.printStatement();
+    }
+
+    if (self.match(.@"{")) |_| {
+        const stmts = try self.block();
+        return Stmt.createBlock(self.alloc, stmts);
+    }
+
     return self.expressionStatement();
+}
+
+fn block(self: *Parser) ParserError![]*Stmt {
+    var stmt_list: std.ArrayList(*Stmt) = .init(self.alloc);
+    errdefer {
+        for (stmt_list.items) |stmt| {
+            stmt.destroy(self.alloc);
+        }
+        stmt_list.deinit();
+    }
+
+    while (!self.check(.@"}") and !self.isAtEnd()) {
+        const stmt = try self.declaration();
+        stmt_list.append(stmt) catch @panic("OOM");
+    }
+
+    try self.consume(.@"}", "Expected '}' at the end of block");
+
+    return stmt_list.toOwnedSlice() catch @panic("OOM");
+}
+
+fn printStatement(self: *Parser) ParserError!*Stmt {
+    const expr = try self.expression();
+    errdefer expr.destroy(self.alloc);
+
+    try self.consume(.@";", "Expected ';' after value");
+
+    return Stmt.createPrint(self.alloc, expr);
 }
 
 fn expressionStatement(self: *Parser) ParserError!*Stmt {
     const expr = try self.expression();
     errdefer expr.destroy(self.alloc);
 
-    try self.consume(.@";", "Expected ';' after statement");
+    try self.consume(.@";", "Expected ';' after expression");
 
     return Stmt.createExpr(self.alloc, expr);
 }
@@ -698,6 +735,54 @@ test "Expression Statement with Assignment" {
     try testing.expect(program[0].expr.expr.assignment.value.* == .literal);
     try testing.expect(program[0].expr.expr.assignment.value.literal.value == .string);
     try testing.expectEqualStrings("Hello", program[0].expr.expr.assignment.value.literal.value.string);
+}
+
+test "Print Statement" {
+    const input =
+        \\print 1;
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(1, program.len);
+
+    try testing.expect(program[0].* == .print);
+    try testing.expect(program[0].print.expr.* == .literal);
+    try testing.expect(program[0].print.expr.literal.value == .int);
+    try testing.expect(program[0].print.expr.literal.value.int == 1);
+}
+
+test "Block" {
+    const input =
+        \\{
+        \\    print 1;
+        \\}
+        \\
+    ;
+
+    const tokens = try Scanner.scan(testing_alloc, input);
+    defer testing_alloc.free(tokens);
+
+    const program = try createAST(testing_alloc, tokens);
+    defer testing_alloc.free(program);
+    defer for (program) |stmt| {
+        stmt.destroy(testing_alloc);
+    };
+
+    try testing.expectEqual(1, program.len);
+
+    try testing.expect(program[0].* == .block);
+    try testing.expectEqual(1, program[0].block.stmts.len);
+
+    try testing.expect(program[0].block.stmts[0].* == .print);
 }
 
 const ParserError = error{
