@@ -7,7 +7,7 @@ pub const Expr = union(enum) {
     assignment: struct { name: Token, value: *Expr },
 
     pub fn createLiteral(alloc: Allocator, value: Token) *Expr {
-        const new_expr = alloc.create(Expr) catch @panic("OOM");
+        const new_expr = Expr.create(alloc);
         new_expr.* = .{
             .literal = .{ .value = value },
         };
@@ -15,7 +15,7 @@ pub const Expr = union(enum) {
     }
 
     pub fn createGrouping(alloc: Allocator, expr: *Expr) *Expr {
-        const new_expr = alloc.create(Expr) catch @panic("OOM");
+        const new_expr = Expr.create(alloc);
         new_expr.* = .{
             .grouping = .{ .expr = expr },
         };
@@ -23,7 +23,7 @@ pub const Expr = union(enum) {
     }
 
     pub fn createUnary(alloc: Allocator, op: Token, expr: *Expr) *Expr {
-        const new_expr = alloc.create(Expr) catch @panic("OOM");
+        const new_expr = Expr.create(alloc);
         new_expr.* = .{
             .unary = .{ .op = op, .expr = expr },
         };
@@ -31,7 +31,7 @@ pub const Expr = union(enum) {
     }
 
     pub fn createBinary(alloc: Allocator, lhs: *Expr, op: Token, rhs: *Expr) *Expr {
-        const new_expr = alloc.create(Expr) catch @panic("OOM");
+        const new_expr = Expr.create(alloc);
         new_expr.* = .{
             .binary = .{ .lhs = lhs, .op = op, .rhs = rhs },
         };
@@ -39,7 +39,7 @@ pub const Expr = union(enum) {
     }
 
     pub fn createLogical(alloc: Allocator, lhs: *Expr, op: Token, rhs: *Expr) *Expr {
-        const new_expr = alloc.create(Expr) catch @panic("OOM");
+        const new_expr = Expr.create(alloc);
         new_expr.* = .{
             .logical = .{ .lhs = lhs, .op = op, .rhs = rhs },
         };
@@ -47,7 +47,7 @@ pub const Expr = union(enum) {
     }
 
     pub fn createAssignment(alloc: Allocator, name: Token, expr: *Expr) *Expr {
-        const new_expr = alloc.create(Expr) catch @panic("OOM");
+        const new_expr = Expr.create(alloc);
         new_expr.* = .{
             .assignment = .{ .name = name, .value = expr },
         };
@@ -71,6 +71,10 @@ pub const Expr = union(enum) {
         }
 
         alloc.destroy(self);
+    }
+
+    fn create(alloc: Allocator) *Expr {
+        return alloc.create(Expr) catch @panic("OOM");
     }
 };
 
@@ -97,7 +101,7 @@ pub const Stmt = union(enum) {
     function: struct { name: Token, params: []*Stmt, body: []*Stmt },
 
     pub fn createPrint(alloc: Allocator, expr: *Expr) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .print = .{ .expr = expr },
         };
@@ -105,7 +109,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createExpr(alloc: Allocator, expr: *Expr) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .expr = .{ .expr = expr },
         };
@@ -113,7 +117,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createBlock(alloc: Allocator, stmts: []const *Stmt) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         const duped_stmts = alloc.dupe(*Stmt, stmts) catch @panic("OOM");
         stmt.* = .{
             .block = .{ .stmts = duped_stmts },
@@ -122,7 +126,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createLoop(alloc: Allocator, condition: *Expr, body: *Stmt) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .loop = .{ .condition = condition, .body = body },
         };
@@ -130,7 +134,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createIf(alloc: Allocator, condition: *Expr, true_branch: *Stmt, false_branch: ?*Stmt) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .@"if" = .{ .condition = condition, .true_branch = true_branch, .false_branch = false_branch },
         };
@@ -138,7 +142,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createReturn(alloc: Allocator, value: *Expr) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .@"return" = .{ .value = value },
         };
@@ -146,7 +150,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createChannelRead(alloc: Allocator, channel: Token, result: Token) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .channel_read = .{ .channel = channel, .result = result },
         };
@@ -154,7 +158,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createChannelWrite(alloc: Allocator, channel: Token, value: *Expr) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .channel_write = .{ .channel = channel, .value = value },
         };
@@ -162,7 +166,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createVariable(alloc: Allocator, name: Token, constant: bool, value: ?*Expr) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .variable = .{
                 .name = name,
@@ -174,7 +178,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createChannel(alloc: Allocator, name: Token) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         stmt.* = .{
             .channel = .{ .name = name },
         };
@@ -182,7 +186,7 @@ pub const Stmt = union(enum) {
     }
 
     pub fn createFunction(alloc: Allocator, name: Token, params: []const *Stmt, body: []const *Stmt) *Stmt {
-        const stmt = alloc.create(Stmt) catch @panic("OOM");
+        const stmt = Stmt.create(alloc);
         const duped_params = alloc.dupe(*Stmt, params) catch @panic("OOM");
         const duped_body = alloc.dupe(*Stmt, body) catch @panic("OOM");
         stmt.* = .{
@@ -229,6 +233,10 @@ pub const Stmt = union(enum) {
             },
         }
         alloc.destroy(self);
+    }
+
+    fn create(alloc: Allocator) *Stmt {
+        return alloc.create(Stmt) catch @panic("OOM");
     }
 };
 
