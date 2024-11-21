@@ -122,7 +122,7 @@ fn primary(self: *Parser) ParserError!*Expr {
         return Expr.createLiteral(self.alloc, token, .{ .string = token.lexeme });
     }
 
-    error_reporter.reportError(self.peek(), "Unexpected Token. Expected Literal, got {}", .{self.peek().type});
+    error_reporter.reportError(self.peek(), "Unexpected Token. Expected Literal, got {s}", .{@tagName(self.peek().type)});
     return ParserError.UnexpectedToken;
 }
 
