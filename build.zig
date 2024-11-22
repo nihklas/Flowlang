@@ -51,3 +51,10 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(test_step);
     check_step.dependOn(&check_exe.step);
 }
+
+pub fn compile(b: *std.Build) void {
+    _ = b;
+    // TODO: Compile and Execute Compiler
+    // TODO: Embed Bytecode file into runtime and compile
+    std.debug.print("Hello from flow\n", .{});
+}
