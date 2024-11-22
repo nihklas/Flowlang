@@ -129,7 +129,7 @@ fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
 const Compiler = @This();
 
 const Token = @import("Token.zig");
-const OpCode = @import("byte_code.zig").OpCode;
+const OpCode = @import("shared").OpCode;
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const ast = @import("ast.zig");

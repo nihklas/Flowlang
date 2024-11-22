@@ -7,12 +7,20 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
 
+    const shared = b.addModule("shared", .{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("src/shared/root.zig"),
+    });
+
     const compiler = b.addExecutable(.{
         .name = "compiler",
         .root_source_file = b.path("src/compiler/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    compiler.root_module.addImport("shared", shared);
 
     b.installArtifact(compiler);
 
@@ -23,6 +31,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    runtime.root_module.addImport("shared", shared);
     runtime.root_module.addAnonymousImport("input", .{
         .root_source_file = b.addWriteFiles().add("dummy", ""),
     });

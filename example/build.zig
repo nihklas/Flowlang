@@ -13,4 +13,8 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(flow_out);
+
+    const run_flow = b.addRunArtifact(flow_out);
+    const run_step = b.step("run", "Run the code directly");
+    run_step.dependOn(&run_flow.step);
 }
