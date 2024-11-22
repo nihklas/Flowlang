@@ -38,6 +38,10 @@ fn expression(self: *Compiler, expr: *Expr) !void {
                 self.emitOpcode(.integer);
                 self.emitMultibyte(i64, int);
             },
+            .float => |float| {
+                self.emitOpcode(.float);
+                self.emitMultibyte(f64, float);
+            },
             .bool => |boolean| self.emitOpcode(if (boolean) .true else .false),
             .null => self.emitOpcode(.null),
             else => return error.NotImplementedYet,
@@ -57,25 +61,51 @@ fn emitMultibyte(self: *Compiler, T: type, value: T) void {
     }
 }
 
-test compile {
+test "Expression Statement" {
     const input =
         \\1;
-        \\print 3;
+        \\1.2;
         \\true;
         \\false;
         \\null;
         \\
     ;
 
+    const float_bytes = std.mem.toBytes(@as(f64, 1.2));
+
     // zig fmt: off
     const expected: []const u8 = &.{
         OpCode.integer.raw(), 1, 0, 0, 0, 0, 0, 0, 0, OpCode.pop.raw(),
-        OpCode.integer.raw(), 3, 0, 0, 0, 0, 0, 0, 0, OpCode.print.raw(),
+
+        OpCode.float.raw(),
+        float_bytes[0],
+        float_bytes[1],
+        float_bytes[2],
+        float_bytes[3],
+        float_bytes[4],
+        float_bytes[5],
+        float_bytes[6],
+        float_bytes[7],
+        OpCode.pop.raw(),
+
         OpCode.true.raw(), OpCode.pop.raw(),
         OpCode.false.raw(), OpCode.pop.raw(),
         OpCode.null.raw(), OpCode.pop.raw(),
     };
     // zig fmt: on
+
+    try testBytecode(input, expected);
+}
+
+test "Print Statement" {
+    const input =
+        \\print 1;
+        \\
+    ;
+
+    const expected: []const u8 = &.{
+        OpCode.integer.raw(), 1, 0, 0, 0, 0, 0, 0, 0, OpCode.print.raw(),
+    };
 
     try testBytecode(input, expected);
 }
