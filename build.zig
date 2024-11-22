@@ -77,6 +77,9 @@ pub fn compile(
     });
     const compiler = flow.artifact("compiler");
     const runtime = flow.artifact("runtime");
+    runtime.name = options.name;
+    runtime.out_filename = options.name;
+
     return compileImpl(b, options, compiler, runtime);
 }
 
@@ -84,9 +87,6 @@ fn compileImpl(b: *std.Build, options: CompileOptions, compiler: *Compile, runti
     const compile_step = b.addRunArtifact(compiler);
     compile_step.addFileArg(options.source);
     const bytecode = compile_step.addOutputFileArg("out.f");
-
-    runtime.name = options.name;
-    runtime.out_filename = options.name;
 
     runtime.root_module.addAnonymousImport("input", .{
         .root_source_file = bytecode,
