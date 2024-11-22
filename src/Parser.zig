@@ -252,9 +252,7 @@ fn recover(self: *Parser) void {
         .print,
         .EOF,
         => self.current -= 1,
-        else => {
-            continue :recover self.advance().type;
-        },
+        else => continue :recover self.advance().type,
     }
 }
 
