@@ -5,16 +5,16 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
 
-    const exe = b.addExecutable(.{
+    const compiler = b.addExecutable(.{
         .name = "flowlang",
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/compiler/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    b.installArtifact(exe);
+    b.installArtifact(compiler);
 
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(compiler);
 
     run_cmd.step.dependOn(b.getInstallStep());
 
@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/testing.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -40,16 +40,16 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
 
-    const check_exe = b.addExecutable(.{
+    const check_compiler = b.addExecutable(.{
         .name = "flowlang",
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/compiler/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const check_step = b.step("check", "Check Step for LSP");
     check_step.dependOn(test_step);
-    check_step.dependOn(&check_exe.step);
+    check_step.dependOn(&check_compiler.step);
 }
 
 pub fn compile(b: *std.Build) void {
