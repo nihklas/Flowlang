@@ -1,6 +1,3 @@
-pub const Integer = i64;
-pub const Float = f64;
-
 pub const ValueType = enum { null, bool, int, float, string };
 
 pub const Expr = union(enum) {
@@ -406,3 +403,6 @@ const testing_alloc = testing.allocator;
 const Token = @import("Token.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const definitions = @import("shared").definitions;
+const Integer = definitions.Integer;
+const Float = definitions.Float;

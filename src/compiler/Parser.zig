@@ -203,11 +203,11 @@ fn primary(self: *Parser) ParserError!*Expr {
     }
 
     if (self.match(.number)) |token| {
-        if (std.fmt.parseInt(ast.Integer, token.lexeme, 10)) |value| {
+        if (std.fmt.parseInt(Integer, token.lexeme, 10)) |value| {
             return Expr.createLiteral(self.alloc, token, .{ .int = value });
         } else |err| switch (err) {
             error.InvalidCharacter => {
-                const value = std.fmt.parseFloat(ast.Float, token.lexeme) catch {
+                const value = std.fmt.parseFloat(Float, token.lexeme) catch {
                     error_reporter.reportError(token, "Could not convert '{s}' to float", .{token.lexeme});
                     return ParserError.SyntaxError;
                 };
@@ -796,6 +796,9 @@ const std = @import("std");
 const Token = @import("Token.zig");
 const ast = @import("ast.zig");
 const error_reporter = @import("error_reporter.zig");
+const definitions = @import("shared").definitions;
+const Integer = definitions.Integer;
+const Float = definitions.Float;
 
 const Allocator = std.mem.Allocator;
 const Expr = ast.Expr;
