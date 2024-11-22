@@ -1,4 +1,6 @@
 const std = @import("std");
+const Step = std.Build.Step;
+const Compile = Step.Compile;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -6,7 +8,7 @@ pub fn build(b: *std.Build) void {
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
 
     const compiler = b.addExecutable(.{
-        .name = "flowlang",
+        .name = "compiler",
         .root_source_file = b.path("src/compiler/main.zig"),
         .target = target,
         .optimize = optimize,
@@ -14,16 +16,18 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(compiler);
 
-    const run_cmd = b.addRunArtifact(compiler);
+    const runtime = b.addExecutable(.{
+        .name = "runtime",
+        .root_source_file = b.path("src/runtime/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
-    run_cmd.step.dependOn(b.getInstallStep());
+    runtime.root_module.addAnonymousImport("input", .{
+        .root_source_file = b.addWriteFiles().add("dummy", ""),
+    });
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    b.installArtifact(runtime);
 
     const exe_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/testing.zig"),
@@ -40,21 +44,53 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
 
-    const check_compiler = b.addExecutable(.{
-        .name = "flowlang",
-        .root_source_file = b.path("src/compiler/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     const check_step = b.step("check", "Check Step for LSP");
     check_step.dependOn(test_step);
-    check_step.dependOn(&check_compiler.step);
+    check_step.dependOn(&compiler.step);
+    check_step.dependOn(&runtime.step);
+
+    const flow_out = compileImpl(b, .{
+        .name = "flow_out",
+        .source = b.path("example/src/main.flow"),
+        .target = target,
+        .optimize = optimize,
+    }, compiler, runtime);
+    const run_flow = b.addRunArtifact(flow_out);
+    const run_step = b.step("run", "Run the complete compiler pipeline on an example .flow file and execute the resulting binary");
+    run_step.dependOn(&run_flow.step);
 }
 
-pub fn compile(b: *std.Build) void {
-    _ = b;
-    // TODO: Compile and Execute Compiler
-    // TODO: Embed Bytecode file into runtime and compile
-    std.debug.print("Hello from flow\n", .{});
+const CompileOptions = struct {
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode = .Debug,
+    name: []const u8,
+    source: std.Build.LazyPath,
+};
+
+pub fn compile(
+    b: *std.Build,
+    options: CompileOptions,
+) *Compile {
+    const flow = b.dependency("flow", .{
+        .target = options.target,
+        .optimize = options.optimize,
+    });
+    const compiler = flow.artifact("compiler");
+    const runtime = flow.artifact("runtime");
+    return compileImpl(b, options, compiler, runtime);
+}
+
+fn compileImpl(b: *std.Build, options: CompileOptions, compiler: *Compile, runtime: *Compile) *Compile {
+    const compile_step = b.addRunArtifact(compiler);
+    compile_step.addFileArg(options.source);
+    const bytecode = compile_step.addOutputFileArg("out.f");
+
+    runtime.name = options.name;
+    runtime.out_filename = options.name;
+
+    runtime.root_module.addAnonymousImport("input", .{
+        .root_source_file = bytecode,
+    });
+
+    return runtime;
 }
