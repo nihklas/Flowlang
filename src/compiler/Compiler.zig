@@ -61,6 +61,34 @@ fn expression(self: *Compiler, expr: *Expr) !void {
             .null => self.emitOpcode(.null),
             else => return error.NotImplementedYet,
         },
+        .unary => |unary| {
+            try self.expression(unary.expr);
+            switch (unary.op.type) {
+                .@"!" => self.emitOpcode(.not),
+                .@"-" => self.emitOpcode(.negate),
+                else => @panic("Wrong Operation"),
+            }
+        },
+        .binary => |binary| {
+            try self.expression(binary.lhs);
+            try self.expression(binary.rhs);
+            switch (binary.op.type) {
+                .@"+" => self.emitOpcode(.add),
+                .@"-" => self.emitOpcode(.sub),
+                .@"*" => self.emitOpcode(.mul),
+                .@"/" => self.emitOpcode(.div),
+
+                .@"==" => self.emitOpcode(.equal),
+                .@"!=" => self.emitOpcode(.unequal),
+
+                .@"<" => self.emitOpcode(.lower),
+                .@"<=" => self.emitOpcode(.lower_equal),
+                .@">" => self.emitOpcode(.greater),
+                .@">=" => self.emitOpcode(.greater_equal),
+
+                else => @panic("Wrong Operation"),
+            }
+        },
         else => return error.NotImplementedYet,
     }
 }

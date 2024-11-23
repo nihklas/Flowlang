@@ -113,7 +113,7 @@ fn orExpr(self: *Parser) ParserError!*Expr {
 
     while (self.match(.@"or")) |op| {
         const rhs = try self.andExpr();
-        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+        lhs = Expr.createLogical(self.alloc, lhs, op, rhs);
     }
 
     return lhs;
@@ -125,7 +125,7 @@ fn andExpr(self: *Parser) ParserError!*Expr {
 
     while (self.match(.@"and")) |op| {
         const rhs = try self.equality();
-        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+        lhs = Expr.createLogical(self.alloc, lhs, op, rhs);
     }
 
     return lhs;
@@ -685,27 +685,27 @@ test "Expression Statement with Logical" {
         // We only have expression statements
         try testing.expect(stmt.* == .expr);
         // ...and all of them are binary
-        try testing.expect(stmt.expr.expr.* == .binary);
+        try testing.expect(stmt.expr.expr.* == .logical);
     }
 
     {
-        try testing.expect(program[0].expr.expr.binary.op.type == .@"and");
-        try testing.expect(program[0].expr.expr.binary.lhs.* == .literal);
-        try testing.expect(program[0].expr.expr.binary.lhs.literal.value == .int);
-        try testing.expect(program[0].expr.expr.binary.lhs.literal.value.int == 4);
-        try testing.expect(program[0].expr.expr.binary.rhs.* == .literal);
-        try testing.expect(program[0].expr.expr.binary.rhs.literal.value == .int);
-        try testing.expect(program[0].expr.expr.binary.rhs.literal.value.int == 2);
+        try testing.expect(program[0].expr.expr.logical.op.type == .@"and");
+        try testing.expect(program[0].expr.expr.logical.lhs.* == .literal);
+        try testing.expect(program[0].expr.expr.logical.lhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.logical.lhs.literal.value.int == 4);
+        try testing.expect(program[0].expr.expr.logical.rhs.* == .literal);
+        try testing.expect(program[0].expr.expr.logical.rhs.literal.value == .int);
+        try testing.expect(program[0].expr.expr.logical.rhs.literal.value.int == 2);
     }
 
     {
-        try testing.expect(program[1].expr.expr.binary.op.type == .@"or");
-        try testing.expect(program[1].expr.expr.binary.lhs.* == .literal);
-        try testing.expect(program[1].expr.expr.binary.lhs.literal.value == .int);
-        try testing.expect(program[1].expr.expr.binary.lhs.literal.value.int == 4);
-        try testing.expect(program[1].expr.expr.binary.rhs.* == .literal);
-        try testing.expect(program[1].expr.expr.binary.rhs.literal.value == .int);
-        try testing.expect(program[1].expr.expr.binary.rhs.literal.value.int == 2);
+        try testing.expect(program[1].expr.expr.logical.op.type == .@"or");
+        try testing.expect(program[1].expr.expr.logical.lhs.* == .literal);
+        try testing.expect(program[1].expr.expr.logical.lhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.logical.lhs.literal.value.int == 4);
+        try testing.expect(program[1].expr.expr.logical.rhs.* == .literal);
+        try testing.expect(program[1].expr.expr.logical.rhs.literal.value == .int);
+        try testing.expect(program[1].expr.expr.logical.rhs.literal.value.int == 2);
     }
 }
 

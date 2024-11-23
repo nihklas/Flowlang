@@ -1,18 +1,35 @@
 pub const OpCode = enum(u8) {
-    // Data
+    // literals
     true,
     false,
     null,
+
+    // constant definitions
     integer,
     float,
     string,
 
-    // Operations
+    // operations
     pop,
     print,
     constant,
 
-    // Markers
+    negate,
+    not,
+
+    add,
+    sub,
+    div,
+    mul,
+
+    equal,
+    unequal,
+    greater,
+    greater_equal,
+    lower,
+    lower_equal,
+
+    // markers
     constants_done,
 
     pub fn raw(op: OpCode) u8 {

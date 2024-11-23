@@ -4,7 +4,7 @@ alloc: Allocator,
 code: []const u8,
 ip: usize = 0,
 value_stack: Stack(Value, STACK_SIZE, true),
-constants: [255]Value = undefined,
+constants: [256]Value = undefined,
 
 pub fn init(alloc: Allocator, code: []const u8) !VM {
     return .{
@@ -73,6 +73,20 @@ fn runWhileSwitch(self: *VM) !void {
                 const constant = self.constants[self.byte()];
                 self.value_stack.push(constant);
             },
+            .negate => {
+                const value = self.value_stack.pop();
+                const negated: Value = switch (value) {
+                    .null, .boolean => return error.CanOnlyNegateNumbers,
+                    .float => .{ .float = -value.float },
+                    .integer => .{ .integer = -value.integer },
+                };
+                self.value_stack.push(negated);
+            },
+            .not => {
+                const value = self.value_stack.pop();
+                self.value_stack.push(.{ .boolean = !value.isTrue() });
+            },
+            .add, .sub, .mul, .div => self.arithmatic(op),
             else => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
                 return error.IllegalInstruction;
@@ -84,6 +98,42 @@ fn runWhileSwitch(self: *VM) !void {
 fn runSwitchContinue(self: *VM) !void {
     _ = self;
     // TODO:
+}
+
+fn arithmatic(self: *VM, op: OpCode) void {
+    const rhs = self.value_stack.pop();
+    const lhs = self.value_stack.pop();
+
+    // If one of the operands is a float, result is also a float
+    // a division always results in a float
+    const is_float = rhs == .float or lhs == .float;
+    if (is_float or op == .div) {
+        const right: Float = if (rhs == .float) rhs.float else @floatFromInt(rhs.integer);
+        const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.integer);
+
+        const result: Value = switch (op) {
+            .add => .{ .float = left + right },
+            .sub => .{ .float = left - right },
+            .mul => .{ .float = left * right },
+            .div => .{ .float = left / right },
+            else => @panic("Unsupported Operation"),
+        };
+
+        self.value_stack.push(result);
+        return;
+    }
+
+    const right = rhs.integer;
+    const left = lhs.integer;
+
+    const result: Value = switch (op) {
+        .add => .{ .integer = left + right },
+        .sub => .{ .integer = left - right },
+        .mul => .{ .integer = left * right },
+        else => @panic("Unsupported Operation"),
+    };
+
+    self.value_stack.push(result);
 }
 
 fn instruction(self: *VM) OpCode {

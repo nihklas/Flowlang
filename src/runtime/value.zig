@@ -12,6 +12,15 @@ pub const Value = union(enum) {
             .float => try writer.print("{d}", .{self.float}),
         }
     }
+
+    pub fn isTrue(self: Value) bool {
+        return switch (self) {
+            .null => false,
+            .boolean => self.boolean,
+            .integer => self.integer != 0,
+            .float => self.float != 0,
+        };
+    }
 };
 
 const definitions = @import("shared").definitions;

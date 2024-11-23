@@ -1,5 +1,6 @@
 ip: usize,
 code: []const u8,
+constants: [256]Value = undefined,
 
 pub fn dump(code: []const u8) void {
     var dumper: Dumper = .{
@@ -18,35 +19,52 @@ fn runDump(self: *Dumper) void {
         const op = self.instruction();
         switch (op) {
             .integer => {
+                if (!constant_block) panic("OP_INTEGER", "not allowed outside constant definitions\n");
                 defer constant_counter += 1;
                 defer self.ip += 8;
                 const bytes = self.code[self.ip .. self.ip + 8];
                 const int = std.mem.bytesToValue(Integer, bytes);
-                printInstruction("OP_INTEGER", "{d: <10}{d: >3}", .{ int, constant_counter });
+                self.constants[constant_counter] = .{ .int = int };
+                printInstruction("OP_INTEGER", "{d: <10}{d}", .{ constant_counter, int });
             },
             .float => {
+                if (!constant_block) panic("OP_FLOAT", "not allowed outside constant definitions\n");
                 defer constant_counter += 1;
                 defer self.ip += 8;
                 const bytes = self.code[self.ip .. self.ip + 8];
                 const float = std.mem.bytesToValue(Float, bytes);
-                printInstruction("OP_FLOAT", "{d: <10}{d: >3}", .{ float, constant_counter });
+                self.constants[constant_counter] = .{ .float = float };
+                printInstruction("OP_FLOAT", "{d: <10}{d}", .{ constant_counter, float });
             },
+            .string => @panic("Not Yet Supported"),
             .constant => {
                 if (constant_block) panic("OP_CONSTANT", "not allowed in constants definitions\n");
                 defer self.ip += 1;
                 const idx = self.code[self.ip];
-                printInstruction("OP_CONSTANT", "{d}", .{idx});
+                const value = self.constants[idx];
+                printInstruction("OP_CONSTANT", "{d: <10}{}", .{ idx, value });
             },
             .true => printInstruction("OP_TRUE", "", .{}),
             .false => printInstruction("OP_FALSE", "", .{}),
             .null => printInstruction("OP_NULL", "", .{}),
             .print => printInstruction("OP_PRINT", "", .{}),
             .pop => printInstruction("OP_POP", "", .{}),
+            .not => printInstruction("OP_NOT", "", .{}),
+            .negate => printInstruction("OP_NEGATE", "", .{}),
+            .add => printInstruction("OP_ADD", "", .{}),
+            .sub => printInstruction("OP_SUB", "", .{}),
+            .div => printInstruction("OP_DIV", "", .{}),
+            .mul => printInstruction("OP_MUL", "", .{}),
+            .lower => printInstruction("OP_LOWER", "", .{}),
+            .lower_equal => printInstruction("OP_LOWER_EQUAL", "", .{}),
+            .greater => printInstruction("OP_GREATER", "", .{}),
+            .greater_equal => printInstruction("OP_GREATER_EQUAL", "", .{}),
+            .equal => printInstruction("OP_EQUAL", "", .{}),
+            .unequal => printInstruction("OP_UNEQUAL", "", .{}),
             .constants_done => {
                 constant_block = false;
                 printInstruction("OP_CONSTANTS_DONE", "", .{});
             },
-            else => panic(@tagName(op), ""),
         }
     }
 }
@@ -78,3 +96,4 @@ const std = @import("std");
 const Integer = @import("../definitions.zig").Integer;
 const Float = @import("../definitions.zig").Float;
 const OpCode = @import("../byte_code.zig").OpCode;
+const Value = @import("../definitions.zig").FlowValue;

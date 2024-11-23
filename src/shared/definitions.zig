@@ -10,6 +10,16 @@ pub const FlowValue = union(ValueType) {
     float: Float,
     string: []const u8,
 
+    pub fn format(self: FlowValue, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (self) {
+            .null => try writer.writeAll("null"),
+            .bool => try writer.print("{}", .{self.bool}),
+            .int => try writer.print("{d}", .{self.int}),
+            .float => try writer.print("{d}", .{self.float}),
+            .string => try writer.print("{s}", .{self.string}),
+        }
+    }
+
     pub fn equals(self: FlowValue, other: FlowValue) bool {
         if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
 
