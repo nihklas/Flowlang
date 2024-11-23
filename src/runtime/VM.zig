@@ -4,6 +4,7 @@ alloc: Allocator,
 code: []const u8,
 ip: usize = 0,
 value_stack: Stack(Value, STACK_SIZE, true),
+constants: [255]Value = undefined,
 
 pub fn init(alloc: Allocator, code: []const u8) !VM {
     return .{
@@ -23,26 +24,43 @@ pub fn deinit(self: *VM) void {
 //    2. labeled switch continue
 // Compare those in benchmarks
 pub fn run(self: *VM) !void {
+    try self.loadConstants();
     try self.runWhileSwitch();
     // try self.runSwitchContinue();
+}
+
+fn loadConstants(self: *VM) !void {
+    var constants_counter: usize = 0;
+    while (self.ip < self.code.len) {
+        const op = self.instruction();
+        switch (op) {
+            .integer => {
+                defer constants_counter += 1;
+                defer self.ip += 8;
+                const bytes = self.code[self.ip .. self.ip + 8];
+                const int = std.mem.bytesToValue(Integer, bytes);
+                self.constants[constants_counter] = .{ .integer = int };
+            },
+            .float => {
+                defer constants_counter += 1;
+                defer self.ip += 8;
+                const bytes = self.code[self.ip .. self.ip + 8];
+                const float = std.mem.bytesToValue(Float, bytes);
+                self.constants[constants_counter] = .{ .float = float };
+            },
+            .constants_done => break,
+            else => {
+                std.debug.print("Illegal Instruction: {}\n", .{op});
+                return error.IllegalInstruction;
+            },
+        }
+    }
 }
 
 fn runWhileSwitch(self: *VM) !void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
         switch (op) {
-            .integer => {
-                defer self.ip += 8;
-                const bytes = self.code[self.ip .. self.ip + 8];
-                const int = std.mem.bytesToValue(Integer, bytes);
-                self.value_stack.push(.{ .integer = int });
-            },
-            .float => {
-                defer self.ip += 8;
-                const bytes = self.code[self.ip .. self.ip + 8];
-                const float = std.mem.bytesToValue(Float, bytes);
-                self.value_stack.push(.{ .float = float });
-            },
             .true => self.value_stack.push(.{ .boolean = true }),
             .false => self.value_stack.push(.{ .boolean = false }),
             .null => self.value_stack.push(.null),
@@ -51,6 +69,10 @@ fn runWhileSwitch(self: *VM) !void {
                 try stdout.print("{}\n", .{value});
             },
             .pop => _ = self.value_stack.pop(),
+            .constant => {
+                const constant = self.constants[self.byte()];
+                self.value_stack.push(constant);
+            },
             else => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
                 return error.IllegalInstruction;
