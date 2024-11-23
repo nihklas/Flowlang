@@ -39,7 +39,7 @@ fn loadConstants(self: *VM) !void {
                 defer self.ip += 8;
                 const bytes = self.code[self.ip .. self.ip + 8];
                 const int = std.mem.bytesToValue(Integer, bytes);
-                self.constants[constants_counter] = .{ .integer = int };
+                self.constants[constants_counter] = .{ .int = int };
             },
             .float => {
                 defer constants_counter += 1;
@@ -61,14 +61,16 @@ fn runWhileSwitch(self: *VM) !void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
         switch (op) {
-            .true => self.value_stack.push(.{ .boolean = true }),
-            .false => self.value_stack.push(.{ .boolean = false }),
+            .true => self.value_stack.push(.{ .bool = true }),
+            .false => self.value_stack.push(.{ .bool = false }),
             .null => self.value_stack.push(.null),
+            .pop => _ = self.value_stack.pop(),
+            .add, .sub, .mul, .div => self.arithmetic(op),
+            .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .print => {
                 const value = self.value_stack.pop();
                 try stdout.print("{}\n", .{value});
             },
-            .pop => _ = self.value_stack.pop(),
             .constant => {
                 const constant = self.constants[self.byte()];
                 self.value_stack.push(constant);
@@ -76,17 +78,26 @@ fn runWhileSwitch(self: *VM) !void {
             .negate => {
                 const value = self.value_stack.pop();
                 const negated: Value = switch (value) {
-                    .null, .boolean => return error.CanOnlyNegateNumbers,
+                    .null, .bool => return error.CanOnlyNegateNumbers,
                     .float => .{ .float = -value.float },
-                    .integer => .{ .integer = -value.integer },
+                    .int => .{ .int = -value.int },
                 };
                 self.value_stack.push(negated);
             },
             .not => {
                 const value = self.value_stack.pop();
-                self.value_stack.push(.{ .boolean = !value.isTrue() });
+                self.value_stack.push(.{ .bool = !value.isTrue() });
             },
-            .add, .sub, .mul, .div => self.arithmatic(op),
+            .equal, .unequal => {
+                const rhs = self.value_stack.pop();
+                const lhs = self.value_stack.pop();
+                const equal = lhs.equals(rhs);
+                if (op == .equal) {
+                    self.value_stack.push(.{ .bool = equal });
+                } else {
+                    self.value_stack.push(.{ .bool = !equal });
+                }
+            },
             else => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
                 return error.IllegalInstruction;
@@ -100,7 +111,7 @@ fn runSwitchContinue(self: *VM) !void {
     // TODO:
 }
 
-fn arithmatic(self: *VM, op: OpCode) void {
+fn arithmetic(self: *VM, op: OpCode) void {
     const rhs = self.value_stack.pop();
     const lhs = self.value_stack.pop();
 
@@ -108,8 +119,8 @@ fn arithmatic(self: *VM, op: OpCode) void {
     // a division always results in a float
     const is_float = rhs == .float or lhs == .float;
     if (is_float or op == .div) {
-        const right: Float = if (rhs == .float) rhs.float else @floatFromInt(rhs.integer);
-        const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.integer);
+        const right: Float = if (rhs == .float) rhs.float else @floatFromInt(rhs.int);
+        const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.int);
 
         const result: Value = switch (op) {
             .add => .{ .float = left + right },
@@ -123,17 +134,47 @@ fn arithmatic(self: *VM, op: OpCode) void {
         return;
     }
 
-    const right = rhs.integer;
-    const left = lhs.integer;
+    const right = rhs.int;
+    const left = lhs.int;
 
     const result: Value = switch (op) {
-        .add => .{ .integer = left + right },
-        .sub => .{ .integer = left - right },
-        .mul => .{ .integer = left * right },
+        .add => .{ .int = left + right },
+        .sub => .{ .int = left - right },
+        .mul => .{ .int = left * right },
         else => @panic("Unsupported Operation"),
     };
 
     self.value_stack.push(result);
+}
+
+fn comparison(self: *VM, op: OpCode) void {
+    const rhs = self.value_stack.pop();
+    const lhs = self.value_stack.pop();
+
+    const is_float = rhs == .float or lhs == .float;
+    if (is_float) {
+        const right: Float = if (rhs == .float) rhs.float else @floatFromInt(rhs.int);
+        const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.int);
+
+        switch (op) {
+            .lower => self.value_stack.push(.{ .bool = left < right }),
+            .lower_equal => self.value_stack.push(.{ .bool = left <= right }),
+            .greater => self.value_stack.push(.{ .bool = left > right }),
+            .greater_equal => self.value_stack.push(.{ .bool = left >= right }),
+            else => @panic("Unsupported Operation"),
+        }
+        return;
+    }
+
+    const left = lhs.int;
+    const right = rhs.int;
+    switch (op) {
+        .lower => self.value_stack.push(.{ .bool = left < right }),
+        .lower_equal => self.value_stack.push(.{ .bool = left <= right }),
+        .greater => self.value_stack.push(.{ .bool = left > right }),
+        .greater_equal => self.value_stack.push(.{ .bool = left >= right }),
+        else => @panic("Unsupported Operation"),
+    }
 }
 
 fn instruction(self: *VM) OpCode {
