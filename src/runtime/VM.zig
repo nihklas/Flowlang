@@ -78,7 +78,7 @@ fn runWhileSwitch(self: *VM) !void {
             .negate => {
                 const value = self.value_stack.pop();
                 const negated: Value = switch (value) {
-                    .null, .bool => return error.CanOnlyNegateNumbers,
+                    .null, .bool, .string => return error.CanOnlyNegateNumbers,
                     .float => .{ .float = -value.float },
                     .int => .{ .int = -value.int },
                 };
@@ -191,11 +191,11 @@ const VM = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Value = @import("value.zig").Value;
 
 const stdout = std.io.getStdOut().writer();
 
 const OpCode = @import("shared").OpCode;
 const Integer = @import("shared").definitions.Integer;
 const Float = @import("shared").definitions.Float;
+const Value = @import("shared").definitions.FlowValue;
 const Stack = @import("shared").Stack;

@@ -31,6 +31,16 @@ pub const FlowValue = union(ValueType) {
             .string => @panic("not supported yet"),
         };
     }
+
+    pub fn isTrue(self: FlowValue) bool {
+        return switch (self) {
+            .null => false,
+            .bool => self.bool,
+            .int => self.int != 0,
+            .float => self.float != 0,
+            .string => self.string.len > 0,
+        };
+    }
 };
 
 const std = @import("std");
