@@ -1,5 +1,3 @@
-pub const ValueType = enum { null, bool, int, float, string };
-
 pub const Expr = union(enum) {
     pub const Literal = union(ValueType) {
         null: void,
@@ -406,3 +404,5 @@ const Allocator = std.mem.Allocator;
 const definitions = @import("shared").definitions;
 const Integer = definitions.Integer;
 const Float = definitions.Float;
+const ValueType = definitions.ValueType;
+const FlowValue = definitions.FlowValue;

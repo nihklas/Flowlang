@@ -6,6 +6,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
+    const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
+
+    const debug_options = b.addOptions();
+    debug_options.addOption(bool, "dump", dump_bytecode);
 
     const shared = b.addModule("shared", .{
         .target = target,
@@ -20,6 +24,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    compiler.root_module.addOptions("debug_options", debug_options);
     compiler.root_module.addImport("shared", shared);
 
     b.installArtifact(compiler);
@@ -31,6 +36,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    runtime.root_module.addOptions("debug_options", debug_options);
     runtime.root_module.addImport("shared", shared);
     runtime.root_module.addAnonymousImport("input", .{
         .root_source_file = b.addWriteFiles().add("dummy", ""),
@@ -43,6 +49,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    exe_unit_tests.root_module.addImport("shared", shared);
 
     const test_options = b.addOptions();
     test_options.addOption(bool, "use_stderr", use_stderr);

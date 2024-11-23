@@ -3,7 +3,7 @@ const STACK_SIZE = 1024;
 alloc: Allocator,
 code: []const u8,
 ip: usize = 0,
-value_stack: stack.Stack(Value, STACK_SIZE, true),
+value_stack: Stack(Value, STACK_SIZE, true),
 
 pub fn init(alloc: Allocator, code: []const u8) !VM {
     return .{
@@ -79,10 +79,10 @@ const VM = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Value = @import("value.zig").Value;
-const stack = @import("stack.zig");
 
 const stdout = std.io.getStdOut().writer();
 
 const OpCode = @import("shared").OpCode;
 const Integer = @import("shared").definitions.Integer;
 const Float = @import("shared").definitions.Float;
+const Stack = @import("shared").Stack;

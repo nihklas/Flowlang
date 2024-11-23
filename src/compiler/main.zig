@@ -21,7 +21,11 @@ pub fn main() !void {
     defer alloc.free(ast);
     defer for (ast) |node| node.destroy(alloc);
 
-    const bytecode = try Compiler.compile(alloc, ast);
+    var sema: Sema = .init(alloc, ast);
+    defer sema.deinit();
+    try sema.analyse();
+
+    const bytecode = try Compiler.compile(alloc, ast, sema.constants.items);
     defer alloc.free(bytecode);
 
     const output_file = try std.fs.cwd().createFile(output, .{});
@@ -43,3 +47,4 @@ const Token = @import("Token.zig");
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
+const Sema = @import("Sema.zig");
