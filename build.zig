@@ -79,7 +79,7 @@ pub fn build(b: *std.Build) void {
 
 const CompileOptions = struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode = .Debug,
+    optimize: std.builtin.OptimizeMode = .ReleaseSafe,
     name: []const u8,
     source: std.Build.LazyPath,
 };
