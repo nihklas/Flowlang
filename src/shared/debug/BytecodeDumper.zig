@@ -36,7 +36,31 @@ fn runDump(self: *Dumper) void {
                 self.constants[constant_counter] = .{ .float = float };
                 printInstruction("OP_FLOAT", "{d: <10}{d}", .{ constant_counter, float });
             },
-            .string => @panic("Not Yet Supported"),
+            .string => {
+                if (!constant_block) panic("OP_STRING", "not allowed outside constant definitions\n");
+                defer constant_counter += 1;
+                const len = self.code[self.ip];
+                self.ip += 1;
+                self.constants[constant_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                printInstruction("OP_STRING", "{d: <10}{s}", .{
+                    constant_counter,
+                    self.constants[constant_counter].string,
+                });
+                self.ip += len;
+            },
+            .string_long => {
+                if (!constant_block) panic("OP_STRING_LONG", "not allowed outside constant definitions\n");
+                defer constant_counter += 1;
+                const bytes = self.code[self.ip .. self.ip + 4];
+                self.ip += 4;
+                const len = std.mem.bytesToValue(u32, bytes);
+                self.constants[constant_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                printInstruction("OP_STRING_LONG", "{d: <10}{s}", .{
+                    constant_counter,
+                    self.constants[constant_counter].string,
+                });
+                self.ip += len;
+            },
             .constant => {
                 if (constant_block) panic("OP_CONSTANT", "not allowed in constants definitions\n");
                 defer self.ip += 1;

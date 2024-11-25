@@ -28,7 +28,17 @@ pub const FlowValue = union(ValueType) {
             .float => self.float == other.float,
             .bool => self.bool == other.bool,
             .null => true,
-            .string => @panic("not supported yet"),
+            .string => {
+                const a = self.string;
+                const b = other.string;
+                if (a.ptr == b.ptr) return true;
+                if (a.len != b.len) return false;
+
+                for (a, b) |el1, el2| {
+                    if (el1 != el2) return false;
+                }
+                return true;
+            },
         };
     }
 

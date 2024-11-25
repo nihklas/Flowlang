@@ -18,7 +18,18 @@ pub fn compile(alloc: Allocator, program: []const *Stmt, constants: []const Flow
 
 fn compileConstants(self: *Compiler) !void {
     for (self.constants) |c| switch (c) {
-        .string => return error.NotImplementedYet,
+        .string => |string| {
+            if (string.len > std.math.maxInt(u8)) {
+                self.emitOpcode(.string_long);
+                self.emitMultibyte(@as(u32, @intCast(string.len)));
+            } else {
+                self.emitOpcode(.string);
+                self.emitByte(@intCast(string.len));
+            }
+            for (string) |char| {
+                self.emitByte(char);
+            }
+        },
         .int => {
             self.emitOpcode(.integer);
             self.emitMultibyte(c.int);
@@ -59,7 +70,7 @@ fn expression(self: *Compiler, expr: *Expr) !void {
             .float => |float| self.emitConstant(.{ .float = float }),
             .bool => |boolean| self.emitOpcode(if (boolean) .true else .false),
             .null => self.emitOpcode(.null),
-            else => return error.NotImplementedYet,
+            .string => |string| self.emitConstant(.{ .string = string }),
         },
         .unary => |unary| {
             try self.expression(unary.expr);
@@ -119,67 +130,69 @@ fn emitMultibyte(self: *Compiler, value: anytype) void {
     }
 }
 
-// TODO: Fix test to use sema for constants information
+test "Expression Statement" {
+    const input =
+        \\1;
+        \\1.2;
+        \\true;
+        \\false;
+        \\null;
+        \\
+    ;
 
-// test "Expression Statement" {
-//     const input =
-//         \\1;
-//         \\1.2;
-//         \\true;
-//         \\false;
-//         \\null;
-//         \\
-//     ;
-//
-//     const float_bytes = std.mem.toBytes(@as(f64, 1.2));
-//
-//     // zig fmt: off
-//     const expected: []const u8 = &.{
-//         OpCode.constants_done.raw(),
-//         OpCode.integer.raw(), 1, 0, 0, 0, 0, 0, 0, 0, OpCode.pop.raw(),
-//
-//         OpCode.float.raw(),
-//         float_bytes[0],
-//         float_bytes[1],
-//         float_bytes[2],
-//         float_bytes[3],
-//         float_bytes[4],
-//         float_bytes[5],
-//         float_bytes[6],
-//         float_bytes[7],
-//         OpCode.pop.raw(),
-//
-//         OpCode.true.raw(), OpCode.pop.raw(),
-//         OpCode.false.raw(), OpCode.pop.raw(),
-//         OpCode.null.raw(), OpCode.pop.raw(),
-//     };
-//     // zig fmt: on
-//
-//     try testBytecode(input, expected);
-// }
-//
-// test "Print Statement" {
-//     const input =
-//         \\print 1;
-//         \\
-//     ;
-//
-//     const expected: []const u8 = &.{
-//         OpCode.constants_done.raw(),
-//         OpCode.integer.raw(),
-//         1,
-//         0,
-//         0,
-//         0,
-//         0,
-//         0,
-//         0,
-//         0,
-//         OpCode.print.raw(),
-//     };
-//
-//     try testBytecode(input, expected);
-// }
+    const float_bytes = std.mem.toBytes(@as(f64, 1.2));
+
+    // zig fmt: off
+    const expected: []const u8 = &.{
+        OpCode.integer.raw(), 1, 0, 0, 0, 0, 0, 0, 0,
+        OpCode.float.raw(),
+        float_bytes[0],
+        float_bytes[1],
+        float_bytes[2],
+        float_bytes[3],
+        float_bytes[4],
+        float_bytes[5],
+        float_bytes[6],
+        float_bytes[7],
+
+        OpCode.constants_done.raw(),
+
+        OpCode.constant.raw(), 0, OpCode.pop.raw(),
+        OpCode.constant.raw(), 1, OpCode.pop.raw(),
+
+        OpCode.true.raw(), OpCode.pop.raw(),
+        OpCode.false.raw(), OpCode.pop.raw(),
+        OpCode.null.raw(), OpCode.pop.raw(),
+    };
+    // zig fmt: on
+
+    try testBytecode(input, expected);
+}
+
+test "Print Statement" {
+    const input =
+        \\print 1;
+        \\
+    ;
+
+    const expected: []const u8 = &.{
+        OpCode.integer.raw(),
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        OpCode.constants_done.raw(),
+        OpCode.constant.raw(),
+        0,
+        OpCode.print.raw(),
+    };
+
+    try testBytecode(input, expected);
+}
 
 fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
     const tokens = try Scanner.scan(testing_allocator, input);
@@ -191,7 +204,11 @@ fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
         node.destroy(testing_allocator);
     };
 
-    const bytecode = try compile(testing_allocator, program, &.{});
+    var sema: Sema = .init(testing_allocator, program);
+    defer sema.deinit();
+    try sema.analyse();
+
+    const bytecode = try compile(testing_allocator, program, sema.constants.items);
     defer testing_allocator.free(bytecode);
 
     try testing.expectEqualSlices(u8, expected_bytecode, bytecode);
@@ -203,6 +220,7 @@ const Token = @import("Token.zig");
 const OpCode = @import("shared").OpCode;
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
+const Sema = @import("Sema.zig");
 const ast = @import("ast.zig");
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;

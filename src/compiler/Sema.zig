@@ -38,8 +38,8 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
             switch (expr.literal.value) {
                 .int => |int| self.constant(.{ .int = int }),
                 .float => |float| self.constant(.{ .float = float }),
+                .string => |string| self.constant(.{ .string = string }),
                 .null, .bool => {},
-                .string => {},
             }
         },
         .unary => try self.visitExpr(expr.unary.expr),

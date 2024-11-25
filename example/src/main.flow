@@ -1,3 +1,8 @@
+print "Hello World";
+print "Hello World";
+print "Hello World";
+print "Some really long string with more than 255 characters. This is hard to achieve, so here comes random characters: skjfhsakdlfhalskdjfhkalsdjhflksajdhflkasjdhflkasjdhfasaskjdhakjshdkjashdfkjasdhfkjsahdfkjahsdfkjhasdkjfhaskdjfhksjdhfkasjdhfkajsdhfkjasdhfkjasdhf";
+
 print 1;
 print 1.2;
 print true;

@@ -8,6 +8,7 @@ pub const OpCode = enum(u8) {
     integer,
     float,
     string,
+    string_long,
 
     // operations
     pop,
