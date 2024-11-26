@@ -7,15 +7,20 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
+    const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse false;
+    const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse false;
 
     const debug_options = b.addOptions();
     debug_options.addOption(bool, "dump", dump_bytecode);
+    debug_options.addOption(bool, "stack", trace_stack);
+    debug_options.addOption(bool, "bytecode", trace_bytecode);
 
     const shared = b.addModule("shared", .{
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/shared/root.zig"),
     });
+    shared.addOptions("module_debug_options", debug_options);
 
     const compiler = b.addExecutable(.{
         .name = "compiler",

@@ -1,9 +1,3 @@
-const std = @import("std");
-const code = @embedFile("input");
-const VM = @import("VM.zig");
-const Dumper = @import("shared").BytecodeDumper;
-const debug_options = @import("debug_options");
-
 pub fn main() !void {
     var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
     defer std.debug.assert(gpa.deinit() == .ok);
@@ -19,3 +13,9 @@ pub fn main() !void {
 
     try vm.run();
 }
+
+const std = @import("std");
+const code = @embedFile("input");
+const VM = @import("VM.zig");
+const Dumper = @import("shared").BytecodeDumper;
+const debug_options = @import("debug_options");

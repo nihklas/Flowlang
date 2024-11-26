@@ -22,6 +22,17 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
             self.* = undefined;
         }
 
+        pub fn dump(self: *Self) void {
+            var stack_counter: usize = 0;
+            while (stack_counter < self.stack_top) : (stack_counter += 1) {
+                std.debug.print("[ {} ] ", .{self.stack[stack_counter]});
+            }
+            if (stack_counter == 0) {
+                std.debug.print("[ ]", .{});
+            }
+            std.debug.print("\n", .{});
+        }
+
         pub fn push(self: *Self, value: T) StackReturn(void) {
             if (self.stack_top == size) {
                 if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;

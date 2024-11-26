@@ -36,4 +36,14 @@ pub const OpCode = enum(u8) {
     pub fn raw(op: OpCode) u8 {
         return @intFromEnum(op);
     }
+
+    pub fn format(self: OpCode, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        try writer.writeAll("OP_");
+        const name = @tagName(self);
+        for (name) |c| {
+            try writer.writeByte(std.ascii.toUpper(c));
+        }
+    }
 };
+
+const std = @import("std");

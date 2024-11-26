@@ -33,6 +33,9 @@ fn loadConstants(self: *VM) !void {
     var constants_counter: usize = 0;
     while (self.ip < self.code.len) {
         const op = self.instruction();
+        if (comptime debug_options.bytecode) {
+            std.debug.print("{}\n", .{op});
+        }
         switch (op) {
             .integer => {
                 defer constants_counter += 1;
@@ -75,6 +78,12 @@ fn loadConstants(self: *VM) !void {
 fn runWhileSwitch(self: *VM) !void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
+        if (comptime debug_options.bytecode) {
+            std.debug.print("{}\n", .{op});
+        }
+        if (comptime debug_options.stack) {
+            self.value_stack.dump();
+        }
         switch (op) {
             .true => self.value_stack.push(.{ .bool = true }),
             .false => self.value_stack.push(.{ .bool = false }),
@@ -214,3 +223,4 @@ const Integer = @import("shared").definitions.Integer;
 const Float = @import("shared").definitions.Float;
 const Value = @import("shared").definitions.FlowValue;
 const Stack = @import("shared").Stack;
+const debug_options = @import("debug_options");
