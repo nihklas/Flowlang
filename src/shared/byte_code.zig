@@ -1,3 +1,4 @@
+// TODO: After all Instructions are added, try turning them into packed structs and stuff
 pub const OpCode = enum(u8) {
     // literals
     true,
