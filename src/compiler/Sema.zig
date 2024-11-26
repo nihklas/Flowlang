@@ -14,6 +14,7 @@ pub fn deinit(self: *Sema) void {
     self.constants.deinit();
 }
 
+// TODO: Check types
 pub fn analyse(self: *Sema) !void {
     for (self.program) |stmt| {
         try self.visitStmt(stmt);

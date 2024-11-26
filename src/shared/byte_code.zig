@@ -1,4 +1,5 @@
 // TODO: After all Instructions are added, try turning them into packed structs and stuff
+// Arithmetic operations can encode the types of the operands in the extra bits
 pub const OpCode = enum(u8) {
     // literals
     true,
