@@ -15,7 +15,10 @@ pub fn main() !void {
 }
 
 const std = @import("std");
-const code = @embedFile("input");
 const VM = @import("VM.zig");
 const Dumper = @import("shared").BytecodeDumper;
 const debug_options = @import("debug_options");
+
+const code = @embedFile("input");
+// TODO: Add another @embedFile or @import for source code locations for error messages
+// Should be a kind of map, mapping the bytecode index to source code locations
