@@ -48,6 +48,21 @@ fn loadConstants(self: *VM) !void {
                 const float = std.mem.bytesToValue(Float, bytes);
                 self.constants[constants_counter] = .{ .float = float };
             },
+            .string => {
+                defer constants_counter += 1;
+                const len = self.code[self.ip];
+                self.ip += 1;
+                self.constants[constants_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                self.ip += len;
+            },
+            .string_long => {
+                defer constants_counter += 1;
+                const bytes = self.code[self.ip .. self.ip + 4];
+                self.ip += 4;
+                const len = std.mem.bytesToValue(u32, bytes);
+                self.constants[constants_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                self.ip += len;
+            },
             .constants_done => break,
             else => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
