@@ -77,6 +77,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }, compiler, runtime);
+
     const run_flow = b.addRunArtifact(flow_out);
     const run_step = b.step("run", "Run the complete compiler pipeline on an example .flow file and execute the resulting binary");
     run_step.dependOn(&run_flow.step);
