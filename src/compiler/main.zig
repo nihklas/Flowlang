@@ -1,8 +1,9 @@
-// TODO: Use correct stdout and stderr
 pub fn main() !void {
     var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
     defer std.debug.assert(gpa.deinit() == .ok);
-    const alloc = gpa.allocator();
+    var arena: std.heap.ArenaAllocator = .init(gpa.allocator());
+    defer arena.deinit();
+    const alloc = arena.allocator();
 
     var args = std.process.args();
     _ = args.next();
@@ -12,21 +13,15 @@ pub fn main() !void {
     const output = args.next() orelse return error.MissingArgument;
 
     const flow_source = try readFile(alloc, input);
-    defer alloc.free(flow_source);
 
     const tokens = try Scanner.scan(alloc, flow_source);
-    defer alloc.free(tokens);
 
     const ast = try Parser.createAST(alloc, tokens);
-    defer alloc.free(ast);
-    defer for (ast) |node| node.destroy(alloc);
 
     var sema: Sema = .init(alloc, ast);
-    defer sema.deinit();
     try sema.analyse();
 
     const bytecode = try Compiler.compile(alloc, ast, sema.constants.items);
-    defer alloc.free(bytecode);
 
     const output_file = try std.fs.cwd().createFile(output, .{});
     defer output_file.close();

@@ -22,6 +22,7 @@ pub fn analyse(self: *Sema) !void {
         try self.visitStmt(stmt);
     }
 
+    // TODO: maybe add 'constant_long' to be able to store more constant values
     if (self.constants.items.len > std.math.maxInt(u8)) {
         return error.TooManyConstants;
     }
@@ -102,7 +103,17 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
                     // TODO: Does this need checking?
                     // Do we have another operator for string concats?
                 },
-                .@"==", .@"!=" => {},
+                .@"==", .@"!=" => {
+                    if (left_type != right_type) {
+                        // if the types are unequal, we already know the answer to this operation
+                        const new_node = Expr.createLiteral(
+                            self.alloc,
+                            expr.binary.op,
+                            .{ .bool = expr.binary.op.type == .@"!=" },
+                        );
+                        expr.* = new_node.*;
+                    }
+                },
                 else => unreachable,
             }
         },

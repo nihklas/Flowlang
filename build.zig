@@ -73,7 +73,7 @@ pub fn build(b: *std.Build) void {
 
     const flow_out = compileImpl(b, .{
         .name = "flow_out",
-        .source = b.path("example/src/main.flow"),
+        .source = b.path("example/src/test.flow"),
         .target = target,
         .optimize = optimize,
     }, compiler, runtime);
