@@ -1,6 +1,7 @@
 alloc: Allocator,
 program: []const *Stmt,
 constants: std.ArrayList(FlowValue),
+last_expr_type: ?FlowType = null,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
@@ -26,6 +27,7 @@ pub fn analyse(self: *Sema) !void {
 }
 
 fn visitStmt(self: *Sema, stmt: *Stmt) !void {
+    self.last_expr_type = null;
     switch (stmt.*) {
         .expr => try self.visitExpr(stmt.expr.expr),
         .print => try self.visitExpr(stmt.print.expr),
@@ -42,17 +44,25 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
                 .string => |string| self.constant(.{ .string = string }),
                 .null, .bool => {},
             }
+            self.last_expr_type = std.meta.activeTag(expr.literal.value);
         },
-        .unary => try self.visitExpr(expr.unary.expr),
+        .unary => {
+            try self.visitExpr(expr.unary.expr);
+            if (expr.unary.op.type == .@"!") {
+                self.last_expr_type = .bool;
+            }
+        },
         .grouping => try self.visitExpr(expr.grouping.expr),
         .assignment => try self.visitExpr(expr.assignment.value),
         .binary => {
             try self.visitExpr(expr.binary.lhs);
             try self.visitExpr(expr.binary.rhs);
+            // TODO: some checkings
         },
         .logical => {
             try self.visitExpr(expr.logical.lhs);
             try self.visitExpr(expr.logical.rhs);
+            self.last_expr_type = .bool;
         },
         .variable => {},
     }
@@ -74,3 +84,4 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const FlowValue = @import("shared").definitions.FlowValue;
+const FlowType = @import("shared").definitions.ValueType;
