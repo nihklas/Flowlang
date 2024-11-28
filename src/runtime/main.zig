@@ -1,14 +1,16 @@
 pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const alloc = gpa.allocator();
-
     if (comptime debug_options.dump) {
         Dumper.dump(code);
         return;
     }
 
-    var vm: VM = try .init(alloc, code);
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
+    defer std.debug.assert(gpa.deinit() == .ok);
+
+    var gc: GC = .init(gpa.allocator());
+    defer gc.deinit();
+
+    var vm: VM = try .init(gpa.allocator(), gc.allocator(), code);
     defer vm.deinit();
 
     try vm.run();
@@ -16,6 +18,7 @@ pub fn main() !void {
 
 const std = @import("std");
 const VM = @import("VM.zig");
+const GC = @import("GC.zig");
 const Dumper = @import("shared").BytecodeDumper;
 const debug_options = @import("debug_options");
 

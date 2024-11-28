@@ -1,16 +1,18 @@
 const STACK_SIZE = 1024;
 
-alloc: Allocator,
+gpa: Allocator,
+gc: Allocator,
 code: []const u8,
 ip: usize = 0,
 value_stack: Stack(Value, STACK_SIZE, true),
 constants: [256]Value = undefined,
 
-pub fn init(alloc: Allocator, code: []const u8) !VM {
+pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) !VM {
     return .{
-        .alloc = alloc,
+        .gpa = gpa,
+        .gc = gc,
         .code = code,
-        .value_stack = try .init(alloc),
+        .value_stack = try .init(gpa),
     };
 }
 
