@@ -9,11 +9,13 @@ pub fn build(b: *std.Build) void {
     const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse false;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse false;
+    const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse false;
 
     const debug_options = b.addOptions();
     debug_options.addOption(bool, "dump", dump_bytecode);
     debug_options.addOption(bool, "stack", trace_stack);
     debug_options.addOption(bool, "bytecode", trace_bytecode);
+    debug_options.addOption(bool, "memory", trace_memory);
 
     const shared = b.addModule("shared", .{
         .target = target,
@@ -73,7 +75,7 @@ pub fn build(b: *std.Build) void {
 
     const flow_out = compileImpl(b, .{
         .name = "flow_out",
-        .source = b.path("example/src/test.flow"),
+        .source = b.path("example/src/main.flow"),
         .target = target,
         .optimize = optimize,
     }, compiler, runtime);

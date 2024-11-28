@@ -16,11 +16,20 @@ pub fn init(child_alloc: Allocator) GC {
 
 /// Frees all still managed objects
 pub fn deinit(self: *GC) void {
+    if (comptime trace) {
+        std.debug.print("[DEBUG] Deinit GC, freeing all managed objects\n", .{});
+    }
+
     defer self.managed_objects.deinit(self.child_alloc);
     var iter = self.managed_objects.iterator();
     while (iter.next()) |entry| {
         const buf = @as([*]u8, @ptrFromInt(entry.key_ptr.*));
-        self.child_alloc.free(buf[0..entry.value_ptr.*]);
+        const len = entry.value_ptr.*;
+        self.child_alloc.free(buf[0..len]);
+
+        if (comptime trace) {
+            std.debug.print("[DEBUG] freed {d} bytes at {*}\n", .{ len, buf });
+        }
     }
 }
 
@@ -41,6 +50,10 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8
             self.child_alloc.free(alloced_bytes[0..len]);
             return null;
         };
+
+        if (comptime trace) {
+            std.debug.print("[DEBUG] alloc {d} bytes at {*}\n", .{ len, alloced_bytes });
+        }
     }
 
     return bytes;
@@ -48,6 +61,8 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8
 
 pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
     const self: *GC = @ptrCast(@alignCast(ctx));
+
+    const old_len = buf.len;
 
     const success = self.child_alloc.rawResize(buf, buf_align, new_len, ret_addr);
 
@@ -58,6 +73,10 @@ pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_add
         } else {
             @panic("What just happened? You resized, but I don't know of that object");
         }
+
+        if (comptime trace) {
+            std.debug.print("[DEBUG] resized from {d} to {d} at {*}\n", .{ old_len, new_len, buf.ptr });
+        }
     }
 
     return success;
@@ -66,6 +85,10 @@ pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_add
 pub fn free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
     const self: *GC = @ptrCast(@alignCast(ctx));
 
+    if (comptime trace) {
+        std.debug.print("[DEBUG] free {d} bytes at {*}\n", .{ buf.len, buf.ptr });
+    }
+
     self.child_alloc.rawFree(buf, buf_align, ret_addr);
     _ = self.managed_objects.remove(@intFromPtr(buf.ptr));
 }
@@ -73,3 +96,4 @@ pub fn free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
 const GC = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const trace = @import("debug_options").memory;

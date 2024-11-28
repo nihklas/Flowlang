@@ -16,7 +16,7 @@ print !false;
 print -1;
 
 print "Concat " . "works";
-print "Event different type: " . true;
+print "Event different types: " . true;
 print true . 2; // The concat operator turns every operand to a string
 print 1 + 1;
 print 3 - 5;
