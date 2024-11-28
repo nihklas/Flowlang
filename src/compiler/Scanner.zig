@@ -81,7 +81,7 @@ fn nextToken(self: *Scanner) !void {
             }
         },
         else => {
-            if (std.ascii.isAlphabetic(c)) {
+            if (std.ascii.isAlphabetic(c) or c == '_') {
                 try self.keywordOrIdentifier();
             } else {
                 self.has_error = true;
@@ -141,13 +141,17 @@ fn number(self: *Scanner) !void {
 }
 
 fn keywordOrIdentifier(self: *Scanner) !void {
-    while (std.ascii.isAlphanumeric(self.peek())) {
+    while (isAlphanumeric(self.peek())) {
         self.advance();
     }
 
     const text = self.input[self.start..self.current];
     const token_type: Token.Type = Token.ReservedKeywords.get(text) orelse .identifier;
     try self.makeToken(token_type);
+}
+
+fn isAlphanumeric(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '_';
 }
 
 fn advance(self: *Scanner) void {

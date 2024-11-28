@@ -123,7 +123,7 @@ pub const Stmt = union(enum) {
         name: Token,
         constant: bool,
         value: ?*Expr,
-        type: ValueType,
+        type_hint: ?Token,
     },
     channel: struct {
         name: Token,
@@ -195,14 +195,14 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createVariable(alloc: Allocator, name: Token, type_hint: ValueType, constant: bool, value: ?*Expr) *Stmt {
+    pub fn createVariable(alloc: Allocator, name: Token, type_hint: ?Token, constant: bool, value: ?*Expr) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .variable = .{
                 .name = name,
                 .constant = constant,
                 .value = value,
-                .type = type_hint,
+                .type_hint = type_hint,
             },
         };
         return stmt;
@@ -381,7 +381,7 @@ test "Stmt.createVariable" {
     const loop = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        .string,
+        .{ .type = .string, .lexeme = "string", .line = 1, .column = 1 },
         false,
         expr,
     );
@@ -391,7 +391,13 @@ test "Stmt.createVariable" {
 test "Stmt.createFunction" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    const variable = Stmt.createVariable(testing_alloc, .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 }, .int, true, null);
+    const variable = Stmt.createVariable(
+        testing_alloc,
+        .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 },
+        .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 },
+        true,
+        null,
+    );
 
     const params = try testing_alloc.alloc(*Stmt, 1);
     params[0] = variable;

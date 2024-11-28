@@ -39,7 +39,37 @@ fn parse(self: *Parser) ![]const *Stmt {
 }
 
 fn declaration(self: *Parser) ParserError!*Stmt {
+    if (self.matchEither(.@"var", .@"const")) |_| {
+        return self.varDeclaration();
+    }
+
     return self.statement();
+}
+
+fn varDeclaration(self: *Parser) ParserError!*Stmt {
+    // var or const
+    const keyword = self.previous();
+
+    try self.consume(
+        .identifier,
+        std.fmt.allocPrint(self.alloc, "Expected identifier after {s}", .{
+            @tagName(keyword.type),
+        }) catch unreachable,
+    );
+    const name = self.previous();
+
+    const type_hint = self.typeHint();
+
+    const value = blk: {
+        if (self.match(.@"=")) |_| {
+            break :blk try self.expression();
+        }
+        break :blk null;
+    };
+
+    try self.consume(.@";", "Expected ';' after variable declaration");
+
+    return Stmt.createVariable(self.alloc, name, type_hint, keyword.type == .@"const", value);
 }
 
 fn statement(self: *Parser) ParserError!*Stmt {
@@ -251,6 +281,20 @@ fn primary(self: *Parser) ParserError!*Expr {
 
     error_reporter.reportError(self.peek(), "UnexpectedToken: Expected Expression, got '{s}'", .{@tagName(self.peek().type)});
     return ParserError.UnexpectedToken;
+}
+
+fn typeHint(self: *Parser) ?Token {
+    if (self.match(.@":")) |colon| {
+        if (self.match(.string)) |string| return string;
+        if (self.match(.int)) |int| return int;
+        if (self.match(.float)) |float| return float;
+        if (self.match(.bool)) |boolean| return boolean;
+
+        error_reporter.reportError(colon, "Expected type after ':'", .{});
+        self.has_error = true;
+    }
+
+    return null;
 }
 
 fn recover(self: *Parser) void {

@@ -17,7 +17,6 @@ pub fn deinit(self: *Sema) void {
     self.constants.deinit();
 }
 
-// TODO: Check types
 pub fn analyse(self: *Sema) !void {
     for (self.program) |stmt| {
         try self.visitStmt(stmt);
@@ -39,7 +38,54 @@ fn visitStmt(self: *Sema, stmt: *Stmt) !void {
     switch (stmt.*) {
         .expr => try self.visitExpr(stmt.expr.expr),
         .print => try self.visitExpr(stmt.print.expr),
+        .variable => try self.visitVarDecl(stmt),
         else => @panic("Illegal Instruction"),
+    }
+}
+
+fn visitVarDecl(self: *Sema, stmt: *Stmt) !void {
+    // TODO: track all variables globally, maybe just when we have assignments
+    if (stmt.variable.value) |value| {
+        try self.visitExpr(value);
+        const value_type = self.last_expr_type.?;
+        if (stmt.variable.type_hint != null) {
+            const correct_type = if (value_type == .null)
+                true
+            else switch (stmt.variable.type_hint.?.type) {
+                .bool => value_type == .bool,
+                .string => value_type == .string,
+                .int => value_type == .int,
+                .float => value_type == .float,
+                else => @panic("Invalid Type Hint"),
+            };
+
+            if (!correct_type) {
+                error_reporter.reportError(
+                    stmt.variable.type_hint.?,
+                    "Type Mismatch: Expected '{s}', got '{?}'",
+                    .{
+                        @tagName(stmt.variable.type_hint.?.type),
+                        value_type,
+                    },
+                );
+                self.has_error = true;
+            }
+        } else if (value_type != .null) {
+            var expr_token = value.getToken();
+            expr_token.type = switch (value_type) {
+                .bool => .bool,
+                .int => .int,
+                .float => .float,
+                .string => .string,
+                .null => unreachable,
+            };
+            stmt.variable.type_hint = expr_token;
+        }
+    }
+
+    if (stmt.variable.type_hint == null) {
+        error_reporter.reportError(stmt.variable.name, "Cannot infer type of variable", .{});
+        self.has_error = true;
     }
 }
 

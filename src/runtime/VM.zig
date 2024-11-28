@@ -21,10 +21,6 @@ pub fn deinit(self: *VM) void {
     self.* = undefined;
 }
 
-// TODO: Write two main run functions:
-//    1. while(true) with switch
-//    2. labeled switch continue
-// Compare those in benchmarks
 pub fn run(self: *VM) !void {
     try self.loadConstants();
     try self.runWhileSwitch();
@@ -77,6 +73,7 @@ fn loadConstants(self: *VM) !void {
     }
 }
 
+// TODO: Better Errorhandling
 fn runWhileSwitch(self: *VM) !void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
@@ -131,11 +128,6 @@ fn runWhileSwitch(self: *VM) !void {
             },
         }
     }
-}
-
-fn runSwitchContinue(self: *VM) !void {
-    _ = self;
-    // TODO:
 }
 
 fn concat(self: *VM) void {
