@@ -75,6 +75,7 @@ fn runDump(self: *Dumper) void {
             .pop => printInstruction("OP_POP", "", .{}),
             .not => printInstruction("OP_NOT", "", .{}),
             .negate => printInstruction("OP_NEGATE", "", .{}),
+            .concat => printInstruction("OP_CONCAT", "", .{}),
             .add => printInstruction("OP_ADD", "", .{}),
             .sub => printInstruction("OP_SUB", "", .{}),
             .div => printInstruction("OP_DIV", "", .{}),

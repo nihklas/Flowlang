@@ -1,6 +1,6 @@
 pub fn main() !void {
     if (comptime debug_options.dump) {
-        Dumper.dump(code);
+        DumpTruck.dump(code);
         return;
     }
 
@@ -19,7 +19,7 @@ pub fn main() !void {
 const std = @import("std");
 const VM = @import("VM.zig");
 const GC = @import("GC.zig");
-const Dumper = @import("shared").BytecodeDumper;
+const DumpTruck = @import("shared").BytecodeDumper;
 const debug_options = @import("debug_options");
 
 const code = @embedFile("input");

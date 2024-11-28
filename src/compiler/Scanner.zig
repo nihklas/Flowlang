@@ -49,6 +49,7 @@ fn nextToken(self: *Scanner) !void {
             self.column = 1;
             self.lexeme_column = 1;
         },
+        '.' => try self.makeToken(.@"."),
         '+' => try self.makeToken(.@"+"),
         '*' => try self.makeToken(.@"*"),
         ':' => try self.makeToken(.@":"),

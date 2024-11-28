@@ -97,6 +97,8 @@ fn expression(self: *Compiler, expr: *Expr) !void {
                 .@">" => self.emitOpcode(.greater),
                 .@">=" => self.emitOpcode(.greater_equal),
 
+                .@"." => self.emitOpcode(.concat),
+
                 else => @panic("Wrong Operation"),
             }
         },

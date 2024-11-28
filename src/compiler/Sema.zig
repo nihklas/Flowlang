@@ -24,6 +24,7 @@ pub fn analyse(self: *Sema) !void {
     }
 
     // TODO: maybe add 'constant_long' to be able to store more constant values
+    // If we add that, should we sort the most used constant into the 'constant_short' area?
     if (self.constants.items.len > std.math.maxInt(u8)) {
         return error.TooManyConstants;
     }
@@ -104,8 +105,23 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
                     }
                 },
                 .@"+" => {
-                    // TODO: Does this need checking?
-                    // Do we have another operator for string concats?
+                    if (!isNumeric(left_type)) {
+                        error_reporter.reportError(
+                            expr.binary.lhs.getToken(),
+                            "Expected left operand of '{s}' to be int, float or string, got '{s}'",
+                            .{ @tagName(expr.binary.op.type), @tagName(left_type) },
+                        );
+                        self.has_error = true;
+                    }
+
+                    if (!isNumeric(right_type)) {
+                        error_reporter.reportError(
+                            expr.binary.rhs.getToken(),
+                            "Expected right operand of '{s}' to be int, float or string, got '{s}'",
+                            .{ @tagName(expr.binary.op.type), @tagName(right_type) },
+                        );
+                        self.has_error = true;
+                    }
                 },
                 .@"==", .@"!=" => {
                     if (left_type != right_type and !had_sideeffect) {
@@ -118,6 +134,7 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
                         expr.* = new_node.*;
                     }
                 },
+                .@"." => {},
                 else => unreachable,
             }
         },

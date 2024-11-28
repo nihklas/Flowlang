@@ -20,6 +20,7 @@ pub const OpCode = enum(u8) {
     negate,
     not,
 
+    concat,
     add,
     sub,
     div,

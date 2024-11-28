@@ -104,7 +104,19 @@ fn assignment(self: *Parser) ParserError!*Expr {
         return Expr.createAssignment(self.alloc, identifier, expr);
     }
 
-    return self.orExpr();
+    return self.concat();
+}
+
+fn concat(self: *Parser) ParserError!*Expr {
+    var lhs = try self.orExpr();
+    errdefer lhs.destroy(self.alloc);
+
+    while (self.match(.@".")) |op| {
+        const rhs = try self.orExpr();
+        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+    }
+
+    return lhs;
 }
 
 fn orExpr(self: *Parser) ParserError!*Expr {

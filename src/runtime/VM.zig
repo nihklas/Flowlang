@@ -92,6 +92,7 @@ fn runWhileSwitch(self: *VM) !void {
             .null => self.value_stack.push(.null),
             .pop => _ = self.value_stack.pop(),
             .add, .sub, .mul, .div => self.arithmetic(op),
+            .concat => self.concat(),
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .print => {
                 const value = self.value_stack.pop();
@@ -135,6 +136,14 @@ fn runWhileSwitch(self: *VM) !void {
 fn runSwitchContinue(self: *VM) !void {
     _ = self;
     // TODO:
+}
+
+fn concat(self: *VM) void {
+    const rhs = self.value_stack.pop();
+    const lhs = self.value_stack.pop();
+
+    const result = std.fmt.allocPrint(self.gc, "{}{}", .{ lhs, rhs }) catch @panic("OOM");
+    self.value_stack.push(.{ .string = result });
 }
 
 fn arithmetic(self: *VM, op: OpCode) void {

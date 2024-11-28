@@ -5,6 +5,7 @@ lexeme: []const u8,
 
 pub const Type = enum {
     // Single Character
+    @".",
     @"+",
     @"-",
     @"*",
