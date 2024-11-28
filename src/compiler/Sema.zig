@@ -3,6 +3,7 @@ program: []const *Stmt,
 constants: std.ArrayList(FlowValue),
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
+last_expr_sideeffect: bool = false,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
@@ -61,7 +62,7 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
                 .@"-" => {
                     if (self.last_expr_type != .int and self.last_expr_type != .float) {
                         error_reporter.reportError(
-                            expr.unary.op,
+                            expr.unary.expr.getToken(),
                             "Expected expression following '-' to be int or float, got '{s}'",
                             .{@tagName(self.last_expr_type.?)},
                         );
@@ -76,14 +77,17 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
         .binary => {
             try self.visitExpr(expr.binary.lhs);
             const left_type = self.last_expr_type.?;
+            var had_sideeffect = self.last_expr_sideeffect;
+
             try self.visitExpr(expr.binary.rhs);
             const right_type = self.last_expr_type.?;
+            had_sideeffect = had_sideeffect or self.last_expr_sideeffect;
 
             switch (expr.binary.op.type) {
                 .@"<", .@"<=", .@">=", .@">", .@"-", .@"*", .@"/" => {
                     if (!isNumeric(left_type)) {
                         error_reporter.reportError(
-                            expr.binary.op,
+                            expr.binary.lhs.getToken(),
                             "Expected left operand of '{s}' to be int or float, got '{s}'",
                             .{ @tagName(expr.binary.op.type), @tagName(left_type) },
                         );
@@ -92,7 +96,7 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
 
                     if (!isNumeric(right_type)) {
                         error_reporter.reportError(
-                            expr.binary.op,
+                            expr.binary.rhs.getToken(),
                             "Expected right operand of '{s}' to be int or float, got '{s}'",
                             .{ @tagName(expr.binary.op.type), @tagName(right_type) },
                         );
@@ -104,7 +108,7 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
                     // Do we have another operator for string concats?
                 },
                 .@"==", .@"!=" => {
-                    if (left_type != right_type) {
+                    if (left_type != right_type and !had_sideeffect) {
                         // if the types are unequal, we already know the answer to this operation
                         const new_node = Expr.createLiteral(
                             self.alloc,

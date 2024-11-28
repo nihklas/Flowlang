@@ -92,6 +92,18 @@ pub const Expr = union(enum) {
         }
     }
 
+    pub fn getToken(self: *Expr) Token {
+        return switch (self.*) {
+            .literal => self.literal.token,
+            .grouping => self.grouping.expr.getToken(),
+            .unary => self.unary.op,
+            .binary => self.binary.op,
+            .logical => self.logical.op,
+            .assignment => self.assignment.name,
+            .variable => self.variable.name,
+        };
+    }
+
     fn create(alloc: Allocator) *Expr {
         return alloc.create(Expr) catch @panic("OOM");
     }
