@@ -156,7 +156,7 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
             try self.visitExpr(expr.binary.rhs);
             const right_type = self.last_expr_type.?;
 
-            if (left_type != right_type) {
+            if (left_type != right_type and expr.binary.op.type != .@".") {
                 error_reporter.reportError(
                     expr.binary.op,
                     "Cannot compare value of type '{s}' to value of type '{s}'",
