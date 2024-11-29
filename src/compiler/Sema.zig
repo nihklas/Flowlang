@@ -1,6 +1,7 @@
 alloc: Allocator,
 program: []const *Stmt,
 constants: std.ArrayList(FlowValue),
+globals: std.StringHashMapUnmanaged(Global),
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
 last_expr_sideeffect: bool = false,
@@ -10,11 +11,13 @@ pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
         .alloc = alloc,
         .program = program,
         .constants = .init(alloc),
+        .globals = .empty,
     };
 }
 
 pub fn deinit(self: *Sema) void {
     self.constants.deinit();
+    self.globals.deinit(self.alloc);
 }
 
 pub fn analyse(self: *Sema) !void {
@@ -44,7 +47,10 @@ fn visitStmt(self: *Sema, stmt: *Stmt) !void {
 }
 
 fn visitVarDecl(self: *Sema, stmt: *Stmt) !void {
-    // TODO: track all variables globally, maybe just when we have assignments
+    // TODO: Track locals
+    stmt.variable.global = true;
+    self.constant(.{ .string = stmt.variable.name.lexeme });
+
     if (stmt.variable.value) |value| {
         try self.visitExpr(value);
         const value_type = self.last_expr_type.?;
@@ -86,6 +92,28 @@ fn visitVarDecl(self: *Sema, stmt: *Stmt) !void {
     if (stmt.variable.type_hint == null) {
         error_reporter.reportError(stmt.variable.name, "Cannot infer type of variable", .{});
         self.has_error = true;
+    } else {
+        if (self.globals.get(stmt.variable.name.lexeme)) |global| {
+            error_reporter.reportError(
+                stmt.variable.name,
+                "Variable '{s}' already defined at {d}:{d}, duplicated definition",
+                .{ stmt.variable.name.lexeme, global.token.line, global.token.column },
+            );
+            self.has_error = true;
+        } else {
+            const type_hint: FlowType = switch (stmt.variable.type_hint.?.type) {
+                .bool => .bool,
+                .int => .int,
+                .float => .float,
+                .string => .string,
+                else => unreachable,
+            };
+            try self.globals.put(
+                self.alloc,
+                stmt.variable.name.lexeme,
+                .{ .token = stmt.variable.name, .type = type_hint },
+            );
+        }
     }
 }
 
@@ -124,63 +152,45 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
         .binary => {
             try self.visitExpr(expr.binary.lhs);
             const left_type = self.last_expr_type.?;
-            var had_sideeffect = self.last_expr_sideeffect;
 
             try self.visitExpr(expr.binary.rhs);
             const right_type = self.last_expr_type.?;
-            had_sideeffect = had_sideeffect or self.last_expr_sideeffect;
+
+            if (left_type != right_type) {
+                error_reporter.reportError(
+                    expr.binary.op,
+                    "Cannot compare value of type '{s}' to value of type '{s}'",
+                    .{ @tagName(left_type), @tagName(right_type) },
+                );
+                self.has_error = true;
+            }
 
             switch (expr.binary.op.type) {
-                .@"<", .@"<=", .@">=", .@">", .@"-", .@"*", .@"/" => {
-                    if (!isNumeric(left_type)) {
-                        error_reporter.reportError(
-                            expr.binary.lhs.getToken(),
-                            "Expected left operand of '{s}' to be int or float, got '{s}'",
-                            .{ @tagName(expr.binary.op.type), @tagName(left_type) },
-                        );
-                        self.has_error = true;
-                    }
-
-                    if (!isNumeric(right_type)) {
-                        error_reporter.reportError(
-                            expr.binary.rhs.getToken(),
-                            "Expected right operand of '{s}' to be int or float, got '{s}'",
-                            .{ @tagName(expr.binary.op.type), @tagName(right_type) },
-                        );
-                        self.has_error = true;
-                    }
+                .@"<", .@"<=", .@">=", .@">" => {
+                    self.checkNumericOperands(
+                        expr.binary.lhs.getToken(),
+                        left_type,
+                        expr.binary.rhs.getToken(),
+                        right_type,
+                        expr.binary.op.type,
+                    );
+                    self.last_expr_type = .bool;
                 },
-                .@"+" => {
-                    if (!isNumeric(left_type)) {
-                        error_reporter.reportError(
-                            expr.binary.lhs.getToken(),
-                            "Expected left operand of '{s}' to be int, float or string, got '{s}'",
-                            .{ @tagName(expr.binary.op.type), @tagName(left_type) },
-                        );
-                        self.has_error = true;
-                    }
-
-                    if (!isNumeric(right_type)) {
-                        error_reporter.reportError(
-                            expr.binary.rhs.getToken(),
-                            "Expected right operand of '{s}' to be int, float or string, got '{s}'",
-                            .{ @tagName(expr.binary.op.type), @tagName(right_type) },
-                        );
-                        self.has_error = true;
-                    }
+                .@"+", .@"-", .@"*", .@"/" => {
+                    self.checkNumericOperands(
+                        expr.binary.lhs.getToken(),
+                        left_type,
+                        expr.binary.rhs.getToken(),
+                        right_type,
+                        expr.binary.op.type,
+                    );
                 },
                 .@"==", .@"!=" => {
-                    if (left_type != right_type and !had_sideeffect) {
-                        // if the types are unequal, we already know the answer to this operation
-                        const new_node = Expr.createLiteral(
-                            self.alloc,
-                            expr.binary.op,
-                            .{ .bool = expr.binary.op.type == .@"!=" },
-                        );
-                        expr.* = new_node.*;
-                    }
+                    self.last_expr_type = .bool;
                 },
-                .@"." => {},
+                .@"." => {
+                    self.last_expr_type = .string;
+                },
                 else => unreachable,
             }
         },
@@ -190,7 +200,17 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
             self.last_expr_type = .bool;
         },
         .variable => {
-            self.last_expr_type = .null;
+            const name = expr.variable.name.lexeme;
+
+            // TODO: Check for locals
+
+            if (self.globals.get(name)) |global| {
+                self.last_expr_type = global.type;
+                expr.variable.global = true;
+            } else {
+                error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
+                self.has_error = true;
+            }
         },
     }
 }
@@ -202,12 +222,39 @@ fn constant(self: *Sema, value: FlowValue) void {
     self.constants.append(value) catch @panic("OOM");
 }
 
+fn checkNumericOperands(self: *Sema, left: Token, lhs: FlowType, right: Token, rhs: FlowType, op: Token.Type) void {
+    if (!isNumeric(lhs)) {
+        error_reporter.reportError(
+            left,
+            "Expected left operand of '{s}' to be int or float, got '{s}'",
+            .{ @tagName(op), @tagName(lhs) },
+        );
+        self.has_error = true;
+    }
+
+    if (!isNumeric(rhs)) {
+        error_reporter.reportError(
+            right,
+            "Expected right operand of '{s}' to be int or float, got '{s}'",
+            .{ @tagName(op), @tagName(rhs) },
+        );
+        self.has_error = true;
+    }
+}
+
 fn isNumeric(value_type: FlowType) bool {
     return value_type == .int or value_type == .float;
 }
 
+const Global = struct {
+    token: Token,
+    type: FlowType,
+};
+
 const Expr = @import("ast.zig").Expr;
 const Stmt = @import("ast.zig").Stmt;
+
+const Token = @import("Token.zig");
 
 const Sema = @This();
 

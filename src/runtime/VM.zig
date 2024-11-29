@@ -6,6 +6,7 @@ code: []const u8,
 ip: usize = 0,
 value_stack: Stack(Value, STACK_SIZE, true),
 constants: [256]Value = undefined,
+globals: std.StringHashMapUnmanaged(Value),
 
 pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) !VM {
     return .{
@@ -13,11 +14,13 @@ pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) !VM {
         .gc = gc,
         .code = code,
         .value_stack = try .init(gpa),
+        .globals = .empty,
     };
 }
 
 pub fn deinit(self: *VM) void {
     self.value_stack.deinit();
+    self.globals.deinit(self.gpa);
     self.* = undefined;
 }
 
@@ -122,7 +125,19 @@ fn runWhileSwitch(self: *VM) !void {
                     self.value_stack.push(.{ .bool = !equal });
                 }
             },
-            else => {
+            .create_global => {
+                const name = self.value_stack.pop();
+                const value = self.value_stack.pop();
+
+                try self.globals.put(self.gpa, name.string, value);
+            },
+            .load_global => {
+                const name = self.value_stack.pop();
+                const value = self.globals.get(name.string).?;
+
+                self.value_stack.push(value);
+            },
+            .string, .string_long, .integer, .float, .constants_done => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
                 return error.IllegalInstruction;
             },

@@ -16,7 +16,7 @@ pub const Expr = union(enum) {
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr },
-    variable: struct { name: Token },
+    variable: struct { name: Token, global: bool = false },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -124,6 +124,7 @@ pub const Stmt = union(enum) {
         constant: bool,
         value: ?*Expr,
         type_hint: ?Token,
+        global: bool = false,
     },
     channel: struct {
         name: Token,

@@ -59,7 +59,26 @@ fn statement(self: *Compiler, stmt: *Stmt) !void {
             try self.expression(stmt.print.expr);
             self.emitOpcode(.print);
         },
+        .variable => try self.varDecl(stmt),
         else => return error.NotImplementedYet,
+    }
+}
+
+fn varDecl(self: *Compiler, stmt: *Stmt) !void {
+    const variable = stmt.variable;
+
+    if (variable.value) |value| {
+        try self.expression(value);
+    } else {
+        self.emitOpcode(.null);
+    }
+
+    if (variable.global) {
+        self.emitConstant(.{ .string = variable.name.lexeme });
+        self.emitOpcode(.create_global);
+    } else {
+        // TODO: Locals
+        return error.NotImplementedYet;
     }
 }
 
@@ -100,6 +119,14 @@ fn expression(self: *Compiler, expr: *Expr) !void {
                 .@"." => self.emitOpcode(.concat),
 
                 else => @panic("Wrong Operation"),
+            }
+        },
+        .variable => |variable| {
+            if (variable.global) {
+                self.emitConstant(.{ .string = variable.name.lexeme });
+                self.emitOpcode(.load_global);
+            } else {
+                return error.NotImplementedYet;
             }
         },
         else => return error.NotImplementedYet,

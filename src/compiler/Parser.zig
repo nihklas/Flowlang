@@ -127,8 +127,9 @@ fn expression(self: *Parser) ParserError!*Expr {
 }
 
 fn assignment(self: *Parser) ParserError!*Expr {
-    if (self.match(.identifier)) |identifier| {
-        try self.consume(.@"=", "Expected '=' after Identifier");
+    if (self.check(.identifier) and self.checkNext(.@"=")) {
+        const identifier = self.match(.identifier).?;
+        _ = self.match(.@"=");
 
         const expr = try self.expression();
         return Expr.createAssignment(self.alloc, identifier, expr);
@@ -339,6 +340,11 @@ fn matchEither(self: *Parser, expected1: Token.Type, expected2: Token.Type) ?Tok
 
 fn check(self: *Parser, expected: Token.Type) bool {
     return self.peek().type == expected;
+}
+
+fn checkNext(self: *Parser, expected: Token.Type) bool {
+    if (self.isAtEnd()) return false;
+    return self.tokens[self.current + 1].type == expected;
 }
 
 fn advance(self: *Parser) Token {

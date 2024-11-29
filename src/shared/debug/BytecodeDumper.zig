@@ -19,7 +19,6 @@ fn runDump(self: *Dumper) void {
         const op = self.instruction();
         switch (op) {
             .integer => {
-                if (!constant_block) panic("OP_INTEGER", "not allowed outside constant definitions\n");
                 defer constant_counter += 1;
                 defer self.ip += 8;
                 const bytes = self.code[self.ip .. self.ip + 8];
@@ -28,7 +27,6 @@ fn runDump(self: *Dumper) void {
                 printInstruction("OP_INTEGER", "{d: <10}{d}", .{ constant_counter, int });
             },
             .float => {
-                if (!constant_block) panic("OP_FLOAT", "not allowed outside constant definitions\n");
                 defer constant_counter += 1;
                 defer self.ip += 8;
                 const bytes = self.code[self.ip .. self.ip + 8];
@@ -37,7 +35,6 @@ fn runDump(self: *Dumper) void {
                 printInstruction("OP_FLOAT", "{d: <10}{d}", .{ constant_counter, float });
             },
             .string => {
-                if (!constant_block) panic("OP_STRING", "not allowed outside constant definitions\n");
                 defer constant_counter += 1;
                 const len = self.code[self.ip];
                 self.ip += 1;
@@ -49,7 +46,6 @@ fn runDump(self: *Dumper) void {
                 self.ip += len;
             },
             .string_long => {
-                if (!constant_block) panic("OP_STRING_LONG", "not allowed outside constant definitions\n");
                 defer constant_counter += 1;
                 const bytes = self.code[self.ip .. self.ip + 4];
                 self.ip += 4;
@@ -62,12 +58,13 @@ fn runDump(self: *Dumper) void {
                 self.ip += len;
             },
             .constant => {
-                if (constant_block) panic("OP_CONSTANT", "not allowed in constants definitions\n");
                 defer self.ip += 1;
                 const idx = self.code[self.ip];
                 const value = self.constants[idx];
                 printInstruction("OP_CONSTANT", "{d: <10}{}", .{ idx, value });
             },
+            .create_global => printInstruction("OP_CREATE_GLOBAL", "", .{}),
+            .load_global => printInstruction("OP_LOAD_GLOBAL", "", .{}),
             .true => printInstruction("OP_TRUE", "", .{}),
             .false => printInstruction("OP_FALSE", "", .{}),
             .null => printInstruction("OP_NULL", "", .{}),
