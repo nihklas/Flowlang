@@ -15,7 +15,7 @@ pub const Expr = union(enum) {
     unary: struct { op: Token, expr: *Expr },
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
-    assignment: struct { name: Token, value: *Expr },
+    assignment: struct { name: Token, value: *Expr, global: bool = false },
     variable: struct { name: Token, global: bool = false },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {

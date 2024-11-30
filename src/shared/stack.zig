@@ -49,8 +49,9 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
             return self.stack[self.stack_top];
         }
 
+        /// 0 is at the top, 1 is the second from the top, and so on...
         pub fn at(self: *Self, offset: usize) StackReturn(T) {
-            const i = self.stack_top - offset;
+            const i = self.stack_top - 1 - offset;
             if (i > self.stack_top or i < 0) {
                 if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
             }

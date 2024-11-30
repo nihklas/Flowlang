@@ -80,11 +80,11 @@ fn loadConstants(self: *VM) !void {
 fn runWhileSwitch(self: *VM) !void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
-        if (comptime debug_options.bytecode) {
-            std.debug.print("{}\n", .{op});
-        }
         if (comptime debug_options.stack) {
             self.value_stack.dump();
+        }
+        if (comptime debug_options.bytecode) {
+            std.debug.print("{}\n", .{op});
         }
         switch (op) {
             .true => self.value_stack.push(.{ .bool = true }),
@@ -136,6 +136,13 @@ fn runWhileSwitch(self: *VM) !void {
                 const value = self.globals.get(name.string).?;
 
                 self.value_stack.push(value);
+            },
+            .set_global => {
+                const name = self.value_stack.pop();
+                const value = self.value_stack.at(0);
+
+                // We can safely assume capacity, as this set only works if the global already exists
+                self.globals.putAssumeCapacity(name.string, value);
             },
             .string, .string_long, .integer, .float, .constants_done => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});

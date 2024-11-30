@@ -35,6 +35,10 @@ var not_yet: float; // We have uninitialised variables, but they need a type
 const constant: string = "Hallo"; // We can also specify a type, it gets checked
 const msg = "Hello " . "World"; // Type inference also works with more complex expressions
 
+test = 2;
+not_yet = 1.3;
+// constant = "Not possible";
+
 print test;
 print not_yet;
 print constant;

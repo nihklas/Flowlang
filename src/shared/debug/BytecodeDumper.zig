@@ -65,6 +65,7 @@ fn runDump(self: *Dumper) void {
             },
             .create_global => printInstruction("OP_CREATE_GLOBAL", "", .{}),
             .load_global => printInstruction("OP_LOAD_GLOBAL", "", .{}),
+            .set_global => printInstruction("OP_SET_GLOBAL", "", .{}),
             .true => printInstruction("OP_TRUE", "", .{}),
             .false => printInstruction("OP_FALSE", "", .{}),
             .null => printInstruction("OP_NULL", "", .{}),

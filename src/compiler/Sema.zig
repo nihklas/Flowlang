@@ -111,7 +111,7 @@ fn visitVarDecl(self: *Sema, stmt: *Stmt) !void {
             try self.globals.put(
                 self.alloc,
                 stmt.variable.name.lexeme,
-                .{ .token = stmt.variable.name, .type = type_hint },
+                .{ .token = stmt.variable.name, .type = type_hint, .constant = stmt.variable.constant },
             );
         }
     }
@@ -128,72 +128,10 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
             }
             self.last_expr_type = std.meta.activeTag(expr.literal.value);
         },
-        .unary => {
-            try self.visitExpr(expr.unary.expr);
-            switch (expr.unary.op.type) {
-                .@"!" => {
-                    self.last_expr_type = .bool;
-                },
-                .@"-" => {
-                    if (self.last_expr_type != .int and self.last_expr_type != .float) {
-                        error_reporter.reportError(
-                            expr.unary.expr.getToken(),
-                            "Expected expression following '-' to be int or float, got '{s}'",
-                            .{@tagName(self.last_expr_type.?)},
-                        );
-                        self.has_error = true;
-                    }
-                },
-                else => unreachable,
-            }
-        },
+        .unary => self.unary(expr),
         .grouping => try self.visitExpr(expr.grouping.expr),
-        .assignment => try self.visitExpr(expr.assignment.value),
-        .binary => {
-            try self.visitExpr(expr.binary.lhs);
-            const left_type = self.last_expr_type.?;
-
-            try self.visitExpr(expr.binary.rhs);
-            const right_type = self.last_expr_type.?;
-
-            if (left_type != right_type and expr.binary.op.type != .@".") {
-                error_reporter.reportError(
-                    expr.binary.op,
-                    "Cannot compare value of type '{s}' to value of type '{s}'",
-                    .{ @tagName(left_type), @tagName(right_type) },
-                );
-                self.has_error = true;
-            }
-
-            switch (expr.binary.op.type) {
-                .@"<", .@"<=", .@">=", .@">" => {
-                    self.checkNumericOperands(
-                        expr.binary.lhs.getToken(),
-                        left_type,
-                        expr.binary.rhs.getToken(),
-                        right_type,
-                        expr.binary.op.type,
-                    );
-                    self.last_expr_type = .bool;
-                },
-                .@"+", .@"-", .@"*", .@"/" => {
-                    self.checkNumericOperands(
-                        expr.binary.lhs.getToken(),
-                        left_type,
-                        expr.binary.rhs.getToken(),
-                        right_type,
-                        expr.binary.op.type,
-                    );
-                },
-                .@"==", .@"!=" => {
-                    self.last_expr_type = .bool;
-                },
-                .@"." => {
-                    self.last_expr_type = .string;
-                },
-                else => unreachable,
-            }
-        },
+        .assignment => self.assignment(expr),
+        .binary => self.binary(expr),
         .logical => {
             try self.visitExpr(expr.logical.lhs);
             try self.visitExpr(expr.logical.rhs);
@@ -212,6 +150,99 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
                 self.has_error = true;
             }
         },
+    }
+}
+
+fn unary(self: *Sema, expr: *Expr) void {
+    try self.visitExpr(expr.unary.expr);
+    switch (expr.unary.op.type) {
+        .@"!" => {
+            self.last_expr_type = .bool;
+        },
+        .@"-" => {
+            if (self.last_expr_type != .int and self.last_expr_type != .float) {
+                error_reporter.reportError(
+                    expr.unary.expr.getToken(),
+                    "Expected expression following '-' to be int or float, got '{s}'",
+                    .{@tagName(self.last_expr_type.?)},
+                );
+                self.has_error = true;
+            }
+        },
+        else => unreachable,
+    }
+}
+
+fn binary(self: *Sema, expr: *Expr) void {
+    try self.visitExpr(expr.binary.lhs);
+    const left_type = self.last_expr_type.?;
+
+    try self.visitExpr(expr.binary.rhs);
+    const right_type = self.last_expr_type.?;
+
+    // TODO: What about null?
+    if (left_type != right_type and expr.binary.op.type != .@".") {
+        error_reporter.reportError(
+            expr.binary.op,
+            "Cannot compare value of type '{s}' to value of type '{s}'",
+            .{ @tagName(left_type), @tagName(right_type) },
+        );
+        self.has_error = true;
+    }
+
+    switch (expr.binary.op.type) {
+        .@"<", .@"<=", .@">=", .@">" => {
+            self.checkNumericOperands(
+                expr.binary.lhs.getToken(),
+                left_type,
+                expr.binary.rhs.getToken(),
+                right_type,
+                expr.binary.op.type,
+            );
+            self.last_expr_type = .bool;
+        },
+        .@"+", .@"-", .@"*", .@"/" => {
+            self.checkNumericOperands(
+                expr.binary.lhs.getToken(),
+                left_type,
+                expr.binary.rhs.getToken(),
+                right_type,
+                expr.binary.op.type,
+            );
+        },
+        .@"==", .@"!=" => {
+            self.last_expr_type = .bool;
+        },
+        .@"." => {
+            self.last_expr_type = .string;
+        },
+        else => unreachable,
+    }
+}
+
+fn assignment(self: *Sema, expr: *Expr) void {
+    try self.visitExpr(expr.assignment.value);
+    const resulted_type = self.last_expr_type.?;
+
+    if (self.globals.get(expr.assignment.name.lexeme)) |global| {
+        if (global.constant) {
+            error_reporter.reportError(expr.assignment.name, "Global is declared const", .{});
+            self.has_error = true;
+        }
+
+        if (resulted_type != .null and global.type != resulted_type) {
+            error_reporter.reportError(
+                expr.assignment.value.getToken(),
+                "Type mismatch: Expected value of type '{s}', got '{s}'",
+                .{ @tagName(global.type), @tagName(resulted_type) },
+            );
+            self.has_error = true;
+        }
+
+        expr.assignment.global = true;
+    } else {
+        error_reporter.reportError(expr.assignment.name, "Undefined variable: '{s}'", .{expr.assignment.name.lexeme});
+        self.has_error = true;
     }
 }
 
@@ -248,6 +279,7 @@ fn isNumeric(value_type: FlowType) bool {
 
 const Global = struct {
     token: Token,
+    constant: bool,
     type: FlowType,
 };
 

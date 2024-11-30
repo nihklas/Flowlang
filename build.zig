@@ -6,10 +6,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
+    const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
-    const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse false;
-    const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse false;
-    const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse false;
+    const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
+    const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
+    const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
 
     const debug_options = b.addOptions();
     debug_options.addOption(bool, "dump", dump_bytecode);

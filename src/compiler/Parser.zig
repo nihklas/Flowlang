@@ -143,7 +143,7 @@ fn concat(self: *Parser) ParserError!*Expr {
     errdefer lhs.destroy(self.alloc);
 
     while (self.match(.@".")) |op| {
-        const rhs = try self.orExpr();
+        const rhs = try self.expression();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
 

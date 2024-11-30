@@ -1,5 +1,7 @@
 var msg = "Hallo " . "Welt!";
-var result = 2 + 1;
+const result = 2 + 1;
+var result_output = "Ergebnis: ";
+result_output = result_output . result;
 
 // Type checking
-print msg < result;
+print result_output;

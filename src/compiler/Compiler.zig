@@ -129,6 +129,15 @@ fn expression(self: *Compiler, expr: *Expr) !void {
                 return error.NotImplementedYet;
             }
         },
+        .assignment => |assignment| {
+            try self.expression(assignment.value);
+            if (assignment.global) {
+                self.emitConstant(.{ .string = assignment.name.lexeme });
+                self.emitOpcode(.set_global);
+            } else {
+                return error.NotImplementedYet;
+            }
+        },
         else => return error.NotImplementedYet,
     }
 }
