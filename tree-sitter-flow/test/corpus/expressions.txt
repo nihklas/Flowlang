@@ -1,0 +1,144 @@
+========
+Literals
+========
+
+1;
+1.2;
+"Hallo";
+true;
+null;
+identifier;
+
+---
+
+(source_file
+    (expressionStatement
+        (number))
+    (expressionStatement
+        (number))
+    (expressionStatement
+        (string))
+    (expressionStatement
+        (bool))
+    (expressionStatement
+        (null))
+    (expressionStatement
+        (identifier)))
+
+=====
+Unary
+=====
+
+-1;
+!true;
+
+---
+
+(source_file
+    (expressionStatement
+        (unary
+            (number)))
+    (expressionStatement
+        (unary
+            (bool))))
+
+======
+Binary
+======
+
+1 + 1;
+1 - 1;
+1 * 1;
+1 / 1;
+"Hello " . "World";
+
+---
+
+(source_file
+    (expressionStatement
+        (binary
+            (number)
+            (number)))
+    (expressionStatement
+        (binary
+            (number)
+            (number)))
+    (expressionStatement
+        (binary
+            (number)
+            (number)))
+    (expressionStatement
+        (binary
+            (number)
+            (number)))
+    (expressionStatement
+        (binary
+            (string)
+            (string))))
+
+==========
+Comparison
+==========
+
+1 < 2;
+1 <= 2;
+1 >= 2;
+1 > 2;
+
+---
+
+(source_file
+    (expressionStatement
+        (comparison
+            (number)
+            (number)))
+    (expressionStatement
+        (comparison
+            (number)
+            (number)))
+    (expressionStatement
+        (comparison
+            (number)
+            (number)))
+    (expressionStatement
+        (comparison
+            (number)
+            (number))))
+
+========
+Equality
+========
+
+1 == 2;
+1 != 2;
+
+---
+
+(source_file
+    (expressionStatement
+        (equality
+            (number)
+            (number)))
+    (expressionStatement
+        (equality
+            (number)
+            (number))))
+
+=======
+Logical
+=======
+
+true or false;
+true and true;
+
+---
+
+(source_file
+    (expressionStatement
+        (logical
+            (bool)
+            (bool)))
+    (expressionStatement
+        (logical
+            (bool)
+            (bool))))
