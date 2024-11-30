@@ -10,6 +10,7 @@
 module.exports = grammar({
   name: "flow",
   word: $ => $.identifier,
+  extras: $ => [' ', '\n', '\r', $.comment],
   rules: {
     source_file: $ => repeat($._declaration),
 
@@ -89,5 +90,10 @@ module.exports = grammar({
     bool: _ => choice('true', 'false'),
     null: _ => 'null',
     identifier: _ => /[a-zA-Z]([a-zA-Z0-9_])*/,
+
+    comment: _ => seq(
+      '//',
+      /.*/
+    )
   }
 });
