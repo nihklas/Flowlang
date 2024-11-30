@@ -63,6 +63,16 @@ fn runDump(self: *Dumper) void {
                 const value = self.constants[idx];
                 printInstruction("OP_CONSTANT", "{d: <10}{}", .{ idx, value });
             },
+            .jump_if_false => {
+                defer self.ip += 2;
+                const jump_len = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
+                printInstruction("OP_JUMP_IF_FALSE", "-> {x:0>4}", .{jump_len + self.ip + 2});
+            },
+            .jump => {
+                defer self.ip += 2;
+                const jump_len = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
+                printInstruction("OP_JUMP", "-> {x:0>4}", .{jump_len + self.ip + 2});
+            },
             .create_global => printInstruction("OP_CREATE_GLOBAL", "", .{}),
             .load_global => printInstruction("OP_LOAD_GLOBAL", "", .{}),
             .set_global => printInstruction("OP_SET_GLOBAL", "", .{}),

@@ -84,7 +84,7 @@ fn runWhileSwitch(self: *VM) !void {
             self.value_stack.dump();
         }
         if (comptime debug_options.bytecode) {
-            std.debug.print("{}\n", .{op});
+            std.debug.print("{x:0>4} {}\n", .{ self.ip, op });
         }
         switch (op) {
             .true => self.value_stack.push(.{ .bool = true }),
@@ -143,6 +143,16 @@ fn runWhileSwitch(self: *VM) !void {
 
                 // We can safely assume capacity, as this set only works if the global already exists
                 self.globals.putAssumeCapacity(name.string, value);
+            },
+            .jump => {
+                // For some reason we cannot inline this
+                const distance = self.short();
+                self.ip += distance;
+            },
+            .jump_if_false => {
+                const distance = self.short();
+                const value = self.value_stack.at(0);
+                if (!value.isTrue()) self.ip += distance;
             },
             .string, .string_long, .integer, .float, .constants_done => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
@@ -229,6 +239,10 @@ fn comparison(self: *VM, op: OpCode) void {
 fn instruction(self: *VM) OpCode {
     defer self.ip += 1;
     return @enumFromInt(self.code[self.ip]);
+}
+
+fn short(self: *VM) u16 {
+    return std.mem.bytesToValue(u16, &.{ self.byte(), self.byte() });
 }
 
 fn byte(self: *VM) u8 {

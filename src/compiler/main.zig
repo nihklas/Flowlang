@@ -1,7 +1,5 @@
 pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer std.debug.assert(gpa.deinit() == .ok);
-    var arena: std.heap.ArenaAllocator = .init(gpa.allocator());
+    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
 

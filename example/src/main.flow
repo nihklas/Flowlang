@@ -43,3 +43,14 @@ print test;
 print not_yet;
 print constant;
 print msg;
+
+if test > 1 {
+    print "We have control flow now!";
+}
+
+if !not_yet {
+    print "This is empty";
+}
+else {
+    print "But this works";
+}

@@ -1,7 +1,9 @@
-var msg = "Hallo " . "Welt!";
-const result = 2 + 1;
-var result_output = "Ergebnis: ";
-result_output = result_output . result;
+const test = true;
 
-// Type checking
-print result_output;
+if (test) {
+    print "True";
+}
+else {
+    print "False";
+}
+

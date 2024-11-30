@@ -22,7 +22,7 @@ pub fn deinit(self: *Sema) void {
 
 pub fn analyse(self: *Sema) !void {
     for (self.program) |stmt| {
-        try self.visitStmt(stmt);
+        try self.statement(stmt);
     }
 
     // TODO: maybe add 'constant_long' to be able to store more constant values
@@ -36,23 +36,35 @@ pub fn analyse(self: *Sema) !void {
     }
 }
 
-fn visitStmt(self: *Sema, stmt: *Stmt) !void {
+fn statement(self: *Sema, stmt: *Stmt) !void {
     self.last_expr_type = null;
     switch (stmt.*) {
-        .expr => try self.visitExpr(stmt.expr.expr),
-        .print => try self.visitExpr(stmt.print.expr),
-        .variable => try self.visitVarDecl(stmt),
+        .expr => self.expression(stmt.expr.expr),
+        .print => self.expression(stmt.print.expr),
+        .variable => try self.varDeclaration(stmt),
+        .@"if" => |if_stmt| {
+            self.expression(if_stmt.condition);
+            try self.statement(if_stmt.true_branch);
+            if (if_stmt.false_branch) |false_branch| {
+                try self.statement(false_branch);
+            }
+        },
+        .block => |block| {
+            for (block.stmts) |inner_stmt| {
+                try self.statement(inner_stmt);
+            }
+        },
         else => @panic("Illegal Instruction"),
     }
 }
 
-fn visitVarDecl(self: *Sema, stmt: *Stmt) !void {
+fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
     // TODO: Track locals
     stmt.variable.global = true;
     self.constant(.{ .string = stmt.variable.name.lexeme });
 
     if (stmt.variable.value) |value| {
-        try self.visitExpr(value);
+        self.expression(value);
         const value_type = self.last_expr_type.?;
         if (stmt.variable.type_hint != null) {
             const correct_type = if (value_type == .null)
@@ -117,7 +129,7 @@ fn visitVarDecl(self: *Sema, stmt: *Stmt) !void {
     }
 }
 
-fn visitExpr(self: *Sema, expr: *Expr) !void {
+fn expression(self: *Sema, expr: *Expr) void {
     switch (expr.*) {
         .literal => {
             switch (expr.literal.value) {
@@ -129,12 +141,12 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
             self.last_expr_type = std.meta.activeTag(expr.literal.value);
         },
         .unary => self.unary(expr),
-        .grouping => try self.visitExpr(expr.grouping.expr),
+        .grouping => self.expression(expr.grouping.expr),
         .assignment => self.assignment(expr),
         .binary => self.binary(expr),
         .logical => {
-            try self.visitExpr(expr.logical.lhs);
-            try self.visitExpr(expr.logical.rhs);
+            self.expression(expr.logical.lhs);
+            self.expression(expr.logical.rhs);
             self.last_expr_type = .bool;
         },
         .variable => {
@@ -154,7 +166,7 @@ fn visitExpr(self: *Sema, expr: *Expr) !void {
 }
 
 fn unary(self: *Sema, expr: *Expr) void {
-    try self.visitExpr(expr.unary.expr);
+    self.expression(expr.unary.expr);
     switch (expr.unary.op.type) {
         .@"!" => {
             self.last_expr_type = .bool;
@@ -174,10 +186,10 @@ fn unary(self: *Sema, expr: *Expr) void {
 }
 
 fn binary(self: *Sema, expr: *Expr) void {
-    try self.visitExpr(expr.binary.lhs);
+    self.expression(expr.binary.lhs);
     const left_type = self.last_expr_type.?;
 
-    try self.visitExpr(expr.binary.rhs);
+    self.expression(expr.binary.rhs);
     const right_type = self.last_expr_type.?;
 
     // TODO: What about null?
@@ -221,7 +233,7 @@ fn binary(self: *Sema, expr: *Expr) void {
 }
 
 fn assignment(self: *Sema, expr: *Expr) void {
-    try self.visitExpr(expr.assignment.value);
+    self.expression(expr.assignment.value);
     const resulted_type = self.last_expr_type.?;
 
     if (self.globals.get(expr.assignment.name.lexeme)) |global| {

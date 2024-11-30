@@ -77,6 +77,10 @@ fn statement(self: *Parser) ParserError!*Stmt {
         return self.printStatement();
     }
 
+    if (self.match(.@"if")) |_| {
+        return self.ifStatement();
+    }
+
     if (self.match(.@"{")) |_| {
         const stmts = try self.block();
         return Stmt.createBlock(self.alloc, stmts);
@@ -111,6 +115,15 @@ fn printStatement(self: *Parser) ParserError!*Stmt {
     try self.consume(.@";", "Expected ';' after value");
 
     return Stmt.createPrint(self.alloc, expr);
+}
+
+fn ifStatement(self: *Parser) ParserError!*Stmt {
+    const condition = try self.expression();
+    const then = try self.statement();
+
+    const else_branch = if (self.match(.@"else")) |_| try self.statement() else null;
+
+    return Stmt.createIf(self.alloc, condition, then, else_branch);
 }
 
 fn expressionStatement(self: *Parser) ParserError!*Stmt {
@@ -348,8 +361,10 @@ fn checkNext(self: *Parser, expected: Token.Type) bool {
 }
 
 fn advance(self: *Parser) Token {
-    if (!self.isAtEnd()) self.current += 1;
-    return self.previous();
+    if (self.isAtEnd()) return self.peek();
+
+    defer self.current += 1;
+    return self.peek();
 }
 
 fn isAtEnd(self: *Parser) bool {

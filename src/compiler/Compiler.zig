@@ -1,3 +1,5 @@
+// TODO: better compile step errors?
+
 alloc: Allocator,
 byte_code: std.ArrayList(u8),
 constants: []const FlowValue,
@@ -10,13 +12,13 @@ pub fn compile(alloc: Allocator, program: []const *Stmt, constants: []const Flow
     };
     errdefer compiler.byte_code.deinit();
 
-    try compiler.compileConstants();
-    try compiler.traverse(program);
+    compiler.compileConstants();
+    compiler.traverse(program);
 
     return try compiler.byte_code.toOwnedSlice();
 }
 
-fn compileConstants(self: *Compiler) !void {
+fn compileConstants(self: *Compiler) void {
     for (self.constants) |c| switch (c) {
         .string => |string| {
             if (string.len > std.math.maxInt(u8)) {
@@ -38,37 +40,39 @@ fn compileConstants(self: *Compiler) !void {
             self.emitOpcode(.float);
             self.emitMultibyte(c.float);
         },
-        .bool, .null => return error.NotAConstant,
+        .bool, .null => @panic("not a constant"),
     };
     self.emitOpcode(.constants_done);
 }
 
-fn traverse(self: *Compiler, program: []const *ast.Stmt) !void {
+fn traverse(self: *Compiler, program: []const *ast.Stmt) void {
     for (program) |stmt| {
-        try self.statement(stmt);
+        self.statement(stmt);
     }
 }
 
-fn statement(self: *Compiler, stmt: *Stmt) !void {
+fn statement(self: *Compiler, stmt: *Stmt) void {
     switch (stmt.*) {
         .expr => {
-            try self.expression(stmt.expr.expr);
+            self.expression(stmt.expr.expr);
             self.emitOpcode(.pop);
         },
         .print => {
-            try self.expression(stmt.print.expr);
+            self.expression(stmt.print.expr);
             self.emitOpcode(.print);
         },
-        .variable => try self.varDecl(stmt),
-        else => return error.NotImplementedYet,
+        .variable => self.varDeclaration(stmt),
+        .@"if" => self.ifStatement(stmt),
+        .block => self.traverse(stmt.block.stmts),
+        else => @panic("Not yet implemented"),
     }
 }
 
-fn varDecl(self: *Compiler, stmt: *Stmt) !void {
+fn varDeclaration(self: *Compiler, stmt: *Stmt) void {
     const variable = stmt.variable;
 
     if (variable.value) |value| {
-        try self.expression(value);
+        self.expression(value);
     } else {
         self.emitOpcode(.null);
     }
@@ -78,11 +82,30 @@ fn varDecl(self: *Compiler, stmt: *Stmt) !void {
         self.emitOpcode(.create_global);
     } else {
         // TODO: Locals
-        return error.NotImplementedYet;
+        @panic("Not yet implemented");
     }
 }
 
-fn expression(self: *Compiler, expr: *Expr) !void {
+fn ifStatement(self: *Compiler, stmt: *Stmt) void {
+    self.expression(stmt.@"if".condition);
+    const jump_idx = self.emitJump(.jump_if_false);
+
+    self.emitOpcode(.pop);
+    self.statement(stmt.@"if".true_branch);
+
+    const else_jump = self.emitJump(.jump);
+
+    self.patchJump(jump_idx);
+
+    self.emitOpcode(.pop);
+    if (stmt.@"if".false_branch) |false_branch| {
+        self.statement(false_branch);
+    }
+
+    self.patchJump(else_jump);
+}
+
+fn expression(self: *Compiler, expr: *Expr) void {
     switch (expr.*) {
         .literal => |literal| switch (literal.value) {
             .int => |int| self.emitConstant(.{ .int = int }),
@@ -92,7 +115,7 @@ fn expression(self: *Compiler, expr: *Expr) !void {
             .string => |string| self.emitConstant(.{ .string = string }),
         },
         .unary => |unary| {
-            try self.expression(unary.expr);
+            self.expression(unary.expr);
             switch (unary.op.type) {
                 .@"!" => self.emitOpcode(.not),
                 .@"-" => self.emitOpcode(.negate),
@@ -100,8 +123,8 @@ fn expression(self: *Compiler, expr: *Expr) !void {
             }
         },
         .binary => |binary| {
-            try self.expression(binary.lhs);
-            try self.expression(binary.rhs);
+            self.expression(binary.lhs);
+            self.expression(binary.rhs);
             switch (binary.op.type) {
                 .@"+" => self.emitOpcode(.add),
                 .@"-" => self.emitOpcode(.sub),
@@ -126,20 +149,47 @@ fn expression(self: *Compiler, expr: *Expr) !void {
                 self.emitConstant(.{ .string = variable.name.lexeme });
                 self.emitOpcode(.load_global);
             } else {
-                return error.NotImplementedYet;
+                @panic("Not yet implemented");
             }
         },
         .assignment => |assignment| {
-            try self.expression(assignment.value);
+            self.expression(assignment.value);
             if (assignment.global) {
                 self.emitConstant(.{ .string = assignment.name.lexeme });
                 self.emitOpcode(.set_global);
             } else {
-                return error.NotImplementedYet;
+                @panic("Not yet implemented");
             }
         },
-        else => return error.NotImplementedYet,
+        .grouping => self.expression(expr.grouping.expr),
+        else => @panic("Not yet implemented"),
     }
+}
+
+fn emitJump(self: *Compiler, jump_op: OpCode) usize {
+    const jump_idx = self.byte_code.items.len;
+    self.emitOpcode(jump_op);
+    // Reserve space for jump distance
+    self.emitByte(0x00);
+    self.emitByte(0x00);
+    return jump_idx;
+}
+
+fn patchJump(self: *Compiler, jump_idx: usize) void {
+    // len - 1 to get the correct amount of instructions between jmp and now
+    // another - 2 to account for the jmp length in the jmp instruction
+    const exact_jump_length = self.byte_code.items.len - 3 - jump_idx;
+
+    // TODO: Do we need to allow bigger jumps?
+    if (exact_jump_length > std.math.maxInt(u16)) {
+        @panic("Jump too long");
+    }
+
+    const jump_length: u16 = @intCast(exact_jump_length);
+
+    const bytes = std.mem.toBytes(jump_length);
+    self.byte_code.items[jump_idx + 1] = bytes[0];
+    self.byte_code.items[jump_idx + 2] = bytes[1];
 }
 
 fn emitConstant(self: *Compiler, value: FlowValue) void {
