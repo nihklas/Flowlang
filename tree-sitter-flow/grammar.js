@@ -15,9 +15,17 @@ module.exports = grammar({
     source_file: $ => repeat($._declaration),
 
     _declaration: $ => choice(
+      $.varDeclaration,
       $._statement,
-      // $.varDeclaration,
       // TODO:
+    ),
+
+    varDeclaration: $ => seq(
+      choice('var', 'const'),
+      $.identifier,
+      optional($._typeHint),
+      optional(seq('=', $._expression)),
+      ';'
     ),
 
     _statement: $ => choice(
@@ -44,37 +52,44 @@ module.exports = grammar({
       $.comparison,
       $.equality,
       $.logical,
-      // TODO:
+      $.assignment,
+      // TODO: Call
     ),
 
-    unary: $ => prec(3, seq(
+    unary: $ => prec(8, seq(
       choice('-', '!'),
       $._expression,
     )),
 
     binary: $ => choice(
-      prec.left(2, seq($._expression, '/', $._expression)),
-      prec.left(2, seq($._expression, '*', $._expression)),
-      prec.left(1, seq($._expression, '-', $._expression)),
-      prec.left(1, seq($._expression, '+', $._expression)),
+      prec.left(7, seq($._expression, '/', $._expression)),
+      prec.left(7, seq($._expression, '*', $._expression)),
+      prec.left(6, seq($._expression, '-', $._expression)),
+      prec.left(6, seq($._expression, '+', $._expression)),
       prec.left(1, seq($._expression, '.', $._expression)),
     ),
 
     comparison: $ => choice(
-      prec.left(1, seq($._expression, '<', $._expression)),
-      prec.left(1, seq($._expression, '<=', $._expression)),
-      prec.left(1, seq($._expression, '>=', $._expression)),
-      prec.left(1, seq($._expression, '>', $._expression)),
+      prec.left(5, seq($._expression, '<', $._expression)),
+      prec.left(5, seq($._expression, '<=', $._expression)),
+      prec.left(5, seq($._expression, '>=', $._expression)),
+      prec.left(5, seq($._expression, '>', $._expression)),
     ),
 
     equality: $ => choice(
-      prec.left(1, seq($._expression, '!=', $._expression)),
-      prec.left(1, seq($._expression, '==', $._expression)),
+      prec.left(4, seq($._expression, '!=', $._expression)),
+      prec.left(4, seq($._expression, '==', $._expression)),
     ),
 
     logical: $ => choice(
-      prec.left(2, seq($._expression, 'and', $._expression)),
-      prec.left(1, seq($._expression, 'or', $._expression)),
+      prec.left(3, seq($._expression, 'and', $._expression)),
+      prec.left(2, seq($._expression, 'or', $._expression)),
+    ),
+
+    assignment: $ => seq(
+      $.identifier,
+      '=',
+      $._expression
     ),
 
     _primary: $ => choice(
@@ -90,6 +105,8 @@ module.exports = grammar({
     bool: _ => choice('true', 'false'),
     null: _ => 'null',
     identifier: _ => /[a-zA-Z]([a-zA-Z0-9_])*/,
+
+    _typeHint: $ => seq(':', $.identifier),
 
     comment: _ => seq(
       '//',
