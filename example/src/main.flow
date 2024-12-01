@@ -54,3 +54,14 @@ if !not_yet {
 else {
     print "But this works";
 }
+
+{
+    print "Random Blocks work too";
+}
+
+{
+    var test = "Even variable shadowing!";
+    print test;
+}
+
+print "outer: " . test;

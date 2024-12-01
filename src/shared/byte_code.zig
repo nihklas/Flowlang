@@ -33,10 +33,13 @@ pub const OpCode = enum(u8) {
     lower,
     lower_equal,
 
-    // Globals
+    // variables
     create_global,
-    load_global,
+    get_global,
     set_global,
+
+    get_local,
+    set_local,
 
     // markers
     constants_done,

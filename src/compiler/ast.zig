@@ -15,8 +15,8 @@ pub const Expr = union(enum) {
     unary: struct { op: Token, expr: *Expr },
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
-    assignment: struct { name: Token, value: *Expr, global: bool = false },
-    variable: struct { name: Token, global: bool = false },
+    assignment: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
+    variable: struct { name: Token, global: bool = false, local_idx: u8 = 0 },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -113,7 +113,7 @@ pub const Stmt = union(enum) {
     // NOTE: Only temporary, until there is support for a std library
     print: struct { expr: *Expr },
     expr: struct { expr: *Expr },
-    block: struct { stmts: []*Stmt },
+    block: struct { stmts: []*Stmt, local_count: usize = 0 },
     loop: struct { condition: *Expr, body: *Stmt },
     @"if": struct { condition: *Expr, true_branch: *Stmt, false_branch: ?*Stmt },
     @"return": struct { value: *Expr },
@@ -125,6 +125,7 @@ pub const Stmt = union(enum) {
         value: ?*Expr,
         type_hint: ?Token,
         global: bool = false,
+        local_index: ?u8 = null,
     },
     channel: struct {
         name: Token,

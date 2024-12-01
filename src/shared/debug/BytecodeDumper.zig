@@ -38,7 +38,7 @@ fn runDump(self: *Dumper) void {
                 defer constant_counter += 1;
                 const len = self.code[self.ip];
                 self.ip += 1;
-                self.constants[constant_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                self.constants[constant_counter] = .{ .string = self.code[self.ip .. self.ip + len] };
                 printInstruction("OP_STRING", "{d: <10}{s}", .{
                     constant_counter,
                     self.constants[constant_counter].string,
@@ -50,7 +50,7 @@ fn runDump(self: *Dumper) void {
                 const bytes = self.code[self.ip .. self.ip + 4];
                 self.ip += 4;
                 const len = std.mem.bytesToValue(u32, bytes);
-                self.constants[constant_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                self.constants[constant_counter] = .{ .string = self.code[self.ip .. self.ip + len] };
                 printInstruction("OP_STRING_LONG", "{d: <10}{s}", .{
                     constant_counter,
                     self.constants[constant_counter].string,
@@ -73,8 +73,18 @@ fn runDump(self: *Dumper) void {
                 const jump_len = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
                 printInstruction("OP_JUMP", "-> {x:0>4}", .{jump_len + self.ip + 2});
             },
+            .get_local => {
+                defer self.ip += 1;
+                const local_idx = self.code[self.ip];
+                printInstruction("OP_GET_LOCAL", "{d}", .{local_idx});
+            },
+            .set_local => {
+                defer self.ip += 1;
+                const local_idx = self.code[self.ip];
+                printInstruction("OP_SET_LOCAL", "{d}", .{local_idx});
+            },
             .create_global => printInstruction("OP_CREATE_GLOBAL", "", .{}),
-            .load_global => printInstruction("OP_LOAD_GLOBAL", "", .{}),
+            .get_global => printInstruction("OP_GET_GLOBAL", "", .{}),
             .set_global => printInstruction("OP_SET_GLOBAL", "", .{}),
             .true => printInstruction("OP_TRUE", "", .{}),
             .false => printInstruction("OP_FALSE", "", .{}),

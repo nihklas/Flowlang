@@ -56,7 +56,7 @@ fn loadConstants(self: *VM) !void {
                 defer constants_counter += 1;
                 const len = self.code[self.ip];
                 self.ip += 1;
-                self.constants[constants_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                self.constants[constants_counter] = .{ .string = self.code[self.ip .. self.ip + len] };
                 self.ip += len;
             },
             .string_long => {
@@ -64,7 +64,7 @@ fn loadConstants(self: *VM) !void {
                 const bytes = self.code[self.ip .. self.ip + 4];
                 self.ip += 4;
                 const len = std.mem.bytesToValue(u32, bytes);
-                self.constants[constants_counter] = .{ .string = self.code[self.ip .. self.ip + len + 1] };
+                self.constants[constants_counter] = .{ .string = self.code[self.ip .. self.ip + len] };
                 self.ip += len;
             },
             .constants_done => break,
@@ -131,7 +131,17 @@ fn runWhileSwitch(self: *VM) !void {
 
                 try self.globals.put(self.gpa, name.string, value);
             },
-            .load_global => {
+            .get_local => {
+                const idx = self.byte();
+                const value = self.value_stack.at(idx);
+                self.value_stack.push(value);
+            },
+            .set_local => {
+                const idx = self.byte() + 1;
+                const value = self.value_stack.at(0);
+                self.value_stack.setAt(idx, value);
+            },
+            .get_global => {
                 const name = self.value_stack.pop();
                 const value = self.globals.get(name.string).?;
 

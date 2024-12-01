@@ -57,6 +57,14 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
             }
             return self.stack[i];
         }
+
+        pub fn setAt(self: *Self, offset: usize, value: T) StackReturn(void) {
+            const i = self.stack_top - 1 - offset;
+            if (i > self.stack_top or i < 0) {
+                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
+            }
+            self.stack[i] = value;
+        }
     };
 }
 

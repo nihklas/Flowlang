@@ -63,7 +63,12 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
         },
         .variable => self.varDeclaration(stmt),
         .@"if" => self.ifStatement(stmt),
-        .block => self.traverse(stmt.block.stmts),
+        .block => {
+            self.traverse(stmt.block.stmts);
+            for (0..stmt.block.local_count) |_| {
+                self.emitOpcode(.pop);
+            }
+        },
         else => @panic("Not yet implemented"),
     }
 }
@@ -80,9 +85,6 @@ fn varDeclaration(self: *Compiler, stmt: *Stmt) void {
     if (variable.global) {
         self.emitConstant(.{ .string = variable.name.lexeme });
         self.emitOpcode(.create_global);
-    } else {
-        // TODO: Locals
-        @panic("Not yet implemented");
     }
 }
 
@@ -147,9 +149,10 @@ fn expression(self: *Compiler, expr: *Expr) void {
         .variable => |variable| {
             if (variable.global) {
                 self.emitConstant(.{ .string = variable.name.lexeme });
-                self.emitOpcode(.load_global);
+                self.emitOpcode(.get_global);
             } else {
-                @panic("Not yet implemented");
+                self.emitOpcode(.get_local);
+                self.emitByte(variable.local_idx);
             }
         },
         .assignment => |assignment| {
@@ -158,7 +161,8 @@ fn expression(self: *Compiler, expr: *Expr) void {
                 self.emitConstant(.{ .string = assignment.name.lexeme });
                 self.emitOpcode(.set_global);
             } else {
-                @panic("Not yet implemented");
+                self.emitOpcode(.set_local);
+                self.emitByte(assignment.local_idx);
             }
         },
         .grouping => self.expression(expr.grouping.expr),
@@ -292,7 +296,7 @@ fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
         node.destroy(testing_allocator);
     };
 
-    var sema: Sema = .init(testing_allocator, program);
+    var sema: Sema = try .init(testing_allocator, program);
     defer sema.deinit();
     try sema.analyse();
 
