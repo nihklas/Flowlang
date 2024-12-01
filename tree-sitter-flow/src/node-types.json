@@ -110,6 +110,37 @@
     }
   },
   {
+    "type": "block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "block",
+          "named": true
+        },
+        {
+          "type": "expressionStatement",
+          "named": true
+        },
+        {
+          "type": "ifStatement",
+          "named": true
+        },
+        {
+          "type": "printStatement",
+          "named": true
+        },
+        {
+          "type": "varDeclaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "bool",
     "named": true,
     "fields": {}
@@ -301,6 +332,10 @@
           "named": true
         },
         {
+          "type": "block",
+          "named": true
+        },
+        {
           "type": "bool",
           "named": true
         },
@@ -471,6 +506,10 @@
       "required": false,
       "types": [
         {
+          "type": "block",
+          "named": true
+        },
+        {
           "type": "expressionStatement",
           "named": true
         },
@@ -484,6 +523,21 @@
         },
         {
           "type": "varDeclaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "typeHint",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
           "named": true
         }
       ]
@@ -590,6 +644,10 @@
         },
         {
           "type": "string",
+          "named": true
+        },
+        {
+          "type": "typeHint",
           "named": true
         },
         {

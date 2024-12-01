@@ -13,7 +13,8 @@ var msg: string;
         (number))
     (varDeclaration
         (identifier)
-        (identifier)))
+        (typeHint
+            (identifier))))
 
 =========
 Constants
@@ -30,6 +31,7 @@ const msg: string;
         (number))
     (varDeclaration
         (identifier)
-        (identifier)))
+        (typeHint
+            (identifier))))
 
 

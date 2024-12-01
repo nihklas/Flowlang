@@ -48,7 +48,7 @@
           "members": [
             {
               "type": "SYMBOL",
-              "name": "_typeHint"
+              "name": "typeHint"
             },
             {
               "type": "BLANK"
@@ -95,7 +95,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "_block"
+          "name": "block"
         },
         {
           "type": "SYMBOL",
@@ -103,7 +103,7 @@
         }
       ]
     },
-    "_block": {
+    "block": {
       "type": "SEQ",
       "members": [
         {
@@ -114,7 +114,7 @@
           "type": "REPEAT",
           "content": {
             "type": "SYMBOL",
-            "name": "_statement"
+            "name": "_declaration"
           }
         },
         {
@@ -618,7 +618,7 @@
       "type": "PATTERN",
       "value": "[a-zA-Z]([a-zA-Z0-9_])*"
     },
-    "_typeHint": {
+    "typeHint": {
       "type": "SEQ",
       "members": [
         {

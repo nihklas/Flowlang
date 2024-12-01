@@ -24,7 +24,7 @@ module.exports = grammar({
     varDeclaration: $ => seq(
       choice('var', 'const'),
       $.identifier,
-      optional($._typeHint),
+      optional($.typeHint),
       optional(seq('=', $._expression)),
       ';'
     ),
@@ -32,7 +32,7 @@ module.exports = grammar({
     _statement: $ => choice(
       $.expressionStatement,
       $.printStatement,
-      $._block,
+      $.block,
       $.ifStatement,
       // $.forStatement,
       // $.returnStatement,
@@ -40,9 +40,9 @@ module.exports = grammar({
       // $.chnWriteStatement,
     ),
 
-    _block: $ => seq(
+    block: $ => seq(
       '{',
-      repeat($._statement),
+      repeat($._declaration),
       '}'
     ),
 
@@ -125,7 +125,7 @@ module.exports = grammar({
     null: _ => 'null',
     identifier: _ => /[a-zA-Z]([a-zA-Z0-9_])*/,
 
-    _typeHint: $ => seq(':', $.identifier),
+    typeHint: $ => seq(':', $.identifier),
 
     comment: _ => seq(
       '//',
