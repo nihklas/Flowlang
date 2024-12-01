@@ -16,8 +16,9 @@ module.exports = grammar({
 
     _declaration: $ => choice(
       $.varDeclaration,
+      // $.functionDeclaration,
+      // $.channelDeclaration,
       $._statement,
-      // TODO:
     ),
 
     varDeclaration: $ => seq(
@@ -31,8 +32,26 @@ module.exports = grammar({
     _statement: $ => choice(
       $.expressionStatement,
       $.printStatement,
-      // TODO:
+      $._block,
+      $.ifStatement,
+      // $.forStatement,
+      // $.returnStatement,
+      // $.chnReadStatement,
+      // $.chnWriteStatement,
     ),
+
+    _block: $ => seq(
+      '{',
+      repeat($._statement),
+      '}'
+    ),
+
+    ifStatement: $ => prec.left(seq(
+      'if',
+      $._expression,
+      $._statement,
+      optional(seq('else', $._statement)),
+    )),
 
     expressionStatement: $ => seq(
       $._expression,
