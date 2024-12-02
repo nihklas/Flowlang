@@ -18,13 +18,6 @@ Non-exhaustive list of some of the biggest and most important features planned:
 - Extendable VM (`.fvm`-Files)
 - Type-Safe
 
-## TODO:
-
-- [x] Scanner
-- [ ] Parser/AST
-- [ ] Input Handling (File Reading, REPL?)
-- [ ] SeMa
-
 ## Try it out!
 
 The file `example/src/main.flow` shows the current possible things that the flow compiler supports.
