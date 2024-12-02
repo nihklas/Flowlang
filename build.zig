@@ -5,6 +5,7 @@ const Compile = Step.Compile;
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const example = b.option([]const u8, "example", "The path to a .flow file to be executed. Useful for compiler development");
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
@@ -74,16 +75,17 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&compiler.step);
     check_step.dependOn(&runtime.step);
 
-    const flow_out = compileImpl(b, .{
-        .name = "flow_out",
-        .source = b.path("example/src/main.flow"),
-        .target = target,
-        .optimize = optimize,
-    }, compiler, runtime);
+    if (example) |path| {
+        const flow_out = compileImpl(b, .{
+            .name = "flow_out",
+            .source = b.path(path),
+            .target = target,
+            .optimize = optimize,
+        }, compiler, runtime);
 
-    const run_flow = b.addRunArtifact(flow_out);
-    const run_step = b.step("run", "Run the complete compiler pipeline on an example .flow file and execute the resulting binary");
-    run_step.dependOn(&run_flow.step);
+        const run_flow = b.addRunArtifact(flow_out);
+        b.getInstallStep().dependOn(&run_flow.step);
+    }
 }
 
 const CompileOptions = struct {
