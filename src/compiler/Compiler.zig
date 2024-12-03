@@ -69,6 +69,7 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
                 self.emitOpcode(.pop);
             }
         },
+        .loop => self.loopStatement(stmt),
         else => @panic("Not yet implemented"),
     }
 }
@@ -86,6 +87,21 @@ fn varDeclaration(self: *Compiler, stmt: *Stmt) void {
         self.emitConstant(.{ .string = variable.name.lexeme });
         self.emitOpcode(.create_global);
     }
+}
+
+fn loopStatement(self: *Compiler, stmt: *Stmt) void {
+    const loop_start = self.byte_code.items.len;
+
+    self.expression(stmt.loop.condition);
+
+    const exit_jump = self.emitJump(.jump_if_false);
+    self.emitOpcode(.pop);
+
+    self.statement(stmt.loop.body);
+
+    self.emitLoop(loop_start);
+    self.patchJump(exit_jump);
+    self.emitOpcode(.pop);
 }
 
 fn ifStatement(self: *Compiler, stmt: *Stmt) void {
@@ -168,6 +184,19 @@ fn expression(self: *Compiler, expr: *Expr) void {
         .grouping => self.expression(expr.grouping.expr),
         else => @panic("Not yet implemented"),
     }
+}
+
+fn emitLoop(self: *Compiler, jump_idx: usize) void {
+    const jump_to = self.byte_code.items.len - jump_idx + 3;
+
+    if (jump_to > std.math.maxInt(u16)) {
+        @panic("Jump too long");
+    }
+
+    self.emitOpcode(.jump_back);
+
+    const jump_len: u16 = @intCast(jump_to);
+    self.emitMultibyte(jump_len);
 }
 
 fn emitJump(self: *Compiler, jump_op: OpCode) usize {

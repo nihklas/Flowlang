@@ -69,6 +69,10 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
 
             self.endScope();
         },
+        .loop => |loop| {
+            self.expression(loop.condition);
+            try self.statement(loop.body);
+        },
         else => @panic("Illegal Instruction"),
     }
 }

@@ -1,3 +1,4 @@
-for var i = 0; i < 10; i = i + 1 {
-    print "Counter: " . i;
+{
+    var i = 0;
+    print "I: " . i;
 }

@@ -73,6 +73,11 @@ fn runDump(self: *Dumper) void {
                 const jump_len = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
                 printInstruction("OP_JUMP", "-> {x:0>4}", .{jump_len + self.ip + 2});
             },
+            .jump_back => {
+                defer self.ip += 2;
+                const jump_len = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
+                printInstruction("OP_JUMP_BACK", "-> {x:0>4}", .{self.ip - jump_len + 2});
+            },
             .get_local => {
                 defer self.ip += 1;
                 const local_idx = self.code[self.ip];

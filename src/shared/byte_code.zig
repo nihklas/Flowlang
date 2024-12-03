@@ -46,6 +46,7 @@ pub const OpCode = enum(u8) {
 
     // jumps
     jump,
+    jump_back,
     jump_if_false,
 
     pub fn raw(op: OpCode) u8 {

@@ -20,7 +20,7 @@ fn parse(self: *Parser) ![]const *Stmt {
         stmt_list.deinit();
     }
 
-    while (!self.check(.EOF)) {
+    while (!self.isAtEnd()) {
         if (self.declaration()) |stmt| {
             stmt_list.append(stmt) catch @panic("OOM");
         } else |_| {
@@ -81,6 +81,10 @@ fn statement(self: *Parser) ParserError!*Stmt {
         return self.ifStatement();
     }
 
+    if (self.match(.@"for")) |_| {
+        return self.forStatement();
+    }
+
     if (self.match(.@"{")) |_| {
         const stmts = try self.block();
         return Stmt.createBlock(self.alloc, stmts);
@@ -124,6 +128,71 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
     const else_branch = if (self.match(.@"else")) |_| try self.statement() else null;
 
     return Stmt.createIf(self.alloc, condition, then, else_branch);
+}
+
+fn forStatement(self: *Parser) ParserError!*Stmt {
+    // initializer
+    // condition
+    // increment
+    // block
+
+    const maybe_initializer: ?*Stmt = blk: {
+        if (self.match(.@";")) |_| {
+            break :blk null;
+        }
+
+        if (self.match(.@"var")) |_| {
+            break :blk try self.varDeclaration();
+        }
+
+        break :blk try self.expressionStatement();
+    };
+
+    const condition: *Expr = blk: {
+        if (self.match(.@";")) |t| {
+            break :blk Expr.createLiteral(self.alloc, t, .{ .bool = true });
+        }
+
+        const expr = try self.expression();
+        try self.consume(.@";", "Expected ';' after loop condition");
+        break :blk expr;
+    };
+
+    const maybe_increment: ?*Stmt = blk: {
+        if (self.check(.@"{")) {
+            break :blk null;
+        }
+
+        const expr = try self.expression();
+        break :blk Stmt.createExpr(self.alloc, expr);
+    };
+
+    try self.consume(.@"{", "Expected '{' before loop body");
+    const body = try self.block();
+
+    // block
+    // initializer
+    // loop
+    //     block
+    //     body
+    //     inc
+
+    var outer_scope: std.ArrayList(*Stmt) = .init(self.alloc);
+
+    if (maybe_initializer) |initializer| {
+        outer_scope.append(initializer) catch @panic("OOM");
+    }
+
+    const loop_body = if (maybe_increment) |increment|
+        std.mem.concat(self.alloc, *Stmt, &.{ body, &.{increment} }) catch @panic("OOM")
+    else
+        body;
+
+    const loop = Stmt.createLoop(self.alloc, condition, Stmt.createBlock(self.alloc, loop_body));
+    outer_scope.append(loop) catch @panic("OOM");
+
+    const outer_scope_stmts = outer_scope.toOwnedSlice() catch @panic("OOM");
+    return Stmt.createBlock(self.alloc, outer_scope_stmts);
 }
 
 fn expressionStatement(self: *Parser) ParserError!*Stmt {
@@ -313,15 +382,14 @@ fn typeHint(self: *Parser) ?Token {
 
 fn recover(self: *Parser) void {
     recover: switch (self.advance().type) {
-        .@";" => {},
+        .@";", .EOF => {},
         .@"if",
-        // .@"for",
+        .@"for",
         .@"var",
         // .func,
         // .@"return",
         .print,
         .@"{",
-        .EOF,
         => self.current -= 1,
         else => continue :recover self.advance().type,
     }
