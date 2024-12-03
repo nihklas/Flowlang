@@ -100,6 +100,10 @@
         {
           "type": "SYMBOL",
           "name": "ifStatement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "forStatement"
         }
       ]
     },
@@ -164,6 +168,64 @@
           }
         ]
       }
+    },
+    "forStatement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "for"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "varDeclaration"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "expressionStatement"
+            },
+            {
+              "type": "STRING",
+              "value": ";"
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_expression"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": ";"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_expression"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "block"
+        }
+      ]
     },
     "expressionStatement": {
       "type": "SEQ",

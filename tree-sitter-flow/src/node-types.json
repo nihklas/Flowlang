@@ -126,6 +126,10 @@
           "named": true
         },
         {
+          "type": "forStatement",
+          "named": true
+        },
+        {
           "type": "ifStatement",
           "named": true
         },
@@ -316,6 +320,73 @@
     }
   },
   {
+    "type": "forStatement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "assignment",
+          "named": true
+        },
+        {
+          "type": "binary",
+          "named": true
+        },
+        {
+          "type": "block",
+          "named": true
+        },
+        {
+          "type": "bool",
+          "named": true
+        },
+        {
+          "type": "comparison",
+          "named": true
+        },
+        {
+          "type": "equality",
+          "named": true
+        },
+        {
+          "type": "expressionStatement",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "logical",
+          "named": true
+        },
+        {
+          "type": "null",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        },
+        {
+          "type": "unary",
+          "named": true
+        },
+        {
+          "type": "varDeclaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "ifStatement",
     "named": true,
     "fields": {},
@@ -349,6 +420,10 @@
         },
         {
           "type": "expressionStatement",
+          "named": true
+        },
+        {
+          "type": "forStatement",
           "named": true
         },
         {
@@ -511,6 +586,10 @@
         },
         {
           "type": "expressionStatement",
+          "named": true
+        },
+        {
+          "type": "forStatement",
           "named": true
         },
         {
@@ -735,6 +814,10 @@
   },
   {
     "type": "false",
+    "named": false
+  },
+  {
+    "type": "for",
     "named": false
   },
   {
