@@ -104,6 +104,14 @@
         {
           "type": "SYMBOL",
           "name": "forStatement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "breakStatement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "continueStatement"
         }
       ]
     },
@@ -224,6 +232,32 @@
         {
           "type": "SYMBOL",
           "name": "block"
+        }
+      ]
+    },
+    "breakStatement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "break"
+        },
+        {
+          "type": "STRING",
+          "value": ";"
+        }
+      ]
+    },
+    "continueStatement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "continue"
+        },
+        {
+          "type": "STRING",
+          "value": ";"
         }
       ]
     },

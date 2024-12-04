@@ -122,6 +122,14 @@
           "named": true
         },
         {
+          "type": "breakStatement",
+          "named": true
+        },
+        {
+          "type": "continueStatement",
+          "named": true
+        },
+        {
           "type": "expressionStatement",
           "named": true
         },
@@ -146,6 +154,11 @@
   },
   {
     "type": "bool",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "breakStatement",
     "named": true,
     "fields": {}
   },
@@ -208,6 +221,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "continueStatement",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "equality",
@@ -411,7 +429,15 @@
           "named": true
         },
         {
+          "type": "breakStatement",
+          "named": true
+        },
+        {
           "type": "comparison",
+          "named": true
+        },
+        {
+          "type": "continueStatement",
           "named": true
         },
         {
@@ -582,6 +608,14 @@
       "types": [
         {
           "type": "block",
+          "named": true
+        },
+        {
+          "type": "breakStatement",
+          "named": true
+        },
+        {
+          "type": "continueStatement",
           "named": true
         },
         {
@@ -805,7 +839,15 @@
     "named": false
   },
   {
+    "type": "break",
+    "named": false
+  },
+  {
     "type": "const",
+    "named": false
+  },
+  {
+    "type": "continue",
     "named": false
   },
   {

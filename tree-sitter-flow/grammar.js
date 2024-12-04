@@ -35,6 +35,8 @@ module.exports = grammar({
       $.block,
       $.ifStatement,
       $.forStatement,
+      $.breakStatement,
+      $.continueStatement,
       // $.returnStatement,
       // $.chnReadStatement,
       // $.chnWriteStatement,
@@ -61,6 +63,9 @@ module.exports = grammar({
       optional($._expression),
       $.block,
     ),
+
+    breakStatement: _ => seq("break", ";"),
+    continueStatement: _ => seq("continue", ";"),
 
     expressionStatement: $ => seq(
       $._expression,
