@@ -133,7 +133,7 @@ fn runWhileSwitch(self: *VM) !void {
             },
             .get_local => {
                 const idx = self.byte();
-                const value = self.value_stack.at(idx);
+                const value = self.value_stack.stack[idx];
                 self.value_stack.push(value);
             },
             .set_local => {

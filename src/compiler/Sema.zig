@@ -2,6 +2,7 @@ alloc: Allocator,
 program: []const *Stmt,
 constants: std.ArrayList(FlowValue),
 variables: Stack(Variable, MAX_LOCAL_SIZE, true),
+globals: std.StringHashMap(Variable),
 scope_depth: usize = 0,
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
@@ -13,12 +14,14 @@ pub fn init(alloc: Allocator, program: []const *Stmt) !Sema {
         .program = program,
         .constants = .init(alloc),
         .variables = try .init(alloc),
+        .globals = .init(alloc),
     };
 }
 
 pub fn deinit(self: *Sema) void {
     self.constants.deinit();
     self.variables.deinit();
+    self.globals.deinit();
 }
 
 pub fn analyse(self: *Sema) !void {
@@ -148,7 +151,18 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
         self.has_error = true;
     } else if (stmt.variable.type_hint) |type_hint_token| {
         const type_hint = tokenToType(type_hint_token);
-        self.variables.push(.{ .token = stmt.variable.name, .type = type_hint, .constant = stmt.variable.constant, .scope_depth = self.scope_depth });
+        const variable: Variable = .{
+            .token = stmt.variable.name,
+            .type = type_hint,
+            .constant = stmt.variable.constant,
+            .scope_depth = self.scope_depth,
+        };
+
+        if (self.scope_depth == 0) {
+            try self.globals.put(stmt.variable.name.lexeme, variable);
+        } else {
+            self.variables.push(variable);
+        }
     }
 }
 
@@ -172,36 +186,7 @@ fn expression(self: *Sema, expr: *Expr) void {
             self.expression(expr.logical.rhs);
             self.last_expr_type = .bool;
         },
-        .variable => {
-            const name = expr.variable.name.lexeme;
-
-            const maybe_variable, const local_idx = blk: {
-                var stack_idx: usize = 0;
-                while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
-                    const local = self.variables.at(stack_idx);
-                    if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
-                        break :blk .{ local, stack_idx };
-                    }
-                }
-                break :blk .{ null, null };
-            };
-
-            if (maybe_variable) |variable| {
-                self.last_expr_type = variable.type;
-                if (variable.scope_depth == 0) {
-                    expr.variable.global = true;
-                } else {
-                    if (local_idx.? > std.math.maxInt(u8)) {
-                        // This kinda should not be really possible, hopefully
-                        @panic("Too many locals");
-                    }
-                    expr.variable.local_idx = @intCast(local_idx.?);
-                }
-            } else {
-                error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
-                self.has_error = true;
-            }
-        },
+        .variable => self.variableExpr(expr),
     }
 }
 
@@ -288,30 +273,63 @@ fn assignment(self: *Sema, expr: *Expr) void {
         break :blk .{ null, null };
     };
 
-    if (maybe_variable) |variable| {
-        if (resulted_type != .null and variable.type != resulted_type) {
-            error_reporter.reportError(
-                expr.assignment.value.getToken(),
-                "Type mismatch: Expected value of type '{s}', got '{s}'",
-                .{ @tagName(variable.type), @tagName(resulted_type) },
-            );
-            self.has_error = true;
-        }
-
-        if (variable.scope_depth == 0) {
-            expr.assignment.global = true;
-        } else {
-            if (local_idx.? > std.math.maxInt(u8)) {
-                // This kinda should not be really possible, hopefully
-                @panic("Too many locals");
-            }
-            expr.assignment.local_idx = @intCast(local_idx.?);
-        }
-
-        self.last_expr_type = variable.type;
-    } else {
+    const variable = maybe_variable orelse self.globals.get(name) orelse {
         error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
         self.has_error = true;
+        return;
+    };
+
+    if (resulted_type != .null and variable.type != resulted_type) {
+        error_reporter.reportError(
+            expr.assignment.value.getToken(),
+            "Type mismatch: Expected value of type '{s}', got '{s}'",
+            .{ @tagName(variable.type), @tagName(resulted_type) },
+        );
+        self.has_error = true;
+    }
+
+    self.last_expr_type = variable.type;
+
+    if (local_idx) |idx| {
+        if (idx > std.math.maxInt(u8)) {
+            // This kinda should not be really possible, hopefully
+            @panic("Too many locals");
+        }
+        expr.assignment.local_idx = @intCast(idx);
+    } else {
+        expr.assignment.global = true;
+    }
+}
+
+fn variableExpr(self: *Sema, expr: *Expr) void {
+    const name = expr.variable.name.lexeme;
+
+    const maybe_variable, const local_idx = blk: {
+        var stack_idx: usize = 0;
+        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
+            const local = self.variables.at(stack_idx);
+            if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
+                break :blk .{ local, self.variables.stack_top - 1 - stack_idx };
+            }
+        }
+        break :blk .{ null, null };
+    };
+
+    const variable = maybe_variable orelse self.globals.get(name) orelse {
+        error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
+        self.has_error = true;
+        return;
+    };
+    self.last_expr_type = variable.type;
+
+    if (local_idx) |idx| {
+        if (idx > std.math.maxInt(u8)) {
+            // This kinda should not be really possible, hopefully
+            @panic("Too many locals");
+        }
+        expr.variable.local_idx = @intCast(idx);
+    } else {
+        expr.variable.global = true;
     }
 }
 
