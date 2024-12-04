@@ -25,6 +25,7 @@ pub const OpCode = enum(u8) {
     sub,
     div,
     mul,
+    mod,
 
     equal,
     unequal,

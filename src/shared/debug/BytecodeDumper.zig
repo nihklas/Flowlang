@@ -103,6 +103,7 @@ fn runDump(self: *Dumper) void {
             .sub => printInstruction("OP_SUB", "", .{}),
             .div => printInstruction("OP_DIV", "", .{}),
             .mul => printInstruction("OP_MUL", "", .{}),
+            .mod => printInstruction("OP_MOD", "", .{}),
             .lower => printInstruction("OP_LOWER", "", .{}),
             .lower_equal => printInstruction("OP_LOWER_EQUAL", "", .{}),
             .greater => printInstruction("OP_GREATER", "", .{}),

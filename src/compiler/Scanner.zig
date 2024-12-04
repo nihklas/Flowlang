@@ -52,6 +52,7 @@ fn nextToken(self: *Scanner) !void {
         '.' => try self.makeToken(.@"."),
         '+' => try self.makeToken(.@"+"),
         '*' => try self.makeToken(.@"*"),
+        '%' => try self.makeToken(.@"%"),
         ':' => try self.makeToken(.@":"),
         ';' => try self.makeToken(.@";"),
         '(' => try self.makeToken(.@"("),

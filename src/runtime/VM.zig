@@ -91,7 +91,7 @@ fn runWhileSwitch(self: *VM) !void {
             .false => self.value_stack.push(.{ .bool = false }),
             .null => self.value_stack.push(.null),
             .pop => _ = self.value_stack.pop(),
-            .add, .sub, .mul, .div => self.arithmetic(op),
+            .add, .sub, .mul, .div, .mod => self.arithmetic(op),
             .concat => self.concat(),
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .print => {
@@ -201,6 +201,7 @@ fn arithmetic(self: *VM, op: OpCode) void {
             .sub => .{ .float = left - right },
             .mul => .{ .float = left * right },
             .div => .{ .float = left / right },
+            .mod => .{ .float = @mod(left, right) },
             else => @panic("Unsupported Operation"),
         };
 
@@ -215,6 +216,7 @@ fn arithmetic(self: *VM, op: OpCode) void {
         .add => .{ .int = left + right },
         .sub => .{ .int = left - right },
         .mul => .{ .int = left * right },
+        .mod => .{ .int = @mod(left, right) },
         else => @panic("Unsupported Operation"),
     };
 

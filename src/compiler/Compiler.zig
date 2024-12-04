@@ -185,6 +185,7 @@ fn expression(self: *Compiler, expr: *Expr) void {
                 .@"-" => self.emitOpcode(.sub),
                 .@"*" => self.emitOpcode(.mul),
                 .@"/" => self.emitOpcode(.div),
+                .@"%" => self.emitOpcode(.mod),
 
                 .@"==" => self.emitOpcode(.equal),
                 .@"!=" => self.emitOpcode(.unequal),

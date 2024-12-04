@@ -306,7 +306,8 @@ fn factor(self: *Parser) ParserError!*Expr {
     var lhs = try self.unary();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.matchEither(.@"/", .@"*")) |op| {
+    while (self.match(.@"*") != null or self.match(.@"/") != null or self.match(.@"%") != null) {
+        const op = self.previous();
         const rhs = try self.unary();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }

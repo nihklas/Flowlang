@@ -253,7 +253,7 @@ fn binary(self: *Sema, expr: *Expr) void {
             );
             self.last_expr_type = .bool;
         },
-        .@"+", .@"-", .@"*", .@"/" => {
+        .@"+", .@"-", .@"*", .@"/", .@"%" => {
             self.checkNumericOperands(
                 expr.binary.lhs.getToken(),
                 left_type,
