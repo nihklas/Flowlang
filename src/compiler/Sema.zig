@@ -7,6 +7,7 @@ scope_depth: usize = 0,
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
 last_expr_sideeffect: bool = false,
+loop_level: usize = 0,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) !Sema {
     return .{
@@ -74,7 +75,21 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
         },
         .loop => |loop| {
             self.expression(loop.condition);
+            self.loop_level += 1;
             try self.statement(loop.body);
+            self.loop_level -= 1;
+        },
+        .@"break" => |break_stmt| {
+            if (self.loop_level < 1) {
+                error_reporter.reportError(break_stmt.token, "'break' is only allowed in loops", .{});
+                self.has_error = true;
+            }
+        },
+        .@"continue" => |continue_stmt| {
+            if (self.loop_level < 1) {
+                error_reporter.reportError(continue_stmt.token, "'continue' is only allowed in loops", .{});
+                self.has_error = true;
+            }
         },
         else => @panic("Illegal Instruction"),
     }

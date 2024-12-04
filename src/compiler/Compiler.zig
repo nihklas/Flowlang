@@ -3,14 +3,17 @@
 alloc: Allocator,
 byte_code: std.ArrayList(u8),
 constants: []const FlowValue,
+loop_levels: Stack(LoopLevel, 256, true),
 
 pub fn compile(alloc: Allocator, program: []const *Stmt, constants: []const FlowValue) ![]const u8 {
     var compiler: Compiler = .{
         .alloc = alloc,
         .byte_code = .init(alloc),
         .constants = constants,
+        .loop_levels = try .init(alloc),
     };
     errdefer compiler.byte_code.deinit();
+    defer compiler.loop_levels.deinit();
 
     compiler.compileConstants();
     compiler.traverse(program);
@@ -70,6 +73,8 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
             }
         },
         .loop => self.loopStatement(stmt),
+        .@"break" => self.breakStatement(),
+        .@"continue" => self.continueStatement(),
         else => @panic("Not yet implemented"),
     }
 }
@@ -92,6 +97,18 @@ fn varDeclaration(self: *Compiler, stmt: *Stmt) void {
 fn loopStatement(self: *Compiler, stmt: *Stmt) void {
     const loop_start = self.byte_code.items.len;
 
+    var break_statements: std.ArrayList(usize) = .init(self.alloc);
+    defer break_statements.deinit();
+
+    const loop_level: LoopLevel = .{
+        .loop = stmt,
+        .break_statements = &break_statements,
+        .loop_start = loop_start,
+    };
+
+    self.loop_levels.push(loop_level);
+    defer _ = self.loop_levels.pop();
+
     self.expression(stmt.loop.condition);
 
     const exit_jump = self.emitJump(.jump_if_false);
@@ -102,6 +119,26 @@ fn loopStatement(self: *Compiler, stmt: *Stmt) void {
     self.emitLoop(loop_start);
     self.patchJump(exit_jump);
     self.emitOpcode(.pop);
+
+    for (loop_level.break_statements.items) |break_stmt| {
+        self.patchJump(break_stmt);
+    }
+}
+
+fn breakStatement(self: *Compiler) void {
+    const break_stmt = self.emitJump(.jump);
+    var stmts = self.loop_levels.at(0);
+    stmts.break_statements.append(break_stmt) catch @panic("OOM");
+}
+
+fn continueStatement(self: *Compiler) void {
+    const loop_level = self.loop_levels.at(0);
+
+    if (loop_level.loop.loop.inc) |inc| {
+        self.statement(inc);
+    }
+
+    self.emitLoop(loop_level.loop_start);
 }
 
 fn ifStatement(self: *Compiler, stmt: *Stmt) void {
@@ -335,6 +372,12 @@ fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
     try testing.expectEqualSlices(u8, expected_bytecode, bytecode);
 }
 
+const LoopLevel = struct {
+    loop: *Stmt,
+    break_statements: *std.ArrayList(usize),
+    loop_start: usize,
+};
+
 const Compiler = @This();
 
 const Token = @import("Token.zig");
@@ -346,6 +389,7 @@ const ast = @import("ast.zig");
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
 const FlowValue = @import("shared").definitions.FlowValue;
+const Stack = @import("shared").Stack;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

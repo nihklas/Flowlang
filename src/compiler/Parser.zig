@@ -85,6 +85,16 @@ fn statement(self: *Parser) ParserError!*Stmt {
         return self.forStatement();
     }
 
+    if (self.match(.@"break")) |token| {
+        try self.consume(.@";", "Expected ';' after 'break'");
+        return Stmt.createBreak(self.alloc, token);
+    }
+
+    if (self.match(.@"continue")) |token| {
+        try self.consume(.@";", "Expected ';' after 'continue'");
+        return Stmt.createContinue(self.alloc, token);
+    }
+
     if (self.match(.@"{")) |_| {
         const stmts = try self.block();
         return Stmt.createBlock(self.alloc, stmts);
@@ -131,11 +141,6 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {
-    // initializer
-    // condition
-    // increment
-    // block
-
     const maybe_initializer: ?*Stmt = blk: {
         if (self.match(.@";")) |_| {
             break :blk null;
@@ -190,6 +195,10 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
 
     const loop = Stmt.createLoop(self.alloc, condition, Stmt.createBlock(self.alloc, loop_body));
     outer_scope.append(loop) catch @panic("OOM");
+
+    if (maybe_increment) |increment| {
+        loop.loop.inc = increment;
+    }
 
     const outer_scope_stmts = outer_scope.toOwnedSlice() catch @panic("OOM");
     return Stmt.createBlock(self.alloc, outer_scope_stmts);

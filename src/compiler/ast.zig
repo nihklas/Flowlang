@@ -114,7 +114,9 @@ pub const Stmt = union(enum) {
     print: struct { expr: *Expr },
     expr: struct { expr: *Expr },
     block: struct { stmts: []*Stmt, local_count: usize = 0 },
-    loop: struct { condition: *Expr, body: *Stmt },
+    loop: struct { condition: *Expr, body: *Stmt, inc: ?*Stmt = null },
+    @"break": struct { token: Token },
+    @"continue": struct { token: Token },
     @"if": struct { condition: *Expr, true_branch: *Stmt, false_branch: ?*Stmt },
     @"return": struct { value: *Expr },
     channel_read: struct { channel: Token, result: Token },
@@ -161,6 +163,22 @@ pub const Stmt = union(enum) {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .loop = .{ .condition = condition, .body = body },
+        };
+        return stmt;
+    }
+
+    pub fn createBreak(alloc: Allocator, token: Token) *Stmt {
+        const stmt = Stmt.create(alloc);
+        stmt.* = .{
+            .@"break" = .{ .token = token },
+        };
+        return stmt;
+    }
+
+    pub fn createContinue(alloc: Allocator, token: Token) *Stmt {
+        const stmt = Stmt.create(alloc);
+        stmt.* = .{
+            .@"continue" = .{ .token = token },
         };
         return stmt;
     }
@@ -229,7 +247,7 @@ pub const Stmt = union(enum) {
     pub fn destroy(self: *Stmt, alloc: Allocator) void {
         defer alloc.destroy(self);
         switch (self.*) {
-            .channel_read, .channel => {},
+            .channel_read, .channel, .@"break", .@"continue" => {},
             .print => |print| print.expr.destroy(alloc),
             .expr => |expr| expr.expr.destroy(alloc),
             .block => |block| {
@@ -241,6 +259,9 @@ pub const Stmt = union(enum) {
             .loop => |loop| {
                 loop.body.destroy(alloc);
                 loop.condition.destroy(alloc);
+                if (loop.inc) |inc| {
+                    inc.destroy(alloc);
+                }
             },
             .@"if" => |if_stmt| {
                 if_stmt.condition.destroy(alloc);
