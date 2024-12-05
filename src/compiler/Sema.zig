@@ -225,14 +225,40 @@ fn expression(self: *Sema, expr: *Expr) void {
             self.last_expr_type = .bool;
         },
         .variable => self.variableExpr(expr),
-        .call => {
-            self.expression(expr.call.expr);
+        .call => |call| {
+            self.expression(call.expr);
+            const name = call.expr.getToken().lexeme;
             if (self.last_expr_type != .builtin_fn) {
-                error_reporter.reportError(expr.call.expr.getToken(), "'{s}' is not callable", .{expr.call.expr.getToken().lexeme});
+                error_reporter.reportError(call.expr.getToken(), "'{s}' is not callable", .{name});
                 self.has_error = true;
             }
-            for (expr.call.params) |param| {
-                self.expression(param);
+
+            const maybe_builtin = builtins.get(name);
+
+            if (maybe_builtin) |builtin| {
+                if (builtin.arg_count != call.args.len) {
+                    error_reporter.reportError(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
+                        name,
+                        builtin.arg_count,
+                        call.args.len,
+                    });
+                    self.has_error = true;
+                }
+            }
+
+            for (expr.call.args, 0..) |arg, i| {
+                self.expression(arg);
+
+                if (maybe_builtin != null and maybe_builtin.?.arg_count == call.args.len and maybe_builtin.?.arg_types != null) {
+                    const arg_type = maybe_builtin.?.arg_types.?[i];
+                    if (self.last_expr_type != arg_type) {
+                        error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
+                            @tagName(arg_type),
+                            @tagName(self.last_expr_type.?),
+                        });
+                        self.has_error = true;
+                    }
+                }
             }
         },
     }

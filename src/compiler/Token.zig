@@ -5,6 +5,7 @@ lexeme: []const u8,
 
 pub const Type = enum {
     // Single Character
+    @",",
     @".",
     @"+",
     @"-",
@@ -41,7 +42,6 @@ pub const Type = enum {
     @"return",
     @"break",
     @"continue",
-    print,
     func,
     flow,
     null,
@@ -83,7 +83,6 @@ pub const ReservedKeywords = std.StaticStringMap(Type).initComptime(.{
     .{ "string", .string },
     .{ "channel", .channel },
     .{ "return", .@"return" },
-    .{ "print", .print },
 });
 
 pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {

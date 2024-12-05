@@ -73,10 +73,6 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
 }
 
 fn statement(self: *Parser) ParserError!*Stmt {
-    if (self.match(.print)) |_| {
-        return self.printStatement();
-    }
-
     if (self.match(.@"if")) |_| {
         return self.ifStatement();
     }
@@ -120,15 +116,6 @@ fn block(self: *Parser) ParserError![]*Stmt {
     try self.consume(.@"}", "Expected '}' at the end of block");
 
     return stmt_list.toOwnedSlice() catch @panic("OOM");
-}
-
-fn printStatement(self: *Parser) ParserError!*Stmt {
-    const expr = try self.expression();
-    errdefer expr.destroy(self.alloc);
-
-    try self.consume(.@";", "Expected ';' after value");
-
-    return Stmt.createPrint(self.alloc, expr);
 }
 
 fn ifStatement(self: *Parser) ParserError!*Stmt {
@@ -329,10 +316,26 @@ fn call(self: *Parser) ParserError!*Expr {
     const expr = try self.primary();
 
     if (self.match(.@"(")) |_| {
-        // TODO: Params
+        const params: []*Expr = blk: {
+            if (!self.check(.@")")) {
+                var params_list: std.ArrayList(*Expr) = .init(self.alloc);
+                defer params_list.deinit();
+
+                params_list.append(try self.expression()) catch @panic("OOM");
+
+                while (self.match(.@",")) |_| {
+                    params_list.append(try self.expression()) catch @panic("OOM");
+                }
+
+                break :blk params_list.toOwnedSlice() catch @panic("OOM");
+            }
+
+            break :blk &.{};
+        };
+
         try self.consume(.@")", "Expected ')' after parameters");
 
-        return Expr.createCall(self.alloc, expr, &.{});
+        return Expr.createCall(self.alloc, expr, params);
     }
     return expr;
 }
@@ -406,7 +409,6 @@ fn recover(self: *Parser) void {
         .@"var",
         // .func,
         // .@"return",
-        .print,
         .@"{",
         => self.current -= 1,
         else => continue :recover self.advance().type,
@@ -899,33 +901,10 @@ test "Expression Statement with Assignment" {
     try testing.expectEqualStrings("Hello", program[0].expr.expr.assignment.value.literal.value.string);
 }
 
-test "Print Statement" {
-    const input =
-        \\print 1;
-        \\
-    ;
-
-    const tokens = try Scanner.scan(testing_alloc, input);
-    defer testing_alloc.free(tokens);
-
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
-
-    try testing.expectEqual(1, program.len);
-
-    try testing.expect(program[0].* == .print);
-    try testing.expect(program[0].print.expr.* == .literal);
-    try testing.expect(program[0].print.expr.literal.value == .int);
-    try testing.expect(program[0].print.expr.literal.value.int == 1);
-}
-
 test "Block" {
     const input =
         \\{
-        \\    print 1;
+        \\    1;
         \\}
         \\
     ;
@@ -944,7 +923,7 @@ test "Block" {
     try testing.expect(program[0].* == .block);
     try testing.expectEqual(1, program[0].block.stmts.len);
 
-    try testing.expect(program[0].block.stmts[0].* == .print);
+    try testing.expect(program[0].block.stmts[0].* == .expr);
 }
 
 const ParserError = error{

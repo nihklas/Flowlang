@@ -58,8 +58,7 @@ fn runDump(self: *Dumper) void {
                 self.ip += len;
             },
             .constant => {
-                defer self.ip += 1;
-                const idx = self.code[self.ip];
+                const idx = self.byte();
                 const value = self.constants[idx];
                 printInstruction("OP_CONSTANT", "{d: <10}{}", .{ idx, value });
             },
@@ -79,16 +78,17 @@ fn runDump(self: *Dumper) void {
                 printInstruction("OP_JUMP_BACK", "-> {x:0>4}", .{self.ip - jump_len + 2});
             },
             .get_local => {
-                defer self.ip += 1;
-                const local_idx = self.code[self.ip];
+                const local_idx = self.byte();
                 printInstruction("OP_GET_LOCAL", "{d}", .{local_idx});
             },
             .set_local => {
-                defer self.ip += 1;
-                const local_idx = self.code[self.ip];
+                const local_idx = self.byte();
                 printInstruction("OP_SET_LOCAL", "{d}", .{local_idx});
             },
-            .call => printInstruction("OP_CALL", "", .{}),
+            .call => {
+                const arg_count = self.byte();
+                printInstruction("OP_CALL", "{d}", .{arg_count});
+            },
             .create_global => printInstruction("OP_CREATE_GLOBAL", "", .{}),
             .get_global => printInstruction("OP_GET_GLOBAL", "", .{}),
             .set_global => printInstruction("OP_SET_GLOBAL", "", .{}),

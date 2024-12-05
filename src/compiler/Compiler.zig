@@ -221,8 +221,12 @@ fn expression(self: *Compiler, expr: *Expr) void {
         },
         .grouping => self.expression(expr.grouping.expr),
         .call => |call| {
+            for (call.args) |arg| {
+                self.expression(arg);
+            }
             self.expression(call.expr);
             self.emitOpcode(.call);
+            self.emitByte(@intCast(call.args.len));
         },
         else => @panic("Not yet implemented"),
     }
@@ -328,31 +332,6 @@ test "Expression Statement" {
         OpCode.null.raw(), OpCode.pop.raw(),
     };
     // zig fmt: on
-
-    try testBytecode(input, expected);
-}
-
-test "Print Statement" {
-    const input =
-        \\print 1;
-        \\
-    ;
-
-    const expected: []const u8 = &.{
-        OpCode.integer.raw(),
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        OpCode.constants_done.raw(),
-        OpCode.constant.raw(),
-        0,
-        OpCode.print.raw(),
-    };
 
     try testBytecode(input, expected);
 }

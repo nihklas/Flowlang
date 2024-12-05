@@ -6,7 +6,8 @@ pub const Function = struct {
 
 pub const BuiltinFunction = struct {
     arg_count: u8,
-    arg_types: []FlowType,
+    /// If this is set to null, Semantic analysing won't perform compile time type checking
+    arg_types: ?[]const FlowType,
     function: *const fn ([]FlowValue) FlowValue,
 };
 

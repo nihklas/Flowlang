@@ -1,22 +1,23 @@
 pub const builtins: std.StaticStringMap(Function) = .initComptime(.{
-    .{ "test", testFunc },
+    .{ "print", print },
 });
 
 const impls = struct {
-    fn testFunc(_: []FlowValue) FlowValue {
-        std.debug.print("Test\n", .{});
-
+    fn print(args: []FlowValue) FlowValue {
+        stdout.print("{}\n", .{args[0]}) catch @panic("IO Error");
         return .null;
     }
 };
 
-const testFunc: Function = .{
-    .arg_count = 0,
-    .arg_types = &.{},
-    .function = &impls.testFunc,
+const print: Function = .{
+    .arg_count = 1,
+    .arg_types = null,
+    .function = &impls.print,
 };
 
 const Function = @import("definitions.zig").BuiltinFunction;
 const FlowValue = @import("definitions.zig").FlowValue;
+
+const stdout = std.io.getStdOut().writer();
 
 const std = @import("std");

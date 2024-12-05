@@ -17,7 +17,7 @@ pub const Expr = union(enum) {
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
     variable: struct { name: Token, global: bool = false, local_idx: u8 = 0 },
-    call: struct { expr: *Expr, params: []*Expr },
+    call: struct { expr: *Expr, args: []*Expr },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -78,7 +78,7 @@ pub const Expr = union(enum) {
     pub fn createCall(alloc: Allocator, expr: *Expr, params: []*Expr) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
-            .call = .{ .expr = expr, .params = params },
+            .call = .{ .expr = expr, .args = params },
         };
         return new_expr;
     }
@@ -100,7 +100,7 @@ pub const Expr = union(enum) {
             },
             .call => |call| {
                 call.expr.destroy(alloc);
-                for (call.params) |expr| {
+                for (call.args) |expr| {
                     expr.destroy(alloc);
                 }
             },

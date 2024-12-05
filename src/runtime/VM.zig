@@ -169,7 +169,10 @@ fn runWhileSwitch(self: *VM) !void {
                 const value = self.value_stack.at(0);
                 if (!value.isTrue()) self.ip += distance;
             },
-            .call => self.call(),
+            .call => {
+                const arg_count = self.byte();
+                self.call(arg_count);
+            },
             .string, .string_long, .integer, .float, .constants_done => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
                 return error.IllegalInstruction;
@@ -254,15 +257,19 @@ fn comparison(self: *VM, op: OpCode) void {
     }
 }
 
-fn call(self: *VM) void {
+fn call(self: *VM, arg_count: u8) void {
     const value = self.value_stack.pop();
-    switch (value) {
-        .builtin_fn => {
-            const result = value.builtin_fn.function(&.{});
-            self.value_stack.push(result);
-        },
+    const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
+    const result = switch (value) {
+        .builtin_fn => value.builtin_fn.function(args),
         else => unreachable,
+    };
+
+    for (0..arg_count) |_| {
+        _ = self.value_stack.pop();
     }
+
+    self.value_stack.push(result);
 }
 
 fn instruction(self: *VM) OpCode {
