@@ -31,7 +31,6 @@ module.exports = grammar({
 
     _statement: $ => choice(
       $.expressionStatement,
-      $.printStatement,
       $.block,
       $.ifStatement,
       $.forStatement,
@@ -68,12 +67,6 @@ module.exports = grammar({
     continueStatement: _ => seq("continue", ";"),
 
     expressionStatement: $ => seq(
-      $._expression,
-      ';'
-    ),
-
-    printStatement: $ => seq(
-      'print',
       $._expression,
       ';'
     ),

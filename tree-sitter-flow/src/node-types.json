@@ -142,10 +142,6 @@
           "named": true
         },
         {
-          "type": "printStatement",
-          "named": true
-        },
-        {
           "type": "varDeclaration",
           "named": true
         }
@@ -473,10 +469,6 @@
           "named": true
         },
         {
-          "type": "printStatement",
-          "named": true
-        },
-        {
           "type": "string",
           "named": true
         },
@@ -493,61 +485,6 @@
     "fields": {},
     "children": {
       "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "assignment",
-          "named": true
-        },
-        {
-          "type": "binary",
-          "named": true
-        },
-        {
-          "type": "bool",
-          "named": true
-        },
-        {
-          "type": "comparison",
-          "named": true
-        },
-        {
-          "type": "equality",
-          "named": true
-        },
-        {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "logical",
-          "named": true
-        },
-        {
-          "type": "null",
-          "named": true
-        },
-        {
-          "type": "number",
-          "named": true
-        },
-        {
-          "type": "string",
-          "named": true
-        },
-        {
-          "type": "unary",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "printStatement",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
       "required": true,
       "types": [
         {
@@ -628,10 +565,6 @@
         },
         {
           "type": "ifStatement",
-          "named": true
-        },
-        {
-          "type": "printStatement",
           "named": true
         },
         {
@@ -880,10 +813,6 @@
   },
   {
     "type": "or",
-    "named": false
-  },
-  {
-    "type": "print",
     "named": false
   },
   {

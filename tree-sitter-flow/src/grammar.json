@@ -91,10 +91,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "printStatement"
-        },
-        {
-          "type": "SYMBOL",
           "name": "block"
         },
         {
@@ -264,23 +260,6 @@
     "expressionStatement": {
       "type": "SEQ",
       "members": [
-        {
-          "type": "SYMBOL",
-          "name": "_expression"
-        },
-        {
-          "type": "STRING",
-          "value": ";"
-        }
-      ]
-    },
-    "printStatement": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "print"
-        },
         {
           "type": "SYMBOL",
           "name": "_expression"
