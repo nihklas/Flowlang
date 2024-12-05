@@ -96,16 +96,30 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
 }
 
 fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
+    const name = stmt.variable.name.lexeme;
+
+    if (builtins.get(name)) |_| {
+        error_reporter.reportError(stmt.variable.name, "'{s}' is a builtin and cannot be reassigned", .{name});
+        self.has_error = true;
+    }
+
     const is_local = self.scope_depth > 0;
     stmt.variable.global = !is_local;
 
     if (!is_local) {
-        self.constant(.{ .string = stmt.variable.name.lexeme });
+        self.constant(.{ .string = name });
     }
 
     if (stmt.variable.value) |value| {
         self.expression(value);
         const value_type = self.last_expr_type.?;
+
+        if (value_type == .builtin_fn) {
+            error_reporter.reportError(value.getToken(), "Cannot reassign builtin '{s}'", .{value.getToken().lexeme});
+            self.has_error = true;
+            return;
+        }
+
         if (stmt.variable.type_hint != null) {
             const correct_type = if (value_type == .null)
                 true
@@ -135,7 +149,7 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
                 .int => .int,
                 .float => .float,
                 .string => .string,
-                .null => unreachable,
+                .null, .builtin_fn => unreachable,
             };
             stmt.variable.type_hint = expr_token;
         }
@@ -161,7 +175,7 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
         error_reporter.reportError(
             stmt.variable.name,
             "Variable '{s}' already defined at {d}:{d}, duplicated definition",
-            .{ stmt.variable.name.lexeme, found.token.line, found.token.column },
+            .{ name, found.token.line, found.token.column },
         );
         self.has_error = true;
     } else if (stmt.variable.type_hint) |type_hint_token| {
@@ -184,13 +198,22 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
 fn expression(self: *Sema, expr: *Expr) void {
     switch (expr.*) {
         .literal => {
-            switch (expr.literal.value) {
-                .int => |int| self.constant(.{ .int = int }),
-                .float => |float| self.constant(.{ .float = float }),
-                .string => |string| self.constant(.{ .string = string }),
-                .null, .bool => {},
-            }
-            self.last_expr_type = std.meta.activeTag(expr.literal.value);
+            self.last_expr_type = blk: switch (expr.literal.value) {
+                .int => |int| {
+                    self.constant(.{ .int = int });
+                    break :blk .int;
+                },
+                .float => |float| {
+                    self.constant(.{ .float = float });
+                    break :blk .float;
+                },
+                .string => |string| {
+                    self.constant(.{ .string = string });
+                    break :blk .string;
+                },
+                .null => .null,
+                .bool => .bool,
+            };
         },
         .unary => self.unary(expr),
         .grouping => self.expression(expr.grouping.expr),
@@ -202,6 +225,16 @@ fn expression(self: *Sema, expr: *Expr) void {
             self.last_expr_type = .bool;
         },
         .variable => self.variableExpr(expr),
+        .call => {
+            self.expression(expr.call.expr);
+            if (self.last_expr_type != .builtin_fn) {
+                error_reporter.reportError(expr.call.expr.getToken(), "'{s}' is not callable", .{expr.call.expr.getToken().lexeme});
+                self.has_error = true;
+            }
+            for (expr.call.params) |param| {
+                self.expression(param);
+            }
+        },
     }
 }
 
@@ -319,6 +352,13 @@ fn assignment(self: *Sema, expr: *Expr) void {
 fn variableExpr(self: *Sema, expr: *Expr) void {
     const name = expr.variable.name.lexeme;
 
+    if (builtins.get(name)) |_| {
+        self.constant(.{ .string = name });
+        expr.variable.global = true;
+        self.last_expr_type = .builtin_fn;
+        return;
+    }
+
     const maybe_variable, const local_idx = blk: {
         var stack_idx: usize = 0;
         while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
@@ -418,8 +458,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const FlowValue = @import("shared").definitions.FlowValue;
-const FlowType = @import("shared").definitions.ValueType;
+const FlowType = @import("shared").definitions.FlowType;
 const Stack = @import("shared").Stack;
+const builtins = @import("shared").builtins;
 
 const error_reporter = @import("error_reporter.zig");
 

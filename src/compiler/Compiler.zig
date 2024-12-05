@@ -43,7 +43,7 @@ fn compileConstants(self: *Compiler) void {
             self.emitOpcode(.float);
             self.emitMultibyte(c.float);
         },
-        .bool, .null => @panic("not a constant"),
+        .bool, .null, .builtin_fn => @panic("not a constant"),
     };
     self.emitOpcode(.constants_done);
 }
@@ -220,6 +220,10 @@ fn expression(self: *Compiler, expr: *Expr) void {
             }
         },
         .grouping => self.expression(expr.grouping.expr),
+        .call => |call| {
+            self.expression(call.expr);
+            self.emitOpcode(.call);
+        },
         else => @panic("Not yet implemented"),
     }
 }

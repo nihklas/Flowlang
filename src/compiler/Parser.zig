@@ -326,7 +326,15 @@ fn unary(self: *Parser) ParserError!*Expr {
 }
 
 fn call(self: *Parser) ParserError!*Expr {
-    return self.primary();
+    const expr = try self.primary();
+
+    if (self.match(.@"(")) |_| {
+        // TODO: Params
+        try self.consume(.@")", "Expected ')' after parameters");
+
+        return Expr.createCall(self.alloc, expr, &.{});
+    }
+    return expr;
 }
 
 fn primary(self: *Parser) ParserError!*Expr {

@@ -1,5 +1,5 @@
 pub const Expr = union(enum) {
-    pub const Literal = union(ValueType) {
+    pub const Literal = union(enum) {
         null: void,
         bool: bool,
         int: Integer,
@@ -17,6 +17,7 @@ pub const Expr = union(enum) {
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
     variable: struct { name: Token, global: bool = false, local_idx: u8 = 0 },
+    call: struct { expr: *Expr, params: []*Expr },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -74,6 +75,14 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
+    pub fn createCall(alloc: Allocator, expr: *Expr, params: []*Expr) *Expr {
+        const new_expr = Expr.create(alloc);
+        new_expr.* = .{
+            .call = .{ .expr = expr, .params = params },
+        };
+        return new_expr;
+    }
+
     pub fn destroy(self: *Expr, alloc: Allocator) void {
         defer alloc.destroy(self);
         switch (self.*) {
@@ -89,6 +98,12 @@ pub const Expr = union(enum) {
                 logical.lhs.destroy(alloc);
                 logical.rhs.destroy(alloc);
             },
+            .call => |call| {
+                call.expr.destroy(alloc);
+                for (call.params) |expr| {
+                    expr.destroy(alloc);
+                }
+            },
         }
     }
 
@@ -101,6 +116,7 @@ pub const Expr = union(enum) {
             .logical => self.logical.op,
             .assignment => self.assignment.name,
             .variable => self.variable.name,
+            .call => self.call.expr.getToken(),
         };
     }
 
@@ -131,7 +147,7 @@ pub const Stmt = union(enum) {
     },
     channel: struct {
         name: Token,
-        type: ValueType,
+        type: FlowType,
     },
     function: struct { name: Token, params: []*Stmt, body: []*Stmt },
 
@@ -228,7 +244,7 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createChannel(alloc: Allocator, name: Token, type_hint: ValueType) *Stmt {
+    pub fn createChannel(alloc: Allocator, name: Token, type_hint: FlowType) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .channel = .{ .name = name, .type = type_hint },
@@ -445,5 +461,5 @@ const Allocator = std.mem.Allocator;
 const definitions = @import("shared").definitions;
 const Integer = definitions.Integer;
 const Float = definitions.Float;
-const ValueType = definitions.ValueType;
+const FlowType = definitions.FlowType;
 const FlowValue = definitions.FlowValue;

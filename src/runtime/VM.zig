@@ -4,9 +4,9 @@ gpa: Allocator,
 gc: Allocator,
 code: []const u8,
 ip: usize = 0,
-value_stack: Stack(Value, STACK_SIZE, true),
-constants: [256]Value = undefined,
-globals: std.StringHashMapUnmanaged(Value),
+value_stack: Stack(FlowValue, STACK_SIZE, true),
+constants: [256]FlowValue = undefined,
+globals: std.StringHashMapUnmanaged(FlowValue),
 
 pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) !VM {
     return .{
@@ -104,8 +104,8 @@ fn runWhileSwitch(self: *VM) !void {
             },
             .negate => {
                 const value = self.value_stack.pop();
-                const negated: Value = switch (value) {
-                    .null, .bool, .string => return error.CanOnlyNegateNumbers,
+                const negated: FlowValue = switch (value) {
+                    .null, .bool, .string, .builtin_fn => return error.CanOnlyNegateNumbers,
                     .float => .{ .float = -value.float },
                     .int => .{ .int = -value.int },
                 };
@@ -131,19 +131,9 @@ fn runWhileSwitch(self: *VM) !void {
 
                 try self.globals.put(self.gpa, name.string, value);
             },
-            .get_local => {
-                const idx = self.byte();
-                const value = self.value_stack.stack[idx];
-                self.value_stack.push(value);
-            },
-            .set_local => {
-                const idx = self.byte() + 1;
-                const value = self.value_stack.at(0);
-                self.value_stack.setAt(idx, value);
-            },
             .get_global => {
                 const name = self.value_stack.pop();
-                const value = self.globals.get(name.string).?;
+                const value: FlowValue = self.globals.get(name.string) orelse .{ .builtin_fn = builtins.get(name.string).? };
 
                 self.value_stack.push(value);
             },
@@ -153,6 +143,16 @@ fn runWhileSwitch(self: *VM) !void {
 
                 // We can safely assume capacity, as this set only works if the global already exists
                 self.globals.putAssumeCapacity(name.string, value);
+            },
+            .get_local => {
+                const idx = self.byte();
+                const value = self.value_stack.stack[idx];
+                self.value_stack.push(value);
+            },
+            .set_local => {
+                const idx = self.byte() + 1;
+                const value = self.value_stack.at(0);
+                self.value_stack.setAt(idx, value);
             },
             .jump => {
                 // For some reason we cannot inline this
@@ -169,6 +169,7 @@ fn runWhileSwitch(self: *VM) !void {
                 const value = self.value_stack.at(0);
                 if (!value.isTrue()) self.ip += distance;
             },
+            .call => self.call(),
             .string, .string_long, .integer, .float, .constants_done => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
                 return error.IllegalInstruction;
@@ -196,7 +197,7 @@ fn arithmetic(self: *VM, op: OpCode) void {
         const right: Float = if (rhs == .float) rhs.float else @floatFromInt(rhs.int);
         const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.int);
 
-        const result: Value = switch (op) {
+        const result: FlowValue = switch (op) {
             .add => .{ .float = left + right },
             .sub => .{ .float = left - right },
             .mul => .{ .float = left * right },
@@ -212,7 +213,7 @@ fn arithmetic(self: *VM, op: OpCode) void {
     const right = rhs.int;
     const left = lhs.int;
 
-    const result: Value = switch (op) {
+    const result: FlowValue = switch (op) {
         .add => .{ .int = left + right },
         .sub => .{ .int = left - right },
         .mul => .{ .int = left * right },
@@ -253,6 +254,17 @@ fn comparison(self: *VM, op: OpCode) void {
     }
 }
 
+fn call(self: *VM) void {
+    const value = self.value_stack.pop();
+    switch (value) {
+        .builtin_fn => {
+            const result = value.builtin_fn.function(&.{});
+            self.value_stack.push(result);
+        },
+        else => unreachable,
+    }
+}
+
 fn instruction(self: *VM) OpCode {
     defer self.ip += 1;
     return @enumFromInt(self.code[self.ip]);
@@ -277,6 +289,7 @@ const stdout = std.io.getStdOut().writer();
 const OpCode = @import("shared").OpCode;
 const Integer = @import("shared").definitions.Integer;
 const Float = @import("shared").definitions.Float;
-const Value = @import("shared").definitions.FlowValue;
+const FlowValue = @import("shared").definitions.FlowValue;
+const builtins = @import("shared").builtins;
 const Stack = @import("shared").Stack;
 const debug_options = @import("debug_options");
