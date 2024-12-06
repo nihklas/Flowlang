@@ -106,6 +106,10 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
         .loop => self.loopStatement(stmt),
         .@"break" => self.breakStatement(),
         .@"continue" => self.continueStatement(),
+        .@"return" => |return_stmt| {
+            self.expression(return_stmt.value);
+            self.emitOpcode(.@"return");
+        },
         .function => {},
         else => @panic("Not yet implemented"),
     }

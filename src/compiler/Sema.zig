@@ -2,6 +2,7 @@ alloc: Allocator,
 program: []const *Stmt,
 constants: std.ArrayList(FlowValue),
 variables: Stack(Variable, MAX_LOCAL_SIZE, true),
+current_function: Stack(Function, MAX_LOCAL_SIZE, true),
 globals: std.StringHashMap(Variable),
 functions: std.StringHashMap(Function),
 scope_depth: usize = 0,
@@ -16,6 +17,7 @@ pub fn init(alloc: Allocator, program: []const *Stmt) !Sema {
         .program = program,
         .constants = .init(alloc),
         .variables = try .init(alloc),
+        .current_function = try .init(alloc),
         .globals = .init(alloc),
         .functions = .init(alloc),
     };
@@ -24,6 +26,7 @@ pub fn init(alloc: Allocator, program: []const *Stmt) !Sema {
 pub fn deinit(self: *Sema) void {
     self.constants.deinit();
     self.variables.deinit();
+    self.current_function.deinit();
     self.globals.deinit();
     self.functions.deinit();
 }
@@ -144,6 +147,7 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
         .function => |func| {
             // TODO: Create complete new scope or handle inner functions otherwise gracefully
             self.beginScope();
+            self.current_function.push(self.functions.get(func.name.lexeme).?);
             for (func.params) |param| {
                 self.variables.push(.{
                     .token = param.variable.name,
@@ -155,7 +159,19 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
             for (func.body) |line| {
                 try self.statement(line);
             }
+            _ = self.current_function.pop();
             self.endScope();
+        },
+        .@"return" => |return_stmt| {
+            self.expression(return_stmt.value);
+            const func = self.current_function.at(0);
+            if (func.ret_type != self.last_expr_type.?) {
+                error_reporter.reportError(return_stmt.value.getToken(), "Return type mismatch. Expected '{s}', got '{s}'", .{
+                    @tagName(func.ret_type),
+                    @tagName(self.last_expr_type.?),
+                });
+                self.has_error = true;
+            }
         },
         .variable => {},
         else => @panic("Illegal Instruction"),

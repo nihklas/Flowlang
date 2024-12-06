@@ -108,8 +108,35 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
 fn parameters(self: *Parser) ParserError![]*Stmt {
     if (self.check(.@")")) return &.{};
 
-    // TODO:
-    return ParserError.Panic;
+    var params: std.ArrayList(*Stmt) = .init(self.alloc);
+    defer params.deinit();
+
+    while (self.param()) |parameter| {
+        params.append(parameter) catch @panic("OOM");
+
+        if (self.match(.@",") == null) {
+            break;
+        }
+    }
+
+    return params.toOwnedSlice() catch @panic("OOM");
+}
+
+fn param(self: *Parser) ?*Stmt {
+    if (self.match(.identifier)) |name| {
+        const type_hint = self.typeHint();
+        if (type_hint == null) {
+            error_reporter.reportError(name, "Expected type hint after parameter name", .{});
+            self.has_error = true;
+            return null;
+        }
+
+        return Stmt.createVariable(self.alloc, name, type_hint, true, null);
+    }
+
+    error_reporter.reportError(self.peek(), "Expected parameter name", .{});
+    self.has_error = true;
+    return null;
 }
 
 fn statement(self: *Parser) ParserError!*Stmt {
@@ -119,6 +146,10 @@ fn statement(self: *Parser) ParserError!*Stmt {
 
     if (self.match(.@"for")) |_| {
         return self.forStatement();
+    }
+
+    if (self.match(.@"return")) |_| {
+        return self.returnStatement();
     }
 
     if (self.match(.@"break")) |token| {
@@ -165,6 +196,18 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
     const else_branch = if (self.match(.@"else")) |_| try self.statement() else null;
 
     return Stmt.createIf(self.alloc, condition, then, else_branch);
+}
+
+fn returnStatement(self: *Parser) ParserError!*Stmt {
+    const value = blk: {
+        if (self.check(.@";")) {
+            break :blk Expr.createLiteral(self.alloc, self.previous(), .null);
+        }
+
+        break :blk try self.expression();
+    };
+    try self.consume(.@";", "Expected ';' after return statement");
+    return Stmt.createReturn(self.alloc, value);
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {
@@ -447,7 +490,7 @@ fn recover(self: *Parser) void {
         .@"if",
         .@"for",
         .@"var",
-        // .func,
+        .func,
         // .@"return",
         .@"{",
         => self.current -= 1,
