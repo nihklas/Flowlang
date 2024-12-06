@@ -198,12 +198,10 @@ var myError = err.MyErrorName
 if myError == err.MyErrorName block
 ```
 
-## Compile Steps
+### Implementation notes
 
-The compilation Process will be split into different steps
+Byte code is split into 3 simple sections:
 
-1. Lexing/Tokenizing
-2. AST
-3. Different IR with optimisations and more infos
-4. Byte Code
-
+- constants
+- top-level functions
+- main code

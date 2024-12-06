@@ -126,8 +126,6 @@ pub const Expr = union(enum) {
 };
 
 pub const Stmt = union(enum) {
-    // NOTE: Only temporary, until there is support for a std library
-    print: struct { expr: *Expr },
     expr: struct { expr: *Expr },
     block: struct { stmts: []*Stmt, local_count: usize = 0 },
     loop: struct { condition: *Expr, body: *Stmt, inc: ?*Stmt = null },
@@ -149,15 +147,7 @@ pub const Stmt = union(enum) {
         name: Token,
         type: FlowType,
     },
-    function: struct { name: Token, params: []*Stmt, body: []*Stmt },
-
-    pub fn createPrint(alloc: Allocator, expr: *Expr) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .print = .{ .expr = expr },
-        };
-        return stmt;
-    }
+    function: struct { name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt },
 
     pub fn createExpr(alloc: Allocator, expr: *Expr) *Stmt {
         const stmt = Stmt.create(alloc);
@@ -252,10 +242,10 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createFunction(alloc: Allocator, name: Token, params: []*Stmt, body: []*Stmt) *Stmt {
+    pub fn createFunction(alloc: Allocator, name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
-            .function = .{ .name = name, .params = params, .body = body },
+            .function = .{ .name = name, .ret_type = ret_type, .params = params, .body = body },
         };
         return stmt;
     }
@@ -264,7 +254,6 @@ pub const Stmt = union(enum) {
         defer alloc.destroy(self);
         switch (self.*) {
             .channel_read, .channel, .@"break", .@"continue" => {},
-            .print => |print| print.expr.destroy(alloc),
             .expr => |expr| expr.expr.destroy(alloc),
             .block => |block| {
                 for (block.stmts) |stmt| {
@@ -356,12 +345,6 @@ test "Stmt.createExpr" {
     defer expr_stmt.destroy(testing_alloc);
 }
 
-test "Stmt.createPrint" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const print = Stmt.createPrint(testing_alloc, expr);
-    defer print.destroy(testing_alloc);
-}
-
 test "Stmt.createBlock" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
@@ -446,6 +429,7 @@ test "Stmt.createFunction" {
     const function = Stmt.createFunction(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
+        .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 },
         params,
         body,
     );

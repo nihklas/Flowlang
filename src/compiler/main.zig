@@ -19,7 +19,7 @@ pub fn main() !void {
     var sema: Sema = try .init(alloc, ast);
     try sema.analyse();
 
-    const bytecode = try Compiler.compile(alloc, ast, sema.constants.items);
+    const bytecode = try Compiler.compile(alloc, ast, &sema);
 
     const output_file = try std.fs.cwd().createFile(output, .{});
     defer output_file.close();

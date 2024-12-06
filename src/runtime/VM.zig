@@ -5,6 +5,7 @@ gc: Allocator,
 code: []const u8,
 ip: usize = 0,
 value_stack: Stack(FlowValue, STACK_SIZE, true),
+call_stack: Stack(CallFrame, STACK_SIZE, true),
 constants: [256]FlowValue = undefined,
 globals: std.StringHashMapUnmanaged(FlowValue),
 
@@ -14,18 +15,25 @@ pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) !VM {
         .gc = gc,
         .code = code,
         .value_stack = try .init(gpa),
+        .call_stack = try .init(gpa),
         .globals = .empty,
     };
 }
 
 pub fn deinit(self: *VM) void {
     self.value_stack.deinit();
+    self.call_stack.deinit();
     self.globals.deinit(self.gpa);
     self.* = undefined;
 }
 
 pub fn run(self: *VM) !void {
     try self.loadConstants();
+    try self.loadFunctions();
+    self.call_stack.push(.{
+        .stack_bottom = 0,
+        .ret_addr = self.ip,
+    });
     try self.runWhileSwitch();
     // try self.runSwitchContinue();
 }
@@ -76,6 +84,39 @@ fn loadConstants(self: *VM) !void {
     }
 }
 
+fn loadFunctions(self: *VM) !void {
+    while (self.ip < self.code.len) {
+        const op = self.instruction();
+        if (comptime debug_options.bytecode) {
+            std.debug.print("{}\n", .{op});
+        }
+        switch (op) {
+            .function => {
+                const name_idx = self.byte();
+                const argc = self.byte();
+                const end = self.short();
+
+                const name = self.constants[name_idx];
+
+                try self.globals.put(self.gpa, name.string, .{
+                    .function = .{
+                        .name = name.string,
+                        .arg_count = argc,
+                        .start_ip = self.ip,
+                    },
+                });
+
+                self.ip += end - 1;
+            },
+            .functions_done => break,
+            else => {
+                std.debug.print("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op });
+                return error.IllegalInstruction;
+            },
+        }
+    }
+}
+
 // TODO: Better Errorhandling
 fn runWhileSwitch(self: *VM) !void {
     while (self.ip < self.code.len) {
@@ -94,10 +135,6 @@ fn runWhileSwitch(self: *VM) !void {
             .add, .sub, .mul, .div, .mod => self.arithmetic(op),
             .concat => self.concat(),
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
-            .print => {
-                const value = self.value_stack.pop();
-                try stdout.print("{}\n", .{value});
-            },
             .constant => {
                 const constant = self.constants[self.byte()];
                 self.value_stack.push(constant);
@@ -105,9 +142,9 @@ fn runWhileSwitch(self: *VM) !void {
             .negate => {
                 const value = self.value_stack.pop();
                 const negated: FlowValue = switch (value) {
-                    .null, .bool, .string, .builtin_fn => return error.CanOnlyNegateNumbers,
                     .float => .{ .float = -value.float },
                     .int => .{ .int = -value.int },
+                    .null, .bool, .string, .builtin_fn, .function => return error.CanOnlyNegateNumbers,
                 };
                 self.value_stack.push(negated);
             },
@@ -146,13 +183,13 @@ fn runWhileSwitch(self: *VM) !void {
             },
             .get_local => {
                 const idx = self.byte();
-                const value = self.value_stack.stack[idx];
+                const value = self.getLocal(idx);
                 self.value_stack.push(value);
             },
             .set_local => {
                 const idx = self.byte() + 1;
                 const value = self.value_stack.at(0);
-                self.value_stack.setAt(idx, value);
+                self.setLocal(idx, value);
             },
             .jump => {
                 // For some reason we cannot inline this
@@ -170,10 +207,13 @@ fn runWhileSwitch(self: *VM) !void {
                 if (!value.isTrue()) self.ip += distance;
             },
             .call => {
-                const arg_count = self.byte();
-                self.call(arg_count);
+                self.call();
             },
-            .string, .string_long, .integer, .float, .constants_done => {
+            .@"return" => {
+                const frame = self.call_stack.pop();
+                self.ip = frame.ret_addr;
+            },
+            .string, .string_long, .integer, .float, .constants_done, .functions_done, .function => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
                 return error.IllegalInstruction;
             },
@@ -257,19 +297,44 @@ fn comparison(self: *VM, op: OpCode) void {
     }
 }
 
-fn call(self: *VM, arg_count: u8) void {
+fn call(self: *VM) void {
     const value = self.value_stack.pop();
-    const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
-    const result = switch (value) {
-        .builtin_fn => value.builtin_fn.function(args),
+    switch (value) {
+        .builtin_fn => self.callBuiltin(value),
+        .function => self.callFlowFunction(value),
         else => unreachable,
-    };
+    }
+}
 
+fn callBuiltin(self: *VM, value: FlowValue) void {
+    const arg_count = value.builtin_fn.arg_count;
+    const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
+    const result = value.builtin_fn.function(args);
     for (0..arg_count) |_| {
         _ = self.value_stack.pop();
     }
 
     self.value_stack.push(result);
+}
+
+fn callFlowFunction(self: *VM, value: FlowValue) void {
+    const arg_count = value.function.arg_count;
+    const stack_bottom = self.value_stack.stack_top - arg_count;
+    self.call_stack.push(.{
+        .ret_addr = self.ip,
+        .stack_bottom = stack_bottom,
+    });
+    self.ip = value.function.start_ip;
+}
+
+fn getLocal(self: *VM, local_idx: usize) FlowValue {
+    const frame = self.call_stack.at(0);
+    return self.value_stack.stack[frame.stack_bottom + local_idx];
+}
+
+fn setLocal(self: *VM, local_idx: usize, value: FlowValue) void {
+    const frame = self.call_stack.at(0);
+    self.value_stack.stack[frame.stack_bottom + local_idx] = value;
 }
 
 fn instruction(self: *VM) OpCode {
@@ -285,6 +350,11 @@ fn byte(self: *VM) u8 {
     defer self.ip += 1;
     return self.code[self.ip];
 }
+
+const CallFrame = struct {
+    ret_addr: usize,
+    stack_bottom: usize,
+};
 
 const VM = @This();
 

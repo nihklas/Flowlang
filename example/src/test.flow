@@ -1,1 +1,16 @@
-print("Hello World");
+var global_counter = 0;
+
+test();
+
+func test() void {
+    print("Hallo Welt");
+    if global_counter < 5 {
+        inc();
+        test();
+    }
+}
+
+func inc() void {
+    global_counter = global_counter + 1;
+}
+

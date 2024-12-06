@@ -3,6 +3,7 @@ program: []const *Stmt,
 constants: std.ArrayList(FlowValue),
 variables: Stack(Variable, MAX_LOCAL_SIZE, true),
 globals: std.StringHashMap(Variable),
+functions: std.StringHashMap(Function),
 scope_depth: usize = 0,
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
@@ -16,6 +17,7 @@ pub fn init(alloc: Allocator, program: []const *Stmt) !Sema {
         .constants = .init(alloc),
         .variables = try .init(alloc),
         .globals = .init(alloc),
+        .functions = .init(alloc),
     };
 }
 
@@ -23,9 +25,18 @@ pub fn deinit(self: *Sema) void {
     self.constants.deinit();
     self.variables.deinit();
     self.globals.deinit();
+    self.functions.deinit();
 }
 
 pub fn analyse(self: *Sema) !void {
+    for (self.program) |stmt| {
+        try self.scanGlobal(stmt);
+    }
+
+    for (self.program) |stmt| {
+        try self.scanFunction(stmt);
+    }
+
     for (self.program) |stmt| {
         try self.statement(stmt);
     }
@@ -41,12 +52,51 @@ pub fn analyse(self: *Sema) !void {
     }
 }
 
+fn scanGlobal(self: *Sema, stmt: *Stmt) !void {
+    switch (stmt.*) {
+        .variable => try self.varDeclaration(stmt),
+        else => {},
+    }
+}
+
+fn scanFunction(self: *Sema, stmt: *Stmt) !void {
+    switch (stmt.*) {
+        .function => |func| {
+            const func_name = func.name.lexeme;
+            if (self.functions.get(func_name)) |_| {
+                error_reporter.reportError(func.name, "Function '{s}' is already defined", .{func_name});
+                self.has_error = true;
+                return;
+            }
+
+            const param_types = self.alloc.alloc(FlowType, func.params.len) catch @panic("OOM");
+
+            for (func.params, param_types) |param, *param_type| {
+                param_type.* = tokenToType(param.variable.type_hint.?);
+            }
+
+            self.constants.append(.{ .string = func_name }) catch @panic("OOM");
+
+            self.functions.put(func_name, .{
+                .param_types = param_types,
+                .ret_type = tokenToType(func.ret_type),
+            }) catch @panic("OOM");
+
+            self.globals.put(func_name, .{
+                .scope_depth = 0,
+                .constant = true,
+                .token = func.name,
+                .type = .function,
+            }) catch @panic("OOM");
+        },
+        else => {},
+    }
+}
+
 fn statement(self: *Sema, stmt: *Stmt) !void {
     self.last_expr_type = null;
     switch (stmt.*) {
         .expr => self.expression(stmt.expr.expr),
-        .print => self.expression(stmt.print.expr),
-        .variable => try self.varDeclaration(stmt),
         .@"if" => |if_stmt| {
             self.expression(if_stmt.condition);
             try self.statement(if_stmt.true_branch);
@@ -91,6 +141,23 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
                 self.has_error = true;
             }
         },
+        .function => |func| {
+            // TODO: Create complete new scope or handle inner functions otherwise gracefully
+            self.beginScope();
+            for (func.params) |param| {
+                self.variables.push(.{
+                    .token = param.variable.name,
+                    .constant = true,
+                    .scope_depth = self.scope_depth,
+                    .type = tokenToType(param.variable.type_hint.?),
+                });
+            }
+            for (func.body) |line| {
+                try self.statement(line);
+            }
+            self.endScope();
+        },
+        .variable => {},
         else => @panic("Illegal Instruction"),
     }
 }
@@ -149,7 +216,7 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
                 .int => .int,
                 .float => .float,
                 .string => .string,
-                .null, .builtin_fn => unreachable,
+                .null, .builtin_fn, .function => unreachable,
             };
             stmt.variable.type_hint = expr_token;
         }
@@ -228,7 +295,7 @@ fn expression(self: *Sema, expr: *Expr) void {
         .call => |call| {
             self.expression(call.expr);
             const name = call.expr.getToken().lexeme;
-            if (self.last_expr_type != .builtin_fn) {
+            if (self.last_expr_type != .builtin_fn and self.last_expr_type != .function) {
                 error_reporter.reportError(call.expr.getToken(), "'{s}' is not callable", .{name});
                 self.has_error = true;
             }
@@ -462,6 +529,7 @@ fn tokenToType(token: Token) FlowType {
         .int => .int,
         .float => .float,
         .string => .string,
+        .null, .void => .null,
         else => unreachable,
     };
 }
@@ -471,6 +539,11 @@ const Variable = struct {
     constant: bool,
     type: FlowType,
     scope_depth: usize,
+};
+
+const Function = struct {
+    param_types: []FlowType,
+    ret_type: FlowType,
 };
 
 const Expr = @import("ast.zig").Expr;

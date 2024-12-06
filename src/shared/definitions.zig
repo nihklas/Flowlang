@@ -11,7 +11,21 @@ pub const BuiltinFunction = struct {
     function: *const fn ([]FlowValue) FlowValue,
 };
 
-pub const FlowType = enum { null, bool, int, float, string, builtin_fn };
+pub const FlowFunction = struct {
+    name: []const u8,
+    arg_count: u8,
+    start_ip: usize,
+};
+
+pub const FlowType = enum {
+    null,
+    bool,
+    int,
+    float,
+    string,
+    builtin_fn,
+    function,
+};
 
 // TODO: Change Runtime definition to be a packed union/struct
 // As we have a statically type language, this is possible and allows us a few performance
@@ -33,6 +47,7 @@ pub const FlowValue = union(FlowType) {
     float: Float,
     string: []const u8,
     builtin_fn: BuiltinFunction,
+    function: FlowFunction,
 
     pub fn format(self: FlowValue, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self) {
@@ -41,7 +56,7 @@ pub const FlowValue = union(FlowType) {
             .int => try writer.print("{d}", .{self.int}),
             .float => try writer.print("{d}", .{self.float}),
             .string => try writer.print("{s}", .{self.string}),
-            // .function => try writer.print("<fn {s}>", .{self.function.name}),
+            .function => try writer.print("<fn {s}>", .{self.function.name}),
             .builtin_fn => try writer.print("<builtin fn>", .{}),
         }
     }
@@ -65,6 +80,7 @@ pub const FlowValue = union(FlowType) {
                 }
                 return true;
             },
+            .function => self.function.start_ip == other.function.start_ip,
             .builtin_fn => self.builtin_fn.function == other.builtin_fn.function,
         };
     }
@@ -76,7 +92,7 @@ pub const FlowValue = union(FlowType) {
             .int => self.int != 0,
             .float => self.float != 0,
             .string => self.string.len > 0,
-            .builtin_fn => true,
+            .builtin_fn, .function => true,
         };
     }
 };

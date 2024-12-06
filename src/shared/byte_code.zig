@@ -9,12 +9,11 @@ pub const OpCode = enum(u8) {
     // constant definitions
     integer,
     float,
-    string,
-    string_long,
+    string, // len as 1 byte operand
+    string_long, // len as 4 byte operand
 
     // operations
     pop,
-    print,
     constant,
 
     negate,
@@ -39,19 +38,22 @@ pub const OpCode = enum(u8) {
     get_global,
     set_global,
 
-    get_local,
-    set_local,
+    get_local, // index as 1 byte operand
+    set_local, // index as 1 byte operand
 
     // functions
+    function, // operands: 1 byte for constant idx name, 1 byte for arg count, 2 byte for line count
     call,
+    @"return",
 
     // jumps
-    jump,
-    jump_back,
-    jump_if_false,
+    jump, // jmp len as 2 byte operand
+    jump_back, // jmp len as 2 byte operand
+    jump_if_false, // jmp len as 2 byte operand
 
     // markers
     constants_done,
+    functions_done,
 
     pub fn raw(op: OpCode) u8 {
         return @intFromEnum(op);

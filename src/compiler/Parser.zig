@@ -43,6 +43,10 @@ fn declaration(self: *Parser) ParserError!*Stmt {
         return self.varDeclaration();
     }
 
+    if (self.match(.func)) |_| {
+        return self.funcDeclaration();
+    }
+
     return self.statement();
 }
 
@@ -70,6 +74,42 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
     try self.consume(.@";", "Expected ';' after variable declaration");
 
     return Stmt.createVariable(self.alloc, name, type_hint, keyword.type == .@"const", value);
+}
+
+fn funcDeclaration(self: *Parser) ParserError!*Stmt {
+    try self.consume(.identifier, "Expected identifier after 'func'");
+    const name = self.previous();
+
+    try self.consume(.@"(", "Expected '(' after function name");
+
+    const params = try self.parameters();
+
+    try self.consume(.@")", "Expected ')' after function parameters");
+
+    const type_hint = blk: {
+        if (self.match(.string)) |string| break :blk string;
+        if (self.match(.int)) |int| break :blk int;
+        if (self.match(.float)) |float| break :blk float;
+        if (self.match(.bool)) |boolean| break :blk boolean;
+        if (self.match(.void)) |token| break :blk token;
+
+        error_reporter.reportError(self.peek(), "Expected return type before function body", .{});
+        self.has_error = true;
+        break :blk self.peek();
+    };
+
+    try self.consume(.@"{", "Expected '{' before function body");
+
+    const body = try self.block();
+
+    return Stmt.createFunction(self.alloc, name, type_hint, params, body);
+}
+
+fn parameters(self: *Parser) ParserError![]*Stmt {
+    if (self.check(.@")")) return &.{};
+
+    // TODO:
+    return ParserError.Panic;
 }
 
 fn statement(self: *Parser) ParserError!*Stmt {

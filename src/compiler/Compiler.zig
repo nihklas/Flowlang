@@ -5,17 +5,18 @@ byte_code: std.ArrayList(u8),
 constants: []const FlowValue,
 loop_levels: Stack(LoopLevel, 256, true),
 
-pub fn compile(alloc: Allocator, program: []const *Stmt, constants: []const FlowValue) ![]const u8 {
+pub fn compile(alloc: Allocator, program: []const *Stmt, sema: *Sema) ![]const u8 {
     var compiler: Compiler = .{
         .alloc = alloc,
         .byte_code = .init(alloc),
-        .constants = constants,
+        .constants = sema.constants.items,
         .loop_levels = try .init(alloc),
     };
     errdefer compiler.byte_code.deinit();
     defer compiler.loop_levels.deinit();
 
     compiler.compileConstants();
+    compiler.compileFunctions(program);
     compiler.traverse(program);
 
     return try compiler.byte_code.toOwnedSlice();
@@ -43,9 +44,43 @@ fn compileConstants(self: *Compiler) void {
             self.emitOpcode(.float);
             self.emitMultibyte(c.float);
         },
-        .bool, .null, .builtin_fn => @panic("not a constant"),
+        .bool, .null, .builtin_fn, .function => @panic("not a constant"),
     };
     self.emitOpcode(.constants_done);
+}
+
+fn compileFunctions(self: *Compiler, program: []const *ast.Stmt) void {
+    for (program) |stmt| {
+        switch (stmt.*) {
+            .function => |func| {
+                self.emitOpcode(.function);
+                self.emitByte(self.resolveConstant(.{ .string = func.name.lexeme }));
+                self.emitByte(@intCast(func.params.len));
+                // Reserve space for operand
+                self.emitByte(0x00);
+                self.emitByte(0x00);
+                const op_idx = self.byte_code.items.len;
+
+                for (func.body) |line| {
+                    self.statement(line);
+                }
+                if (func.ret_type.type == .void) {
+                    self.emitOpcode(.null);
+                }
+                self.emitOpcode(.@"return");
+
+                const line_count = self.byte_code.items.len - op_idx + 1;
+                const jump_length: u16 = @intCast(line_count);
+
+                const bytes = std.mem.toBytes(jump_length);
+                self.byte_code.items[op_idx - 2] = bytes[0];
+                self.byte_code.items[op_idx - 1] = bytes[1];
+            },
+            else => {},
+        }
+    }
+
+    self.emitOpcode(.functions_done);
 }
 
 fn traverse(self: *Compiler, program: []const *ast.Stmt) void {
@@ -60,10 +95,6 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
             self.expression(stmt.expr.expr);
             self.emitOpcode(.pop);
         },
-        .print => {
-            self.expression(stmt.print.expr);
-            self.emitOpcode(.print);
-        },
         .variable => self.varDeclaration(stmt),
         .@"if" => self.ifStatement(stmt),
         .block => {
@@ -75,6 +106,7 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
         .loop => self.loopStatement(stmt),
         .@"break" => self.breakStatement(),
         .@"continue" => self.continueStatement(),
+        .function => {},
         else => @panic("Not yet implemented"),
     }
 }
@@ -226,7 +258,6 @@ fn expression(self: *Compiler, expr: *Expr) void {
             }
             self.expression(call.expr);
             self.emitOpcode(.call);
-            self.emitByte(@intCast(call.args.len));
         },
         else => @panic("Not yet implemented"),
     }
@@ -272,14 +303,18 @@ fn patchJump(self: *Compiler, jump_idx: usize) void {
 }
 
 fn emitConstant(self: *Compiler, value: FlowValue) void {
-    const idx = for (self.constants, 0..) |c, i| {
-        if (c.equals(value)) break i;
+    const idx = self.resolveConstant(value);
+    self.emitOpcode(.constant);
+    self.emitByte(@intCast(idx));
+}
+
+fn resolveConstant(self: *Compiler, value: FlowValue) u8 {
+    return for (self.constants, 0..) |c, i| {
+        if (c.equals(value)) break @intCast(i);
     } else {
         std.debug.print("Could not find constant {}\n", .{value});
         @panic("UnknownConstant");
     };
-    self.emitOpcode(.constant);
-    self.emitByte(@intCast(idx));
 }
 
 fn emitOpcode(self: *Compiler, op: OpCode) void {
@@ -323,6 +358,7 @@ test "Expression Statement" {
         float_bytes[7],
 
         OpCode.constants_done.raw(),
+        OpCode.functions_done.raw(),
 
         OpCode.constant.raw(), 0, OpCode.pop.raw(),
         OpCode.constant.raw(), 1, OpCode.pop.raw(),
@@ -350,7 +386,7 @@ fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
     defer sema.deinit();
     try sema.analyse();
 
-    const bytecode = try compile(testing_allocator, program, sema.constants.items);
+    const bytecode = try compile(testing_allocator, program, &sema);
     defer testing_allocator.free(bytecode);
 
     try testing.expectEqualSlices(u8, expected_bytecode, bytecode);

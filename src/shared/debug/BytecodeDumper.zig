@@ -13,6 +13,7 @@ pub fn dump(code: []const u8) void {
 fn runDump(self: *Dumper) void {
     var constant_counter: usize = 0;
     var constant_block: bool = true;
+    var functions_block: bool = false;
     while (self.ip < self.code.len) {
         defer std.debug.print("\n", .{});
         std.debug.print("{x:0>4} ", .{self.ip});
@@ -85,17 +86,21 @@ fn runDump(self: *Dumper) void {
                 const local_idx = self.byte();
                 printInstruction("OP_SET_LOCAL", "{d}", .{local_idx});
             },
-            .call => {
+            .function => {
+                defer self.ip += 2;
+                const name_idx = self.byte();
+                const name = self.constants[name_idx];
                 const arg_count = self.byte();
-                printInstruction("OP_CALL", "{d}", .{arg_count});
+                const line_count = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
+                printInstruction("OP_FUNCTION", "{d: <10}{{{s}}} [{x:0>4}]", .{ arg_count, name, self.ip + line_count });
             },
+            .call => printInstruction("OP_CALL", "", .{}),
             .create_global => printInstruction("OP_CREATE_GLOBAL", "", .{}),
             .get_global => printInstruction("OP_GET_GLOBAL", "", .{}),
             .set_global => printInstruction("OP_SET_GLOBAL", "", .{}),
             .true => printInstruction("OP_TRUE", "", .{}),
             .false => printInstruction("OP_FALSE", "", .{}),
             .null => printInstruction("OP_NULL", "", .{}),
-            .print => printInstruction("OP_PRINT", "", .{}),
             .pop => printInstruction("OP_POP", "", .{}),
             .not => printInstruction("OP_NOT", "", .{}),
             .negate => printInstruction("OP_NEGATE", "", .{}),
@@ -111,9 +116,15 @@ fn runDump(self: *Dumper) void {
             .greater_equal => printInstruction("OP_GREATER_EQUAL", "", .{}),
             .equal => printInstruction("OP_EQUAL", "", .{}),
             .unequal => printInstruction("OP_UNEQUAL", "", .{}),
+            .@"return" => printInstruction("OP_RETURN", "", .{}),
             .constants_done => {
                 constant_block = false;
+                functions_block = true;
                 printInstruction("OP_CONSTANTS_DONE", "", .{});
+            },
+            .functions_done => {
+                functions_block = false;
+                printInstruction("OP_FUNCTIONS_DONE", "", .{});
             },
         }
     }

@@ -53,6 +53,7 @@ pub const Type = enum {
     float,
     string,
     channel,
+    void,
 
     // Literals
     identifier,
@@ -75,6 +76,7 @@ pub const ReservedKeywords = std.StaticStringMap(Type).initComptime(.{
     .{ "func", .func },
     .{ "flow", .flow },
     .{ "null", .null },
+    .{ "void", .void },
     .{ "true", .true },
     .{ "false", .false },
     .{ "bool", .bool },
