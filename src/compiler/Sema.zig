@@ -173,7 +173,7 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
                 self.has_error = true;
             }
         },
-        .variable => {},
+        .variable => try self.varDeclaration(stmt),
         else => @panic("Illegal Instruction"),
     }
 }
@@ -435,6 +435,15 @@ fn assignment(self: *Sema, expr: *Expr) void {
         self.has_error = true;
         return;
     };
+
+    if (variable.constant) {
+        error_reporter.reportError(
+            expr.assignment.value.getToken(),
+            "Cannot assign to a constant",
+            .{},
+        );
+        self.has_error = true;
+    }
 
     if (resulted_type != .null and variable.type != resulted_type) {
         error_reporter.reportError(
