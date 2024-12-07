@@ -67,7 +67,7 @@ pub fn build(b: *std.Build) void {
     exe_unit_tests.root_module.addOptions("testing_options", test_options);
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
-    const test_step = b.step("test", "Run unit tests");
+    const test_step = b.step("unit", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
 
     const check_step = b.step("check", "Check Step for LSP");
@@ -86,6 +86,16 @@ pub fn build(b: *std.Build) void {
         const run_flow = b.addRunArtifact(flow_out);
         b.getInstallStep().dependOn(&run_flow.step);
     }
+
+    const exe_integration_tests = b.addExecutable(.{
+        .name = "integration_test",
+        .root_source_file = b.path("tests/main.zig"),
+        .optimize = .Debug,
+        .target = target,
+    });
+
+    const integration_tests = b.step("test", "Run integration tests");
+    integration_tests.dependOn(&exe_integration_tests.step);
 }
 
 const CompileOptions = struct {
