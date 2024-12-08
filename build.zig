@@ -68,7 +68,7 @@ pub fn build(b: *std.Build) !void {
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     // Step to run tests
-    const test_step = b.step("unit", "Run unit tests");
+    const test_step = b.step("unit-test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
 
     // Integration tests

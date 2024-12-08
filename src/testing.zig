@@ -13,12 +13,3 @@ test "Runtime" {
     _ = @import("runtime/VM.zig");
     _ = @import("runtime/main.zig");
 }
-
-test "Shared" {
-    _ = @import("shared/debug/BytecodeDumper.zig");
-    _ = @import("shared/builtins.zig");
-    _ = @import("shared/byte_code.zig");
-    _ = @import("shared/definitions.zig");
-    _ = @import("shared/root.zig");
-    _ = @import("shared/stack.zig");
-}

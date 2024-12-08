@@ -1,0 +1,11 @@
+stages:
+  - test
+
+tests:
+  stage: test
+  image: nixos/nix
+  script:
+    - nix --experimental-features 'nix-command flakes' develop --command bash -c "zig build check --summary all"
+    - nix --experimental-features 'nix-command flakes' develop --command bash -c "zig build unit-test --summary all"
+    - nix --experimental-features 'nix-command flakes' develop --command bash -c "zig build integration-test --summary all"
+
