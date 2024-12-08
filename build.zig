@@ -2,7 +2,7 @@ const std = @import("std");
 const Step = std.Build.Step;
 const Compile = Step.Compile;
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const example = b.option([]const u8, "example", "The path to a .flow file to be executed. Useful for compiler development");
@@ -72,14 +72,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     // Integration tests
-    const exe_integration_tests = b.addExecutable(.{
-        .name = "integration_test",
-        .root_source_file = b.path("tests/main.zig"),
-        .optimize = .Debug,
-        .target = target,
-    });
-    const integration_tests = b.step("test", "Run integration tests");
-    integration_tests.dependOn(&exe_integration_tests.step);
+    try @import("tests/integration.zig").addIntegrationTest(b, shared, debug_options);
 
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
