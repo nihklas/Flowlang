@@ -1,0 +1,16 @@
+if true {
+    print("from if");
+} else {
+    print("This is false");
+}
+
+if false {
+    print("This is false");
+} else {
+    print("from else");
+}
+
+=====
+
+from if
+from else
