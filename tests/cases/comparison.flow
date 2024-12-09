@@ -19,6 +19,13 @@ print(2 > 2);
 print("1" == "1");
 print("1" != "2");
 
+print("not null" != null);
+print("not null" == null);
+
+var nullable: int;
+print(nullable == null);
+print(nullable != null);
+
 =====
 
 true
@@ -39,3 +46,7 @@ false
 false
 true
 true
+true
+false
+true
+false

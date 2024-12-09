@@ -374,8 +374,7 @@ fn binary(self: *Sema, expr: *Expr) void {
     self.expression(expr.binary.rhs);
     const right_type = self.last_expr_type.?;
 
-    // TODO: What about null?
-    if (left_type != right_type and expr.binary.op.type != .@".") {
+    if (left_type != right_type and expr.binary.op.type != .@"." and expr.binary.op.type != .@"==" and expr.binary.op.type != .@"!=") {
         error_reporter.reportError(
             expr.binary.op,
             "Cannot compare value of type '{s}' to value of type '{s}'",
