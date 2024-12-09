@@ -76,7 +76,6 @@ pub fn build(b: *std.Build) !void {
 
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
-    check_step.dependOn(test_step);
     check_step.dependOn(&compiler.step);
     check_step.dependOn(&runtime.step);
 
