@@ -174,7 +174,7 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
             }
         },
         .variable => try self.varDeclaration(stmt),
-        else => @panic("Illegal Instruction"),
+        else => panic("Illegal Instruction: {s}", .{@tagName(stmt.*)}),
     }
 }
 
@@ -211,7 +211,7 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
                 .string => value_type == .string,
                 .int => value_type == .int,
                 .float => value_type == .float,
-                else => @panic("Invalid Type Hint"),
+                else => |t| panic("Invalid Type Hint: {s}", .{@tagName(t)}),
             };
 
             if (!correct_type) {
@@ -459,7 +459,7 @@ fn assignment(self: *Sema, expr: *Expr) void {
     if (local_idx) |idx| {
         if (idx > std.math.maxInt(u8)) {
             // This kinda should not be really possible, hopefully
-            @panic("Too many locals");
+            panic("Too many locals: {d}", .{idx});
         }
         expr.assignment.local_idx = @intCast(idx);
     } else {
@@ -498,7 +498,7 @@ fn variableExpr(self: *Sema, expr: *Expr) void {
     if (local_idx) |idx| {
         if (idx > std.math.maxInt(u8)) {
             // This kinda should not be really possible, hopefully
-            @panic("Too many locals");
+            panic("Too many locals: {d}", .{idx});
         }
         expr.variable.local_idx = @intCast(idx);
     } else {
@@ -586,6 +586,7 @@ const FlowType = @import("shared").definitions.FlowType;
 const Stack = @import("shared").Stack;
 const builtins = @import("shared").builtins;
 const oom = @import("shared").oom;
+const panic = std.debug.panic;
 
 const error_reporter = @import("error_reporter.zig");
 

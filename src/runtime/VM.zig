@@ -249,7 +249,7 @@ fn arithmetic(self: *VM, op: OpCode) void {
             .mul => .{ .float = left * right },
             .div => .{ .float = left / right },
             .mod => .{ .float = @mod(left, right) },
-            else => @panic("Unsupported Operation"),
+            else => unreachable,
         };
 
         self.value_stack.push(result);
@@ -264,7 +264,7 @@ fn arithmetic(self: *VM, op: OpCode) void {
         .sub => .{ .int = left - right },
         .mul => .{ .int = left * right },
         .mod => .{ .int = @mod(left, right) },
-        else => @panic("Unsupported Operation"),
+        else => unreachable,
     };
 
     self.value_stack.push(result);
@@ -284,7 +284,7 @@ fn comparison(self: *VM, op: OpCode) void {
             .lower_equal => self.value_stack.push(.{ .bool = left <= right }),
             .greater => self.value_stack.push(.{ .bool = left > right }),
             .greater_equal => self.value_stack.push(.{ .bool = left >= right }),
-            else => @panic("Unsupported Operation"),
+            else => unreachable,
         }
         return;
     }
@@ -296,7 +296,7 @@ fn comparison(self: *VM, op: OpCode) void {
         .lower_equal => self.value_stack.push(.{ .bool = left <= right }),
         .greater => self.value_stack.push(.{ .bool = left > right }),
         .greater_equal => self.value_stack.push(.{ .bool = left >= right }),
-        else => @panic("Unsupported Operation"),
+        else => unreachable,
     }
 }
 

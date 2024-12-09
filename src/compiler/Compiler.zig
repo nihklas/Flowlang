@@ -44,7 +44,7 @@ fn compileConstants(self: *Compiler) void {
             self.emitOpcode(.float);
             self.emitMultibyte(c.float);
         },
-        .bool, .null, .builtin_fn, .function => @panic("not a constant"),
+        .bool, .null, .builtin_fn, .function => unreachable,
     };
     self.emitOpcode(.constants_done);
 }
@@ -111,7 +111,7 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
             self.emitOpcode(.@"return");
         },
         .function => {},
-        else => @panic("Not yet implemented"),
+        else => panic("{s} is not yet implemented", .{@tagName(stmt.*)}),
     }
 }
 
@@ -210,7 +210,7 @@ fn expression(self: *Compiler, expr: *Expr) void {
             switch (unary.op.type) {
                 .@"!" => self.emitOpcode(.not),
                 .@"-" => self.emitOpcode(.negate),
-                else => @panic("Wrong Operation"),
+                else => unreachable,
             }
         },
         .binary => |binary| {
@@ -233,7 +233,7 @@ fn expression(self: *Compiler, expr: *Expr) void {
 
                 .@".", .@".=" => self.emitOpcode(.concat),
 
-                else => @panic("Wrong Operation"),
+                else => unreachable,
             }
         },
         .variable => |variable| {
@@ -263,7 +263,7 @@ fn expression(self: *Compiler, expr: *Expr) void {
             self.expression(call.expr);
             self.emitOpcode(.call);
         },
-        else => @panic("Not yet implemented"),
+        else => panic("{s} is not yet implemented", .{@tagName(expr.*)}),
     }
 }
 
@@ -271,7 +271,7 @@ fn emitLoop(self: *Compiler, jump_idx: usize) void {
     const jump_to = self.byte_code.items.len - jump_idx + 3;
 
     if (jump_to > std.math.maxInt(u16)) {
-        @panic("Jump too long");
+        panic("Jump too long: {d}", .{jump_to});
     }
 
     self.emitOpcode(.jump_back);
@@ -296,7 +296,7 @@ fn patchJump(self: *Compiler, jump_idx: usize) void {
 
     // TODO: Do we need to allow bigger jumps?
     if (exact_jump_length > std.math.maxInt(u16)) {
-        @panic("Jump too long");
+        panic("Jump too long: {d}", .{exact_jump_length});
     }
 
     const jump_length: u16 = @intCast(exact_jump_length);
@@ -315,10 +315,7 @@ fn emitConstant(self: *Compiler, value: FlowValue) void {
 fn resolveConstant(self: *Compiler, value: FlowValue) u8 {
     return for (self.constants, 0..) |c, i| {
         if (c.equals(value)) break @intCast(i);
-    } else {
-        std.debug.print("Could not find constant {}\n", .{value});
-        @panic("UnknownConstant");
-    };
+    } else unreachable;
 }
 
 fn emitOpcode(self: *Compiler, op: OpCode) void {
@@ -421,3 +418,4 @@ const Allocator = std.mem.Allocator;
 
 const testing = std.testing;
 const testing_allocator = testing.allocator;
+const panic = std.debug.panic;

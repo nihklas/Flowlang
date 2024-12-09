@@ -35,7 +35,7 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
 
         pub fn push(self: *Self, value: T) StackReturn(void) {
             if (self.stack_top == size) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
+                if (panic_on_overflow) panic("Stackoverflow", .{}) else return error.Stackoverflow;
             }
             defer self.stack_top += 1;
             self.stack[self.stack_top] = value;
@@ -43,7 +43,7 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
 
         pub fn pop(self: *Self) StackReturn(T) {
             if (self.stack_top == 0) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
+                if (panic_on_overflow) panic("Stackoverflow", .{}) else return error.Stackoverflow;
             }
             self.stack_top -= 1;
             return self.stack[self.stack_top];
@@ -53,7 +53,7 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
         pub fn at(self: *Self, offset: usize) StackReturn(T) {
             const i = self.stack_top - 1 - offset;
             if (i > self.stack_top or i < 0) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
+                if (panic_on_overflow) panic("Stackoverflow", .{}) else return error.Stackoverflow;
             }
             return self.stack[i];
         }
@@ -61,7 +61,7 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
         pub fn setAt(self: *Self, offset: usize, value: T) StackReturn(void) {
             const i = self.stack_top - 1 - offset;
             if (i > self.stack_top or i < 0) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
+                if (panic_on_overflow) panic("Stackoverflow", .{}) else return error.Stackoverflow;
             }
             self.stack[i] = value;
         }
@@ -70,3 +70,4 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const panic = std.debug.panic;

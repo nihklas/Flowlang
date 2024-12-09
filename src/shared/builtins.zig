@@ -4,7 +4,7 @@ pub const builtins: std.StaticStringMap(Function) = .initComptime(.{
 
 const impls = struct {
     fn print(args: []FlowValue) FlowValue {
-        stdout.print("{}\n", .{args[0]}) catch @panic("IO Error");
+        stdout.print("{}\n", .{args[0]}) catch panic("IO Error", .{});
         return .null;
     }
 };
@@ -21,3 +21,4 @@ const FlowValue = @import("definitions.zig").FlowValue;
 const stdout = std.io.getStdOut().writer();
 
 const std = @import("std");
+const panic = std.debug.panic;
