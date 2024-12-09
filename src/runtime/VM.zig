@@ -225,7 +225,7 @@ fn concat(self: *VM) void {
     const rhs = self.value_stack.pop();
     const lhs = self.value_stack.pop();
 
-    const result = std.fmt.allocPrint(self.gc, "{}{}", .{ lhs, rhs }) catch @panic("OOM");
+    const result = std.fmt.allocPrint(self.gc, "{}{}", .{ lhs, rhs }) catch oom();
     self.value_stack.push(.{ .string = result });
 }
 
@@ -369,4 +369,5 @@ const Float = @import("shared").definitions.Float;
 const FlowValue = @import("shared").definitions.FlowValue;
 const builtins = @import("shared").builtins;
 const Stack = @import("shared").Stack;
+const oom = @import("shared").oom;
 const debug_options = @import("debug_options");

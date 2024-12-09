@@ -72,25 +72,25 @@ fn scanFunction(self: *Sema, stmt: *Stmt) !void {
                 return;
             }
 
-            const param_types = self.alloc.alloc(FlowType, func.params.len) catch @panic("OOM");
+            const param_types = self.alloc.alloc(FlowType, func.params.len) catch oom();
 
             for (func.params, param_types) |param, *param_type| {
                 param_type.* = tokenToType(param.variable.type_hint.?);
             }
 
-            self.constants.append(.{ .string = func_name }) catch @panic("OOM");
+            self.constants.append(.{ .string = func_name }) catch oom();
 
             self.functions.put(func_name, .{
                 .param_types = param_types,
                 .ret_type = tokenToType(func.ret_type),
-            }) catch @panic("OOM");
+            }) catch oom();
 
             self.globals.put(func_name, .{
                 .scope_depth = 0,
                 .constant = true,
                 .token = func.name,
                 .type = .function,
-            }) catch @panic("OOM");
+            }) catch oom();
         },
         else => {},
     }
@@ -301,6 +301,7 @@ fn expression(self: *Sema, expr: *Expr) void {
         .unary => self.unary(expr),
         .grouping => self.expression(expr.grouping.expr),
         .assignment => self.assignment(expr),
+        .append => @panic("TODO"),
         .binary => self.binary(expr),
         .logical => {
             self.expression(expr.logical.lhs);
@@ -520,7 +521,7 @@ fn constant(self: *Sema, value: FlowValue) void {
     for (self.constants.items) |c| {
         if (c.equals(value)) return;
     }
-    self.constants.append(value) catch @panic("OOM");
+    self.constants.append(value) catch oom();
 }
 
 fn checkNumericOperands(self: *Sema, left: Token, lhs: FlowType, right: Token, rhs: FlowType, op: Token.Type) void {
@@ -584,6 +585,7 @@ const FlowValue = @import("shared").definitions.FlowValue;
 const FlowType = @import("shared").definitions.FlowType;
 const Stack = @import("shared").Stack;
 const builtins = @import("shared").builtins;
+const oom = @import("shared").oom;
 
 const error_reporter = @import("error_reporter.zig");
 

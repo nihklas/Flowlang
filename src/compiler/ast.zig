@@ -16,6 +16,7 @@ pub const Expr = union(enum) {
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
+    append: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
     variable: struct { name: Token, global: bool = false, local_idx: u8 = 0 },
     call: struct { expr: *Expr, args: []*Expr },
 
@@ -67,6 +68,14 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
+    pub fn createAppend(alloc: Allocator, name: Token, expr: *Expr) *Expr {
+        const new_expr = Expr.create(alloc);
+        new_expr.* = .{
+            .append = .{ .name = name, .value = expr },
+        };
+        return new_expr;
+    }
+
     pub fn createVariable(alloc: Allocator, name: Token) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
@@ -90,6 +99,7 @@ pub const Expr = union(enum) {
             .grouping => |grouping| grouping.expr.destroy(alloc),
             .unary => |unary| unary.expr.destroy(alloc),
             .assignment => |assignment| assignment.value.destroy(alloc),
+            .append => |append| append.value.destroy(alloc),
             .binary => |binary| {
                 binary.lhs.destroy(alloc);
                 binary.rhs.destroy(alloc);
@@ -115,13 +125,14 @@ pub const Expr = union(enum) {
             .binary => self.binary.op,
             .logical => self.logical.op,
             .assignment => self.assignment.name,
+            .append => self.append.name,
             .variable => self.variable.name,
             .call => self.call.expr.getToken(),
         };
     }
 
     fn create(alloc: Allocator) *Expr {
-        return alloc.create(Expr) catch @panic("OOM");
+        return alloc.create(Expr) catch oom();
     }
 };
 
@@ -140,6 +151,7 @@ pub const Stmt = union(enum) {
         constant: bool,
         value: ?*Expr,
         type_hint: ?Token,
+        array: bool = false,
         global: bool = false,
         local_index: ?u8 = null,
     },
@@ -293,7 +305,7 @@ pub const Stmt = union(enum) {
     }
 
     fn create(alloc: Allocator) *Stmt {
-        return alloc.create(Stmt) catch @panic("OOM");
+        return alloc.create(Stmt) catch oom();
     }
 };
 
@@ -443,6 +455,7 @@ const Token = @import("Token.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const definitions = @import("shared").definitions;
+const oom = @import("shared").oom;
 const Integer = definitions.Integer;
 const Float = definitions.Float;
 const FlowType = definitions.FlowType;

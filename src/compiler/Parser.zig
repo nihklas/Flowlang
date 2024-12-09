@@ -22,7 +22,7 @@ fn parse(self: *Parser) ![]const *Stmt {
 
     while (!self.isAtEnd()) {
         if (self.declaration()) |stmt| {
-            stmt_list.append(stmt) catch @panic("OOM");
+            stmt_list.append(stmt) catch oom();
         } else |_| {
             self.has_error = true;
             self.recover();
@@ -35,7 +35,7 @@ fn parse(self: *Parser) ![]const *Stmt {
         return error.ParseError;
     }
 
-    return stmt_list.toOwnedSlice() catch @panic("OOM");
+    return stmt_list.toOwnedSlice() catch oom();
 }
 
 fn declaration(self: *Parser) ParserError!*Stmt {
@@ -112,14 +112,14 @@ fn parameters(self: *Parser) ParserError![]*Stmt {
     defer params.deinit();
 
     while (self.param()) |parameter| {
-        params.append(parameter) catch @panic("OOM");
+        params.append(parameter) catch oom();
 
         if (self.match(.@",") == null) {
             break;
         }
     }
 
-    return params.toOwnedSlice() catch @panic("OOM");
+    return params.toOwnedSlice() catch oom();
 }
 
 fn param(self: *Parser) ?*Stmt {
@@ -181,12 +181,12 @@ fn block(self: *Parser) ParserError![]*Stmt {
 
     while (!self.check(.@"}") and !self.isAtEnd()) {
         const stmt = try self.declaration();
-        stmt_list.append(stmt) catch @panic("OOM");
+        stmt_list.append(stmt) catch oom();
     }
 
     try self.consume(.@"}", "Expected '}' at the end of block");
 
-    return stmt_list.toOwnedSlice() catch @panic("OOM");
+    return stmt_list.toOwnedSlice() catch oom();
 }
 
 fn ifStatement(self: *Parser) ParserError!*Stmt {
@@ -255,22 +255,22 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     var outer_scope: std.ArrayList(*Stmt) = .init(self.alloc);
 
     if (maybe_initializer) |initializer| {
-        outer_scope.append(initializer) catch @panic("OOM");
+        outer_scope.append(initializer) catch oom();
     }
 
     const loop_body = if (maybe_increment) |increment|
-        std.mem.concat(self.alloc, *Stmt, &.{ body, &.{increment} }) catch @panic("OOM")
+        std.mem.concat(self.alloc, *Stmt, &.{ body, &.{increment} }) catch oom()
     else
         body;
 
     const loop = Stmt.createLoop(self.alloc, condition, Stmt.createBlock(self.alloc, loop_body));
-    outer_scope.append(loop) catch @panic("OOM");
+    outer_scope.append(loop) catch oom();
 
     if (maybe_increment) |increment| {
         loop.loop.inc = increment;
     }
 
-    const outer_scope_stmts = outer_scope.toOwnedSlice() catch @panic("OOM");
+    const outer_scope_stmts = outer_scope.toOwnedSlice() catch oom();
     return Stmt.createBlock(self.alloc, outer_scope_stmts);
 }
 
@@ -409,13 +409,13 @@ fn call(self: *Parser) ParserError!*Expr {
                 var params_list: std.ArrayList(*Expr) = .init(self.alloc);
                 defer params_list.deinit();
 
-                params_list.append(try self.expression()) catch @panic("OOM");
+                params_list.append(try self.expression()) catch oom();
 
                 while (self.match(.@",")) |_| {
-                    params_list.append(try self.expression()) catch @panic("OOM");
+                    params_list.append(try self.expression()) catch oom();
                 }
 
-                break :blk params_list.toOwnedSlice() catch @panic("OOM");
+                break :blk params_list.toOwnedSlice() catch oom();
             }
 
             break :blk &.{};
@@ -1038,6 +1038,7 @@ const Token = @import("Token.zig");
 const ast = @import("ast.zig");
 const error_reporter = @import("error_reporter.zig");
 const definitions = @import("shared").definitions;
+const oom = @import("shared").oom;
 const Integer = definitions.Integer;
 const Float = definitions.Float;
 

@@ -164,7 +164,7 @@ fn loopStatement(self: *Compiler, stmt: *Stmt) void {
 fn breakStatement(self: *Compiler) void {
     const break_stmt = self.emitJump(.jump);
     var stmts = self.loop_levels.at(0);
-    stmts.break_statements.append(break_stmt) catch @panic("OOM");
+    stmts.break_statements.append(break_stmt) catch oom();
 }
 
 fn continueStatement(self: *Compiler) void {
@@ -322,17 +322,17 @@ fn resolveConstant(self: *Compiler, value: FlowValue) u8 {
 }
 
 fn emitOpcode(self: *Compiler, op: OpCode) void {
-    self.byte_code.append(op.raw()) catch @panic("OOM");
+    self.byte_code.append(op.raw()) catch oom();
 }
 
 fn emitByte(self: *Compiler, byte: u8) void {
-    self.byte_code.append(byte) catch @panic("OOM");
+    self.byte_code.append(byte) catch oom();
 }
 
 fn emitMultibyte(self: *Compiler, value: anytype) void {
     const bytes = std.mem.toBytes(value);
     for (bytes) |byte| {
-        self.byte_code.append(byte) catch @panic("OOM");
+        self.byte_code.append(byte) catch oom();
     }
 }
 
@@ -414,6 +414,7 @@ const Stmt = ast.Stmt;
 const Expr = ast.Expr;
 const FlowValue = @import("shared").definitions.FlowValue;
 const Stack = @import("shared").Stack;
+const oom = @import("shared").oom;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

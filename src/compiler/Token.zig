@@ -22,6 +22,8 @@ pub const Type = enum {
     @"}",
     @">",
     @"<",
+    @"[",
+    @"]",
 
     // Two Characters
     @"==",
