@@ -7,9 +7,24 @@ const Compile = Step.Compile;
 const cases_dir = "tests/cases";
 const split_marker = "=====";
 
-pub fn addIntegrationTest(b: *std.Build, shared: *Module, debug_options: *Step.Options) !void {
+pub fn addIntegrationTest(b: *std.Build, shared: *Module, debug_options: *Step.Options, specific_case: ?[]const u8) !void {
     const integration_tests = b.step("integration-test", "Run integration tests");
 
+    if (specific_case) |case_name| {
+        try runSingle(b, shared, debug_options, integration_tests, case_name);
+    } else {
+        try runAll(b, shared, debug_options, integration_tests);
+    }
+}
+
+fn runSingle(b: *std.Build, shared: *Module, debug_options: *Step.Options, integration_tests: *Step, case_name: []const u8) !void {
+    const file_name = b.fmt("{s}/{s}.flow", .{ cases_dir, case_name });
+    var test_file = try b.build_root.handle.openFile(file_name, .{});
+    defer test_file.close();
+    try buildTest(b, case_name, test_file, shared, debug_options, integration_tests);
+}
+
+fn runAll(b: *std.Build, shared: *Module, debug_options: *Step.Options, integration_tests: *Step) !void {
     var test_cases = try b.build_root.handle.openDir(cases_dir, .{ .iterate = true });
     defer test_cases.close();
 

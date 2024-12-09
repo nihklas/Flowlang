@@ -12,6 +12,7 @@ pub fn build(b: *std.Build) !void {
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
     const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
+    const integration_test_case = b.option([]const u8, "case", "Specific integration test case to run");
 
     const debug_options = b.addOptions();
     debug_options.addOption(bool, "dump", dump_bytecode);
@@ -72,7 +73,7 @@ pub fn build(b: *std.Build) !void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     // Integration tests
-    try @import("tests/integration.zig").addIntegrationTest(b, shared, debug_options);
+    try @import("tests/integration.zig").addIntegrationTest(b, shared, debug_options, integration_test_case);
 
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
