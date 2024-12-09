@@ -1,0 +1,16 @@
+const global = "Don't change me!";
+addAndPrint(1, 2);
+print(global);
+
+func addAndPrint(a: int, b: int) void {
+    const result = a + b;
+    const global = "Tried to change huh";
+    print(global);
+    print(result);
+}
+
+=====
+
+Tried to change huh
+3
+Don't change me!

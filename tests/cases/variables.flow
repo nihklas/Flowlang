@@ -1,0 +1,21 @@
+var test = 1;
+var not_yet: float;
+const msg: string = "Hello";
+const concatted = 42 . " is the number";
+
+print(test);
+print(not_yet);
+print(msg);
+print(concatted);
+
+not_yet = 1.5;
+
+print(not_yet);
+
+=====
+
+1
+null
+Hello
+42 is the number
+1.5

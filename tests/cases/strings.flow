@@ -1,9 +1,11 @@
 print("Hello");
 print("World");
 print("Concatted " . "Hello");
+print("Works with different types: " . true);
 
 =====
 
 Hello
 World
 Concatted Hello
+Works with different types: true
