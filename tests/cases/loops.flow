@@ -2,6 +2,24 @@ for var i = 0; i < 10; i = i + 1 {
     print("i: " . i);
 }
 
+var i = 0;
+for ;; {
+    if i == 5 {
+        break;
+    }
+
+    print("In loop: " . i);
+    i = i + 1;
+}
+
+for var i = 0; i < 10; i = i + 1 {
+    if i % 2 == 0 {
+        continue;
+    }
+
+    print("Uneven: " . i);
+}
+
 =====
 
 i: 0
@@ -14,3 +32,13 @@ i: 6
 i: 7
 i: 8
 i: 9
+In loop: 0
+In loop: 1
+In loop: 2
+In loop: 3
+In loop: 4
+Uneven: 1
+Uneven: 3
+Uneven: 5
+Uneven: 7
+Uneven: 9
