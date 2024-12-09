@@ -32,11 +32,13 @@ const flow = @import("flow");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOptions(.{});
 
     const flow_out = flow.compile(b, .{
         .name = "flow-example",
         .source = b.path("src/main.flow"),
         .target = target,
+        .optimize = optimize,
     });
 
     b.installArtifact(flow_out);
@@ -97,6 +99,14 @@ and, or
 
 // String concat
 .
+
+// shorthands for assignment
++=
+-=
+*=
+/=
+%=
+.=
 ```
 
 ### Variables / Constants
@@ -133,7 +143,7 @@ else block
 Loops:
 
 ```
-for initializer;condition;continue-expr; block
+for initializer;condition;continue-expr block
 ```
 
 Functions:
