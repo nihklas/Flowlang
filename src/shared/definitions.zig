@@ -1,8 +1,5 @@
 pub const Integer = i64;
 pub const Float = f64;
-pub const Function = struct {
-    name: []const u8,
-};
 
 pub const BuiltinFunction = struct {
     arg_count: u8,

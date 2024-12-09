@@ -145,11 +145,6 @@ fn byte(self: *Dumper) u8 {
     return self.code[self.ip];
 }
 
-fn panic(op: []const u8, msg: []const u8) void {
-    std.debug.print("Illegal Instruction: {s}, {s}\n", .{ op, msg });
-    @panic("Illegal Instruction");
-}
-
 const Dumper = @This();
 
 const std = @import("std");
