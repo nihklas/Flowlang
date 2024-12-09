@@ -288,11 +288,16 @@ fn expression(self: *Parser) ParserError!*Expr {
 }
 
 fn assignment(self: *Parser) ParserError!*Expr {
-    if (self.check(.identifier) and self.checkNext(.@"=")) {
+    if (self.isAssignment()) {
         const identifier = self.match(.identifier).?;
-        _ = self.match(.@"=");
+        const op = self.advance();
 
-        const expr = try self.expression();
+        var expr = try self.expression();
+        if (op.type != .@"=") {
+            const identifier_expr = Expr.createVariable(self.alloc, identifier);
+            expr = Expr.createBinary(self.alloc, identifier_expr, op, expr);
+        }
+
         return Expr.createAssignment(self.alloc, identifier, expr);
     }
 
@@ -530,6 +535,16 @@ fn check(self: *Parser, expected: Token.Type) bool {
 fn checkNext(self: *Parser, expected: Token.Type) bool {
     if (self.isAtEnd()) return false;
     return self.tokens[self.current + 1].type == expected;
+}
+
+fn isAssignment(self: *Parser) bool {
+    return self.check(.identifier) and (self.checkNext(.@"=") or
+        self.checkNext(.@".=") or
+        self.checkNext(.@"+=") or
+        self.checkNext(.@"-=") or
+        self.checkNext(.@"*=") or
+        self.checkNext(.@"/=") or
+        self.checkNext(.@"%="));
 }
 
 fn advance(self: *Parser) Token {

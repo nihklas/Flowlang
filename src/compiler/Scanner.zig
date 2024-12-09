@@ -50,25 +50,35 @@ fn nextToken(self: *Scanner) !void {
             self.lexeme_column = 1;
         },
         ',' => try self.makeToken(.@","),
-        '.' => try self.makeToken(.@"."),
-        '+' => try self.makeToken(.@"+"),
-        '*' => try self.makeToken(.@"*"),
-        '%' => try self.makeToken(.@"%"),
         ':' => try self.makeToken(.@":"),
         ';' => try self.makeToken(.@";"),
         '(' => try self.makeToken(.@"("),
         ')' => try self.makeToken(.@")"),
         '{' => try self.makeToken(.@"{"),
         '}' => try self.makeToken(.@"}"),
-        '-' => try self.makeToken(if (self.match('>')) .@"->" else .@"-"),
+        '.' => try self.makeToken(if (self.match('=')) .@".=" else .@"."),
+        '+' => try self.makeToken(if (self.match('=')) .@"+=" else .@"+"),
+        '*' => try self.makeToken(if (self.match('=')) .@"*=" else .@"*"),
+        '%' => try self.makeToken(if (self.match('=')) .@"%=" else .@"%"),
         '=' => try self.makeToken(if (self.match('=')) .@"==" else .@"="),
         '!' => try self.makeToken(if (self.match('=')) .@"!=" else .@"!"),
         '>' => try self.makeToken(if (self.match('=')) .@">=" else .@">"),
         '"' => try self.string(),
         '0'...'9' => try self.number(),
+        '-' => {
+            if (self.match('>')) {
+                try self.makeToken(.@"->");
+            } else if (self.match('=')) {
+                try self.makeToken(.@"-=");
+            } else {
+                try self.makeToken(.@"-");
+            }
+        },
         '/' => {
             if (self.match('/')) {
                 while (!self.check('\n')) self.advance();
+            } else if (self.match('=')) {
+                try self.makeToken(.@"/=");
             } else {
                 try self.makeToken(.@"/");
             }

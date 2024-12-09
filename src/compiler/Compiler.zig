@@ -217,11 +217,11 @@ fn expression(self: *Compiler, expr: *Expr) void {
             self.expression(binary.lhs);
             self.expression(binary.rhs);
             switch (binary.op.type) {
-                .@"+" => self.emitOpcode(.add),
-                .@"-" => self.emitOpcode(.sub),
-                .@"*" => self.emitOpcode(.mul),
-                .@"/" => self.emitOpcode(.div),
-                .@"%" => self.emitOpcode(.mod),
+                .@"+", .@"+=" => self.emitOpcode(.add),
+                .@"-", .@"-=" => self.emitOpcode(.sub),
+                .@"*", .@"*=" => self.emitOpcode(.mul),
+                .@"/", .@"/=" => self.emitOpcode(.div),
+                .@"%", .@"%=" => self.emitOpcode(.mod),
 
                 .@"==" => self.emitOpcode(.equal),
                 .@"!=" => self.emitOpcode(.unequal),
@@ -231,7 +231,7 @@ fn expression(self: *Compiler, expr: *Expr) void {
                 .@">" => self.emitOpcode(.greater),
                 .@">=" => self.emitOpcode(.greater_equal),
 
-                .@"." => self.emitOpcode(.concat),
+                .@".", .@".=" => self.emitOpcode(.concat),
 
                 else => @panic("Wrong Operation"),
             }
