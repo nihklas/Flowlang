@@ -125,6 +125,7 @@ fn compileImpl(b: *std.Build, options: CompileOptions, compiler: *Compile, runti
     runtime.root_module.addAnonymousImport("input", .{
         .root_source_file = bytecode,
     });
+    runtime.root_module.optimize = options.optimize;
 
     return runtime;
 }
