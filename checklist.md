@@ -1,3 +1,8 @@
+## All
+
+- [ ] Switch out every `@panic` with `std.debug.panic` and provide better msg if
+  possible
+
 ## Compiler
 
 - [ ] `Compiler.zig`
