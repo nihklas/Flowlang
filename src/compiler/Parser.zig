@@ -356,8 +356,7 @@ fn comparison(self: *Parser) ParserError!*Expr {
     var lhs = try self.term();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.matchEither(.@"<", .@"<=") != null or self.matchEither(.@">=", .@">") != null) {
-        const op = self.previous();
+    while (self.matchOneOf(&.{ .@"<", .@"<=", .@">=", .@">" })) |op| {
         const rhs = try self.term();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -477,10 +476,9 @@ fn primary(self: *Parser) ParserError!*Expr {
 
 fn typeHint(self: *Parser) ?Token {
     if (self.match(.@":")) |colon| {
-        if (self.match(.string)) |string| return string;
-        if (self.match(.int)) |int| return int;
-        if (self.match(.float)) |float| return float;
-        if (self.match(.bool)) |boolean| return boolean;
+        if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
+            return token;
+        }
 
         error_reporter.reportError(colon, "Expected type after ':'", .{});
         self.has_error = true;
@@ -525,6 +523,13 @@ fn matchEither(self: *Parser, expected1: Token.Type, expected2: Token.Type) ?Tok
         return self.advance();
     }
 
+    return null;
+}
+
+fn matchOneOf(self: *Parser, comptime expecteds: []const Token.Type) ?Token {
+    inline for (expecteds) |t_type| {
+        if (self.check(t_type)) return self.advance();
+    }
     return null;
 }
 
