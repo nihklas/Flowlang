@@ -135,14 +135,18 @@ pub const Expr = union(enum) {
 
 pub const Stmt = union(enum) {
     expr: struct { expr: *Expr },
+
     block: struct { stmts: []*Stmt, local_count: usize = 0 },
+
     loop: struct { condition: *Expr, body: *Stmt, inc: ?*Stmt = null },
     @"break": struct { token: Token },
     @"continue": struct { token: Token },
+
     @"if": struct { condition: *Expr, true_branch: *Stmt, false_branch: ?*Stmt },
-    @"return": struct { value: *Expr },
+
     channel_read: struct { channel: Token, result: Token },
     channel_write: struct { channel: Token, value: *Expr },
+    channel: struct { name: Token, type: FlowType },
     variable: struct {
         name: Token,
         constant: bool,
@@ -152,11 +156,9 @@ pub const Stmt = union(enum) {
         global: bool = false,
         local_index: ?u8 = null,
     },
-    channel: struct {
-        name: Token,
-        type: FlowType,
-    },
+
     function: struct { name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt },
+    @"return": struct { value: *Expr },
 
     pub fn createExpr(alloc: Allocator, expr: *Expr) *Stmt {
         const stmt = Stmt.create(alloc);
@@ -206,14 +208,6 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createReturn(alloc: Allocator, value: *Expr) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .@"return" = .{ .value = value },
-        };
-        return stmt;
-    }
-
     pub fn createChannelRead(alloc: Allocator, channel: Token, result: Token) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
@@ -226,6 +220,14 @@ pub const Stmt = union(enum) {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .channel_write = .{ .channel = channel, .value = value },
+        };
+        return stmt;
+    }
+
+    pub fn createChannel(alloc: Allocator, name: Token, type_hint: FlowType) *Stmt {
+        const stmt = Stmt.create(alloc);
+        stmt.* = .{
+            .channel = .{ .name = name, .type = type_hint },
         };
         return stmt;
     }
@@ -243,18 +245,18 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createChannel(alloc: Allocator, name: Token, type_hint: FlowType) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .channel = .{ .name = name, .type = type_hint },
-        };
-        return stmt;
-    }
-
     pub fn createFunction(alloc: Allocator, name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .function = .{ .name = name, .ret_type = ret_type, .params = params, .body = body },
+        };
+        return stmt;
+    }
+
+    pub fn createReturn(alloc: Allocator, value: *Expr) *Stmt {
+        const stmt = Stmt.create(alloc);
+        stmt.* = .{
+            .@"return" = .{ .value = value },
         };
         return stmt;
     }
