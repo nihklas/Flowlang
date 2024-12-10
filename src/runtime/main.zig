@@ -19,7 +19,7 @@ pub fn main() !void {
 const std = @import("std");
 const VM = @import("VM.zig");
 const GC = @import("GC.zig");
-const DumpTruck = @import("shared").BytecodeDumper;
+const DumpTruck = @import("debug/BytecodeDumper.zig");
 const debug_options = @import("debug_options");
 
 const code = @embedFile("input");

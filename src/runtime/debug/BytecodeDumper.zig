@@ -128,7 +128,7 @@ const Dumper = @This();
 
 const std = @import("std");
 
-const Integer = @import("../definitions.zig").Integer;
-const Float = @import("../definitions.zig").Float;
-const OpCode = @import("../byte_code.zig").OpCode;
-const FlowValue = @import("../definitions.zig").FlowValue;
+const Integer = @import("shared").definitions.Integer;
+const Float = @import("shared").definitions.Float;
+const OpCode = @import("shared").OpCode;
+const FlowValue = @import("shared").definitions.FlowValue;
