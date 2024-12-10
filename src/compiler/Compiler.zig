@@ -10,6 +10,7 @@ pub fn compile(alloc: Allocator, program: []const *Stmt, sema: *Sema) []const u8
         .constants = sema.constants.items,
         .loop_levels = .init(alloc),
     };
+    defer compiler.loop_levels.deinit(alloc);
 
     compiler.compileConstants();
     compiler.compileFunctions(program);
@@ -400,11 +401,11 @@ fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
         node.destroy(testing_allocator);
     };
 
-    var sema: Sema = try .init(testing_allocator, program);
+    var sema: Sema = .init(testing_allocator, program);
     defer sema.deinit();
     try sema.analyse();
 
-    const bytecode = try compile(testing_allocator, program, &sema);
+    const bytecode = compile(testing_allocator, program, &sema);
     defer testing_allocator.free(bytecode);
 
     try testing.expectEqualSlices(u8, expected_bytecode, bytecode);

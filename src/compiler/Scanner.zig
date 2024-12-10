@@ -15,6 +15,8 @@ pub fn scan(alloc: Allocator, input: []const u8) ![]const Token {
         .alloc = alloc,
         .tokens = .init(alloc),
     };
+    errdefer scanner.tokens.deinit();
+
     scanner.scanTokens();
 
     if (scanner.has_error) {

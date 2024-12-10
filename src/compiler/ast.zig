@@ -7,10 +7,7 @@ pub const Expr = union(enum) {
         string: []const u8,
     };
 
-    literal: struct {
-        token: Token,
-        value: Literal,
-    },
+    literal: struct { token: Token, value: Literal },
     grouping: struct { expr: *Expr },
     unary: struct { op: Token, expr: *Expr },
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
