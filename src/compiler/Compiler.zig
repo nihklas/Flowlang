@@ -95,6 +95,7 @@ fn statement(self: *Compiler, stmt: *Stmt) void {
         .@"break" => self.breakStatement(),
         .@"continue" => self.continueStatement(),
         .@"return" => self.returnStatement(stmt),
+        .function => {}, // This is not an error state, global functions are already handled
         else => panic("{s} is not yet implemented", .{@tagName(stmt.*)}),
     }
 }

@@ -9,13 +9,13 @@ call_stack: Stack(CallFrame, STACK_SIZE, true),
 constants: [256]FlowValue = undefined,
 globals: std.StringHashMapUnmanaged(FlowValue),
 
-pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) !VM {
+pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) VM {
     return .{
         .gpa = gpa,
         .gc = gc,
         .code = code,
-        .value_stack = try .init(gpa),
-        .call_stack = try .init(gpa),
+        .value_stack = Stack(FlowValue, STACK_SIZE, true).init(gpa) catch oom(),
+        .call_stack = Stack(CallFrame, STACK_SIZE, true).init(gpa) catch oom(),
         .globals = .empty,
     };
 }
@@ -27,18 +27,18 @@ pub fn deinit(self: *VM) void {
     self.* = undefined;
 }
 
-pub fn run(self: *VM) !void {
-    try self.loadConstants();
-    try self.loadFunctions();
+pub fn run(self: *VM) void {
+    self.loadConstants();
+    self.loadFunctions();
     self.call_stack.push(.{
         .stack_bottom = 0,
         .ret_addr = self.ip,
     });
-    try self.runWhileSwitch();
+    self.runWhileSwitch();
     // try self.runSwitchContinue();
 }
 
-fn loadConstants(self: *VM) !void {
+fn loadConstants(self: *VM) void {
     var constants_counter: usize = 0;
     while (self.ip < self.code.len) {
         const op = self.instruction();
@@ -76,15 +76,12 @@ fn loadConstants(self: *VM) !void {
                 self.ip += len;
             },
             .constants_done => break,
-            else => {
-                std.debug.print("Illegal Instruction: {}\n", .{op});
-                return error.IllegalInstruction;
-            },
+            else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
     }
 }
 
-fn loadFunctions(self: *VM) !void {
+fn loadFunctions(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
         if (comptime debug_options.bytecode) {
@@ -98,27 +95,23 @@ fn loadFunctions(self: *VM) !void {
 
                 const name = self.constants[name_idx];
 
-                try self.globals.put(self.gpa, name.string, .{
+                self.globals.put(self.gpa, name.string, .{
                     .function = .{
                         .name = name.string,
                         .arg_count = argc,
                         .start_ip = self.ip,
                     },
-                });
+                }) catch oom();
 
                 self.ip += end - 1;
             },
             .functions_done => break,
-            else => {
-                std.debug.print("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op });
-                return error.IllegalInstruction;
-            },
+            else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
     }
 }
 
-// TODO: Better Errorhandling
-fn runWhileSwitch(self: *VM) !void {
+fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
         if (comptime debug_options.stack) {
@@ -144,7 +137,8 @@ fn runWhileSwitch(self: *VM) !void {
                 const negated: FlowValue = switch (value) {
                     .float => .{ .float = -value.float },
                     .int => .{ .int = -value.int },
-                    .null, .bool, .string, .builtin_fn, .function => return error.CanOnlyNegateNumbers,
+
+                    .null, .bool, .string, .builtin_fn, .function => unreachable,
                 };
                 self.value_stack.push(negated);
             },
@@ -166,7 +160,7 @@ fn runWhileSwitch(self: *VM) !void {
                 const name = self.value_stack.pop();
                 const value = self.value_stack.pop();
 
-                try self.globals.put(self.gpa, name.string, value);
+                self.globals.put(self.gpa, name.string, value) catch oom();
             },
             .get_global => {
                 const name = self.value_stack.pop();
@@ -216,10 +210,15 @@ fn runWhileSwitch(self: *VM) !void {
                 self.value_stack.stack_top = frame.stack_bottom;
                 self.value_stack.push(ret_value);
             },
-            .string, .string_long, .integer, .float, .constants_done, .functions_done, .function => {
-                std.debug.print("Illegal Instruction: {}\n", .{op});
-                return error.IllegalInstruction;
-            },
+
+            .string,
+            .string_long,
+            .integer,
+            .float,
+            .constants_done,
+            .functions_done,
+            .function,
+            => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
     }
 }
@@ -374,3 +373,5 @@ const builtins = @import("shared").builtins;
 const Stack = @import("shared").Stack;
 const oom = @import("shared").oom;
 const debug_options = @import("debug_options");
+
+const panic = std.debug.panic;

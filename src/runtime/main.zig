@@ -10,10 +10,10 @@ pub fn main() !void {
     var gc: GC = .init(gpa.allocator());
     defer gc.deinit();
 
-    var vm: VM = try .init(gpa.allocator(), gc.allocator(), code);
+    var vm: VM = .init(gpa.allocator(), gc.allocator(), code);
     defer vm.deinit();
 
-    try vm.run();
+    vm.run();
 }
 
 const std = @import("std");
