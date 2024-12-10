@@ -39,7 +39,7 @@ fn parse(self: *Parser) ![]const *Stmt {
 }
 
 fn declaration(self: *Parser) ParserError!*Stmt {
-    if (self.matchEither(.@"var", .@"const")) |_| {
+    if (self.matchOneOf(&.{ .@"var", .@"const" })) |_| {
         return self.varDeclaration();
     }
 
@@ -344,7 +344,7 @@ fn equality(self: *Parser) ParserError!*Expr {
     var lhs = try self.comparison();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.matchEither(.@"!=", .@"==")) |op| {
+    while (self.matchOneOf(&.{ .@"!=", .@"==" })) |op| {
         const rhs = try self.comparison();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -368,7 +368,7 @@ fn term(self: *Parser) ParserError!*Expr {
     var lhs = try self.factor();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.matchEither(.@"+", .@"-")) |op| {
+    while (self.matchOneOf(&.{ .@"+", .@"-" })) |op| {
         const rhs = try self.factor();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -390,7 +390,7 @@ fn factor(self: *Parser) ParserError!*Expr {
 }
 
 fn unary(self: *Parser) ParserError!*Expr {
-    if (self.matchEither(.@"-", .@"!")) |op| {
+    if (self.matchOneOf(&.{ .@"-", .@"!" })) |op| {
         const expr = try self.unary();
         errdefer expr.destroy(self.alloc);
         return Expr.createUnary(self.alloc, op, expr);
@@ -431,7 +431,7 @@ fn primary(self: *Parser) ParserError!*Expr {
     if (self.match(.null)) |token| {
         return Expr.createLiteral(self.alloc, token, .null);
     }
-    if (self.matchEither(.true, .false)) |token| {
+    if (self.matchOneOf(&.{ .true, .false })) |token| {
         return Expr.createLiteral(self.alloc, token, .{ .bool = token.type == .true });
     }
 
@@ -512,14 +512,6 @@ fn consume(self: *Parser, expected: Token.Type, msg: []const u8) ParserError!voi
 
 fn match(self: *Parser, expected: Token.Type) ?Token {
     if (self.check(expected)) {
-        return self.advance();
-    }
-
-    return null;
-}
-
-fn matchEither(self: *Parser, expected1: Token.Type, expected2: Token.Type) ?Token {
-    if (self.check(expected1) or self.check(expected2)) {
         return self.advance();
     }
 
