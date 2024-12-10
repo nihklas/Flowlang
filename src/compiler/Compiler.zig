@@ -1,14 +1,14 @@
 alloc: Allocator,
 byte_code: std.ArrayList(u8),
 constants: []const FlowValue,
-loop_levels: Stack(LoopLevel, 256, true),
+loop_levels: Stack(LoopLevel, 256),
 
 pub fn compile(alloc: Allocator, program: []const *Stmt, sema: *Sema) []const u8 {
     var compiler: Compiler = .{
         .alloc = alloc,
         .byte_code = .init(alloc),
         .constants = sema.constants.items,
-        .loop_levels = Stack(LoopLevel, 256, true).init(alloc) catch oom(),
+        .loop_levels = .init(alloc),
     };
 
     compiler.compileConstants();

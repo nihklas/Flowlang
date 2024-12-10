@@ -1,8 +1,8 @@
 alloc: Allocator,
 program: []const *Stmt,
 constants: std.ArrayList(FlowValue),
-variables: Stack(Variable, MAX_LOCAL_SIZE, true),
-current_function: Stack(Function, MAX_LOCAL_SIZE, true),
+variables: Stack(Variable, MAX_LOCAL_SIZE),
+current_function: Stack(Function, MAX_LOCAL_SIZE),
 globals: std.StringHashMap(Variable),
 functions: std.StringHashMap(Function),
 scope_depth: usize = 0,
@@ -11,13 +11,13 @@ last_expr_type: ?FlowType = null,
 last_expr_sideeffect: bool = false,
 loop_level: usize = 0,
 
-pub fn init(alloc: Allocator, program: []const *Stmt) !Sema {
+pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
         .alloc = alloc,
         .program = program,
         .constants = .init(alloc),
-        .variables = try .init(alloc),
-        .current_function = try .init(alloc),
+        .variables = .init(alloc),
+        .current_function = .init(alloc),
         .globals = .init(alloc),
         .functions = .init(alloc),
     };
@@ -25,8 +25,8 @@ pub fn init(alloc: Allocator, program: []const *Stmt) !Sema {
 
 pub fn deinit(self: *Sema) void {
     self.constants.deinit();
-    self.variables.deinit();
-    self.current_function.deinit();
+    self.variables.deinit(self.alloc);
+    self.current_function.deinit(self.alloc);
     self.globals.deinit();
     self.functions.deinit();
 }
