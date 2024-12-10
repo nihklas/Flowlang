@@ -5,7 +5,8 @@ pub const BuiltinFunction = struct {
     arg_count: u8,
     /// If this is set to null, Semantic analysing won't perform compile time type checking
     arg_types: ?[]const FlowType,
-    function: *const fn ([]FlowValue) FlowValue,
+    ret_type: FlowType,
+    function: *const fn (std.mem.Allocator, []FlowValue) FlowValue,
 };
 
 pub const FlowFunction = struct {

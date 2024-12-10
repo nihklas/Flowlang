@@ -314,7 +314,7 @@ fn call(self: *VM) void {
 fn callBuiltin(self: *VM, value: FlowValue) void {
     const arg_count = value.builtin_fn.arg_count;
     const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
-    const result = value.builtin_fn.function(args);
+    const result = value.builtin_fn.function(self.gc, args);
     for (0..arg_count) |_| {
         _ = self.pop();
     }

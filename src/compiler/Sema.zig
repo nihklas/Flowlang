@@ -8,7 +8,7 @@ functions: std.StringHashMap(Function),
 scope_depth: usize = 0,
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
-last_expr_sideeffect: bool = false,
+last_function_ret_type: ?FlowType = null,
 loop_level: usize = 0,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
@@ -404,6 +404,104 @@ fn binaryExpression(self: *Sema, expr: *Expr) void {
             );
         },
         else => unreachable,
+    }
+}
+
+fn assignment(self: *Sema, expr: *Expr) void {
+    self.expression(expr.assignment.value);
+    const resulted_type = self.last_expr_type.?;
+    const name = expr.assignment.name.lexeme;
+
+    const maybe_variable, const local_idx = blk: {
+        var stack_idx: usize = 0;
+        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
+            const local = self.variables.at(stack_idx);
+            if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
+                break :blk .{ local, stack_idx };
+            }
+        }
+        break :blk .{ null, null };
+    };
+
+    const variable = maybe_variable orelse self.globals.get(name) orelse {
+        error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
+        self.has_error = true;
+        return;
+    };
+
+    if (variable.constant) {
+        error_reporter.reportError(
+            expr.assignment.value.getToken(),
+            "Cannot assign to a constant",
+            .{},
+        );
+        self.has_error = true;
+    }
+
+    if (resulted_type != .null and variable.type != resulted_type) {
+        error_reporter.reportError(
+            expr.assignment.value.getToken(),
+            "Type mismatch: Expected value of type '{s}', got '{s}'",
+            .{ @tagName(variable.type), @tagName(resulted_type) },
+        );
+        self.has_error = true;
+    }
+
+    self.last_expr_type = variable.type;
+
+    if (local_idx) |idx| {
+        if (idx > std.math.maxInt(u8)) {
+            // This kinda should not be really possible, hopefully
+            @panic("Too many locals");
+        }
+        expr.assignment.local_idx = @intCast(idx);
+    } else {
+        expr.assignment.global = true;
+    }
+}
+
+fn variableExpr(self: *Sema, expr: *Expr) void {
+    const name = expr.variable.name.lexeme;
+
+    if (builtins.get(name)) |builtin| {
+        self.constant(.{ .string = name });
+        expr.variable.global = true;
+        self.last_expr_type = .builtin_fn;
+        self.last_function_ret_type = builtin.ret_type;
+        return;
+    }
+
+    const maybe_variable, const local_idx = blk: {
+        var stack_idx: usize = 0;
+        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
+            const local = self.variables.at(stack_idx);
+            if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
+                break :blk .{ local, self.variables.stack_top - 1 - stack_idx };
+            }
+        }
+        break :blk .{ null, null };
+    };
+
+    const variable = maybe_variable orelse self.globals.get(name) orelse {
+        error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
+        self.has_error = true;
+        return;
+    };
+    self.last_expr_type = variable.type;
+
+    if (variable.type == .function) {
+        const func = self.functions.get(variable.token.lexeme).?;
+        self.last_function_ret_type = func.ret_type;
+    }
+
+    if (local_idx) |idx| {
+        if (idx > std.math.maxInt(u8)) {
+            // This kinda should not be really possible, hopefully
+            @panic("Too many locals");
+        }
+        expr.variable.local_idx = @intCast(idx);
+    } else {
+        expr.variable.global = true;
     }
 }
 
