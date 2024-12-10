@@ -210,8 +210,11 @@ fn runWhileSwitch(self: *VM) !void {
                 self.call();
             },
             .@"return" => {
+                const ret_value = self.value_stack.pop();
                 const frame = self.call_stack.pop();
                 self.ip = frame.ret_addr;
+                self.value_stack.stack_top = frame.stack_bottom;
+                self.value_stack.push(ret_value);
             },
             .string, .string_long, .integer, .float, .constants_done, .functions_done, .function => {
                 std.debug.print("Illegal Instruction: {}\n", .{op});
