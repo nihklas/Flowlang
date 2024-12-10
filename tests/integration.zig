@@ -84,6 +84,7 @@ fn makeTest(
     const output = run_test.captureStdOut();
 
     const check_file = b.addCheckFile(output, .{ .expected_exact = expected });
+    check_file.setName(b.dupe(case_name));
 
     integration_tests.dependOn(&check_file.step);
 }
