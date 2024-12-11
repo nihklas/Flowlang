@@ -2,7 +2,7 @@ const global = "Don't change me!";
 addAndPrint(1, 2);
 print(global);
 
-func addAndPrint(a: int, b: int) void {
+func addAndPrint(a: int, b: int) {
     const result = a + b;
     const global = "Tried to change huh";
     print(global);

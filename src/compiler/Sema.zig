@@ -554,7 +554,7 @@ fn tokenToType(token: Token) FlowType {
         .int => .int,
         .float => .float,
         .string => .string,
-        .null, .void => .null,
+        .null => .null,
         else => unreachable,
     };
 }

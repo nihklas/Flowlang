@@ -54,12 +54,8 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
     // var or const
     const keyword = self.previous();
 
-    try self.consume(
-        .identifier,
-        std.fmt.allocPrint(self.alloc, "Expected identifier after {s}", .{
-            @tagName(keyword.type),
-        }) catch unreachable,
-    );
+    try self.consume(.identifier, "Expected variable identifier");
+
     const name = self.previous();
 
     const type_hint = self.typeHint();
@@ -85,18 +81,18 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
     const params = try self.parameters();
 
     try self.consume(.@")", "Expected ')' after function parameters");
+    const close_paren = self.previous();
 
-    const type_hint = blk: {
-        if (self.match(.string)) |string| break :blk string;
-        if (self.match(.int)) |int| break :blk int;
-        if (self.match(.float)) |float| break :blk float;
-        if (self.match(.bool)) |boolean| break :blk boolean;
-        if (self.match(.void)) |token| break :blk token;
-
-        error_reporter.reportError(self.peek(), "Expected return type before function body", .{});
-        self.has_error = true;
-        break :blk self.peek();
-    };
+    // null implies void
+    const type_hint: Token = if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token|
+        token
+    else
+        .{
+            .type = .null,
+            .line = close_paren.line,
+            .column = close_paren.column,
+            .lexeme = "null",
+        };
 
     try self.consume(.@"{", "Expected '{' before function body");
 
@@ -111,8 +107,10 @@ fn parameters(self: *Parser) ParserError![]*Stmt {
     var params: std.ArrayList(*Stmt) = .init(self.alloc);
     defer params.deinit();
 
-    while (self.param()) |parameter| {
-        params.append(parameter) catch oom();
+    while (!self.check(.@")") and !self.isAtEnd()) {
+        if (self.param()) |parameter| {
+            params.append(parameter) catch oom();
+        }
 
         if (self.match(.@",") == null) {
             break;
@@ -199,18 +197,18 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
 }
 
 fn returnStatement(self: *Parser) ParserError!*Stmt {
-    const value = blk: {
-        if (self.check(.@";")) {
-            break :blk Expr.createLiteral(self.alloc, self.previous(), .null);
-        }
+    // if no value, returning null is fine
+    const value = if (self.check(.@";"))
+        Expr.createLiteral(self.alloc, self.previous(), .null)
+    else
+        try self.expression();
 
-        break :blk try self.expression();
-    };
     try self.consume(.@";", "Expected ';' after return statement");
     return Stmt.createReturn(self.alloc, value);
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {
+    // TODO: maybe this can be improved? Maybe some Go-like syntax sugar
     const maybe_initializer: ?*Stmt = blk: {
         if (self.match(.@";")) |_| {
             break :blk null;
@@ -245,6 +243,8 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     try self.consume(.@"{", "Expected '{' before loop body");
     const body = try self.block();
 
+    // for-loop gets desugared into this structure:
+    //
     // block
     // initializer
     // loop
@@ -263,6 +263,7 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     else
         body;
 
+    // TODO: make loop body an array of statements, since single statements are not allowed anyways
     const loop = Stmt.createLoop(self.alloc, condition, Stmt.createBlock(self.alloc, loop_body));
     outer_scope.append(loop) catch oom();
 
