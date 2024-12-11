@@ -33,6 +33,21 @@
               echo "Running Zig Version: $(zig version)"
             '';
           };
+
+          checks.default = stdenv.mkDerivation {
+            name = "all-tests";
+            nativeBuildInputs = [zigpkgs.master];
+            src = ./.;
+            preBuild = "export HOME=$TMPDIR";
+            installPhase = ''
+              runHook preInstall
+              zig build --prefix $out check
+              zig build --prefix $out unit-test
+              zig build --prefix $out integration-test
+              mkdir $out
+              runHook postInstall
+            '';
+          };
         }
     );
 }
