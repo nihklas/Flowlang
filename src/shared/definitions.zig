@@ -24,19 +24,6 @@ pub const FlowType = enum {
     function,
 };
 
-// TODO: Change Runtime definition to be a packed union/struct
-// As we have a statically type language, this is possible and allows us a few performance
-// optimisations
-// We have to be able to differentiate between garbage collected values and non-gc'ed values
-// GC'ed Values:
-// - strings
-// - arrays (but not necessarily the elements of it)
-// - functions/closures
-// Non GC'ed Values:
-// - null
-// - bool
-// - int
-// - float
 pub const FlowValue = union(FlowType) {
     null: void,
     bool: bool,

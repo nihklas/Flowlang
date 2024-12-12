@@ -208,7 +208,6 @@ fn returnStatement(self: *Parser) ParserError!*Stmt {
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {
-    // TODO: maybe this can be improved? Maybe some Go-like syntax sugar
     const maybe_initializer: ?*Stmt = blk: {
         if (self.match(.@";")) |_| {
             break :blk null;
@@ -248,7 +247,6 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     // block
     // initializer
     // loop
-    //     block
     //     body
     //     inc
 
@@ -263,7 +261,6 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     else
         body;
 
-    // TODO: make loop body an array of statements, since single statements are not allowed anyways
     const loop = Stmt.createLoop(self.alloc, condition, loop_body);
     outer_scope.append(loop) catch oom();
 
@@ -381,8 +378,7 @@ fn factor(self: *Parser) ParserError!*Expr {
     var lhs = try self.unary();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.match(.@"*") != null or self.match(.@"/") != null or self.match(.@"%") != null) {
-        const op = self.previous();
+    while (self.matchOneOf(&.{ .@"*", .@"/", .@"%" })) |op| {
         const rhs = try self.unary();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -403,29 +399,26 @@ fn unary(self: *Parser) ParserError!*Expr {
 fn call(self: *Parser) ParserError!*Expr {
     const expr = try self.primary();
 
-    if (self.match(.@"(")) |_| {
-        const params: []*Expr = blk: {
-            if (!self.check(.@")")) {
-                var params_list: std.ArrayList(*Expr) = .init(self.alloc);
-                defer params_list.deinit();
-
-                params_list.append(try self.expression()) catch oom();
-
-                while (self.match(.@",")) |_| {
-                    params_list.append(try self.expression()) catch oom();
-                }
-
-                break :blk params_list.toOwnedSlice() catch oom();
-            }
-
-            break :blk &.{};
-        };
-
-        try self.consume(.@")", "Expected ')' after parameters");
-
-        return Expr.createCall(self.alloc, expr, params);
+    if (self.match(.@"(") == null) {
+        return expr;
     }
-    return expr;
+
+    const params: []*Expr = blk: {
+        var params_list: std.ArrayList(*Expr) = .init(self.alloc);
+        defer params_list.deinit();
+
+        while (!self.check(.@")") and !self.isAtEnd()) {
+            params_list.append(try self.expression()) catch oom();
+
+            if (self.match(.@",") == null) break;
+        }
+
+        break :blk params_list.toOwnedSlice() catch oom();
+    };
+
+    try self.consume(.@")", "Expected ')' after parameters");
+
+    return Expr.createCall(self.alloc, expr, params);
 }
 
 fn primary(self: *Parser) ParserError!*Expr {
@@ -495,7 +488,7 @@ fn recover(self: *Parser) void {
         .@"for",
         .@"var",
         .func,
-        // .@"return",
+        .@"return",
         .@"{",
         => self.current -= 1,
         else => continue :recover self.advance().type,

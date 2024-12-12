@@ -44,8 +44,6 @@ pub fn analyse(self: *Sema) !void {
         try self.statement(stmt);
     }
 
-    // TODO: maybe add 'constant_long' to be able to store more constant values
-    // If we add that, should we sort the most used constant into the 'constant_short' area?
     if (self.constants.items.len > std.math.maxInt(u8)) {
         return error.TooManyConstants;
     }
@@ -149,7 +147,6 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
             }
         },
         .function => |func| {
-            // TODO: Create complete new scope or handle inner functions otherwise gracefully
             self.beginScope();
             self.current_function.push(self.functions.get(func.name.lexeme).?);
             for (func.params) |param| {

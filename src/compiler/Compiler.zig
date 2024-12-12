@@ -314,7 +314,6 @@ fn patchJump(self: *Compiler, jump_idx: usize) void {
     // another - 2 to account for the jmp length in the jmp instruction
     const exact_jump_length = self.byte_code.items.len - 3 - jump_idx;
 
-    // TODO: Do we need to allow bigger jumps?
     if (exact_jump_length > std.math.maxInt(u16)) {
         panic("Jump too long: {d}", .{exact_jump_length});
     }
