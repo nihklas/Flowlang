@@ -114,7 +114,11 @@ fn blockStatement(self: *Compiler, stmt: *Stmt) void {
 }
 
 fn returnStatement(self: *Compiler, stmt: *Stmt) void {
-    self.expression(stmt.@"return".value);
+    if (stmt.@"return".value) |value| {
+        self.expression(value);
+    } else {
+        self.emitOpcode(.null);
+    }
     self.emitOpcode(.@"return");
 }
 

@@ -197,14 +197,11 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
 }
 
 fn returnStatement(self: *Parser) ParserError!*Stmt {
-    // if no value, returning null is fine
-    const value = if (self.check(.@";"))
-        Expr.createLiteral(self.alloc, self.previous(), .null)
-    else
-        try self.expression();
+    const keyword = self.previous();
+    const value = if (!self.check(.@";")) try self.expression() else null;
 
     try self.consume(.@";", "Expected ';' after return statement");
-    return Stmt.createReturn(self.alloc, value);
+    return Stmt.createReturn(self.alloc, keyword, value);
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {

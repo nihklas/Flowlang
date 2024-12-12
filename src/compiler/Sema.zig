@@ -76,7 +76,7 @@ fn scanFunction(self: *Sema, stmt: *Stmt) void {
                 param_type.* = tokenToType(param.variable.type_hint.?);
             }
 
-            self.constants.append(.{ .string = func_name }) catch oom();
+            self.constant(.{ .string = func_name });
 
             self.functions.put(func_name, .{
                 .param_types = param_types,
@@ -140,6 +140,12 @@ fn blockStatement(self: *Sema, stmt: *Stmt) void {
         self.statement(inner_stmt);
     }
 
+    stmt.block.local_count = self.localCount();
+
+    self.endScope();
+}
+
+fn localCount(self: *Sema) usize {
     var locals_count: usize = 0;
     var stack_idx: usize = 0;
     while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
@@ -149,9 +155,7 @@ fn blockStatement(self: *Sema, stmt: *Stmt) void {
         }
         locals_count += 1;
     }
-    stmt.block.local_count = locals_count;
-
-    self.endScope();
+    return locals_count;
 }
 
 fn loopStatement(self: *Sema, stmt: *Stmt) void {
@@ -184,7 +188,9 @@ fn continueStatement(self: *Sema, stmt: *Stmt) void {
 
 fn functionDeclaration(self: *Sema, stmt: *Stmt) void {
     const func = stmt.function;
+
     self.beginScope();
+
     self.current_function.push(self.functions.get(func.name.lexeme).?);
     for (func.params) |param| {
         self.variables.push(.{
@@ -194,27 +200,37 @@ fn functionDeclaration(self: *Sema, stmt: *Stmt) void {
             .type = tokenToType(param.variable.type_hint.?),
         });
     }
+
     for (func.body) |line| {
         self.statement(line);
     }
     _ = self.current_function.pop();
+
     self.endScope();
 }
 
 fn returnStatement(self: *Sema, stmt: *Stmt) void {
     const return_stmt = stmt.@"return";
-    self.expression(return_stmt.value);
     const func = self.current_function.at(0);
-    if (func.ret_type != self.last_expr_type.?) {
-        error_reporter.reportError(return_stmt.value.getToken(), "Return type mismatch. Expected '{s}', got '{s}'", .{
-            @tagName(func.ret_type),
-            @tagName(self.last_expr_type.?),
-        });
+
+    if (return_stmt.value) |value| {
+        self.expression(value);
+
+        if (func.ret_type != self.last_expr_type.?) {
+            error_reporter.reportError(value.getToken(), "Return type mismatch. Expected '{s}', got '{s}'", .{
+                @tagName(func.ret_type),
+                @tagName(self.last_expr_type.?),
+            });
+            self.has_error = true;
+        }
+    } else if (func.ret_type != .null) {
+        error_reporter.reportError(return_stmt.token, "Missing return value", .{});
         self.has_error = true;
     }
 }
 
 fn varDeclaration(self: *Sema, stmt: *Stmt) void {
+    // TODO: This is to complicated, pls rework
     const name = stmt.variable.name.lexeme;
 
     if (builtins.get(name)) |_| {
@@ -354,6 +370,7 @@ fn unaryExpression(self: *Sema, expr: *Expr) void {
 }
 
 fn binaryExpression(self: *Sema, expr: *Expr) void {
+    // TODO: This needs to be done better, pls improve
     self.expression(expr.binary.lhs);
     const left_type = self.last_expr_type.?;
 
@@ -399,6 +416,30 @@ fn binaryExpression(self: *Sema, expr: *Expr) void {
     }
 }
 
+fn checkNumericOperands(self: *Sema, left: Token, lhs: FlowType, right: Token, rhs: FlowType, op: Token.Type) void {
+    if (!isNumeric(lhs)) {
+        error_reporter.reportError(
+            left,
+            "Expected left operand of '{s}' to be int or float, got '{s}'",
+            .{ @tagName(op), @tagName(lhs) },
+        );
+        self.has_error = true;
+    }
+
+    if (!isNumeric(rhs)) {
+        error_reporter.reportError(
+            right,
+            "Expected right operand of '{s}' to be int or float, got '{s}'",
+            .{ @tagName(op), @tagName(rhs) },
+        );
+        self.has_error = true;
+    }
+}
+
+fn isNumeric(value_type: FlowType) bool {
+    return value_type == .int or value_type == .float;
+}
+
 fn logicalExpression(self: *Sema, expr: *Expr) void {
     self.expression(expr.logical.lhs);
     self.expression(expr.logical.rhs);
@@ -410,16 +451,7 @@ fn assignmentExpression(self: *Sema, expr: *Expr) void {
     const resulted_type = self.last_expr_type.?;
     const name = expr.assignment.name.lexeme;
 
-    const maybe_variable, const local_idx = blk: {
-        var stack_idx: usize = 0;
-        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
-            const local = self.variables.at(stack_idx);
-            if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
-                break :blk .{ local, stack_idx };
-            }
-        }
-        break :blk .{ null, null };
-    };
+    const maybe_variable, const local_idx = self.findLocal(name);
 
     const variable = maybe_variable orelse self.globals.get(name) orelse {
         error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
@@ -428,12 +460,9 @@ fn assignmentExpression(self: *Sema, expr: *Expr) void {
     };
 
     if (variable.constant) {
-        error_reporter.reportError(
-            expr.assignment.value.getToken(),
-            "Cannot assign to a constant",
-            .{},
-        );
+        error_reporter.reportError(expr.assignment.value.getToken(), "Cannot assign to a constant", .{});
         self.has_error = true;
+        return;
     }
 
     if (resulted_type != .null and variable.type != resulted_type) {
@@ -468,16 +497,7 @@ fn variableExpression(self: *Sema, expr: *Expr) void {
         return;
     }
 
-    const maybe_variable, const local_idx = blk: {
-        var stack_idx: usize = 0;
-        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
-            const local = self.variables.at(stack_idx);
-            if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
-                break :blk .{ local, self.variables.stack_top - 1 - stack_idx };
-            }
-        }
-        break :blk .{ null, null };
-    };
+    const maybe_variable, const local_idx = self.findLocal(name);
 
     const variable = maybe_variable orelse self.globals.get(name) orelse {
         error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
@@ -495,6 +515,18 @@ fn variableExpression(self: *Sema, expr: *Expr) void {
     } else {
         expr.variable.global = true;
     }
+}
+
+fn findLocal(self: *Sema, name: []const u8) struct { ?Variable, ?usize } {
+    var stack_idx: usize = 0;
+    while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
+        const local = self.variables.at(stack_idx);
+        if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
+            return .{ local, self.variables.stack_top - 1 - stack_idx };
+        }
+    }
+
+    return .{ null, null };
 }
 
 fn callExpression(self: *Sema, expr: *Expr) void {
@@ -523,14 +555,16 @@ fn callExpression(self: *Sema, expr: *Expr) void {
     for (expr.call.args, 0..) |arg, i| {
         self.expression(arg);
 
-        if (maybe_builtin != null and maybe_builtin.?.arg_count == call.args.len and maybe_builtin.?.arg_types != null) {
-            const arg_type = maybe_builtin.?.arg_types.?[i];
-            if (self.last_expr_type != arg_type) {
-                error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
-                    @tagName(arg_type),
-                    @tagName(self.last_expr_type.?),
-                });
-                self.has_error = true;
+        if (maybe_builtin) |builtin| {
+            if (builtin.arg_count == call.args.len and builtin.arg_types != null) {
+                const arg_type = builtin.arg_types.?[i];
+                if (self.last_expr_type != arg_type) {
+                    error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
+                        @tagName(arg_type),
+                        @tagName(self.last_expr_type.?),
+                    });
+                    self.has_error = true;
+                }
             }
         }
     }
@@ -552,30 +586,6 @@ fn constant(self: *Sema, value: FlowValue) void {
         if (c.equals(value)) return;
     }
     self.constants.append(value) catch oom();
-}
-
-fn checkNumericOperands(self: *Sema, left: Token, lhs: FlowType, right: Token, rhs: FlowType, op: Token.Type) void {
-    if (!isNumeric(lhs)) {
-        error_reporter.reportError(
-            left,
-            "Expected left operand of '{s}' to be int or float, got '{s}'",
-            .{ @tagName(op), @tagName(lhs) },
-        );
-        self.has_error = true;
-    }
-
-    if (!isNumeric(rhs)) {
-        error_reporter.reportError(
-            right,
-            "Expected right operand of '{s}' to be int or float, got '{s}'",
-            .{ @tagName(op), @tagName(rhs) },
-        );
-        self.has_error = true;
-    }
-}
-
-fn isNumeric(value_type: FlowType) bool {
-    return value_type == .int or value_type == .float;
 }
 
 fn tokenToType(token: Token) FlowType {

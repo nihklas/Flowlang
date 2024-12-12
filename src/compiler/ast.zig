@@ -158,7 +158,7 @@ pub const Stmt = union(enum) {
     },
 
     function: struct { name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt },
-    @"return": struct { value: *Expr },
+    @"return": struct { token: Token, value: ?*Expr },
 
     pub fn createExpr(alloc: Allocator, expr: *Expr) *Stmt {
         const stmt = Stmt.create(alloc);
@@ -253,10 +253,10 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createReturn(alloc: Allocator, value: *Expr) *Stmt {
+    pub fn createReturn(alloc: Allocator, token: Token, value: ?*Expr) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
-            .@"return" = .{ .value = value },
+            .@"return" = .{ .token = token, .value = value },
         };
         return stmt;
     }
@@ -290,7 +290,7 @@ pub const Stmt = union(enum) {
                     false_branch.destroy(alloc);
                 }
             },
-            .@"return" => |return_stmt| return_stmt.value.destroy(alloc),
+            .@"return" => |return_stmt| if (return_stmt.value) |value| value.destroy(alloc),
             .channel_write => |channel_write| channel_write.value.destroy(alloc),
             .variable => |variable| if (variable.value) |value| value.destroy(alloc),
             .function => |function| {
