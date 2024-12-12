@@ -373,7 +373,7 @@ test "Stmt.createBlock" {
 
 test "Stmt.createReturn" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const return_stmt = Stmt.createReturn(testing_alloc, expr);
+    const return_stmt = Stmt.createReturn(testing_alloc, .{ .type = .@"return", .lexeme = "return", .line = 1, .column = 1 }, expr);
     defer return_stmt.destroy(testing_alloc);
 }
 
