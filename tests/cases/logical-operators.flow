@@ -1,0 +1,18 @@
+func sideEffectReturn(b: bool) bool {
+    print("Sideeffect!");
+    return b;
+}
+
+print(true or sideEffectReturn(true));
+print(true and sideEffectReturn(false));
+print(false or sideEffectReturn(false));
+print(false and sideEffectReturn(true));
+
+=====
+
+true
+Sideeffect!
+false
+Sideeffect!
+false
+false

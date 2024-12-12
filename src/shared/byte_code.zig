@@ -47,6 +47,7 @@ pub const OpCode = enum(u8) {
     // jumps
     jump, // jmp len as 2 byte operand
     jump_back, // jmp len as 2 byte operand
+    jump_if_true, // jmp len as 2 byte operand
     jump_if_false, // jmp len as 2 byte operand
 
     // markers
