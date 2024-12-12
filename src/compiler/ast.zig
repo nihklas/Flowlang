@@ -138,7 +138,7 @@ pub const Stmt = union(enum) {
 
     block: struct { stmts: []*Stmt, local_count: usize = 0 },
 
-    loop: struct { condition: *Expr, body: *Stmt, inc: ?*Stmt = null },
+    loop: struct { condition: *Expr, body: []*Stmt, inc: ?*Stmt = null },
     @"break": struct { token: Token },
     @"continue": struct { token: Token },
 
@@ -176,7 +176,7 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createLoop(alloc: Allocator, condition: *Expr, body: *Stmt) *Stmt {
+    pub fn createLoop(alloc: Allocator, condition: *Expr, body: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .loop = .{ .condition = condition, .body = body },
@@ -273,7 +273,11 @@ pub const Stmt = union(enum) {
                 alloc.free(block.stmts);
             },
             .loop => |loop| {
-                loop.body.destroy(alloc);
+                for (loop.body) |body| {
+                    body.destroy(alloc);
+                }
+                alloc.free(loop.body);
+
                 loop.condition.destroy(alloc);
                 if (loop.inc) |inc| {
                     inc.destroy(alloc);
@@ -397,7 +401,9 @@ test "Stmt.createLoop" {
     const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    const loop = Stmt.createLoop(testing_alloc, condition, expr_stmt);
+    const body = try testing_alloc.alloc(*Stmt, 1);
+    body[0] = expr_stmt;
+    const loop = Stmt.createLoop(testing_alloc, condition, body);
     defer loop.destroy(testing_alloc);
 }
 

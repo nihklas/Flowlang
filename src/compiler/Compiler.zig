@@ -153,7 +153,9 @@ fn loopStatement(self: *Compiler, stmt: *Stmt) void {
     const exit_jump = self.emitJump(.jump_if_false);
     self.emitOpcode(.pop);
 
-    self.statement(stmt.loop.body);
+    for (stmt.loop.body) |body| {
+        self.statement(body);
+    }
 
     self.emitLoop(loop_start);
     self.patchJump(exit_jump);

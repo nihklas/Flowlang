@@ -127,10 +127,14 @@ fn statement(self: *Sema, stmt: *Stmt) !void {
             self.endScope();
         },
         .loop => |loop| {
+            self.beginScope();
             self.expression(loop.condition);
             self.loop_level += 1;
-            try self.statement(loop.body);
+            for (loop.body) |body_stmt| {
+                try self.statement(body_stmt);
+            }
             self.loop_level -= 1;
+            self.endScope();
         },
         .@"break" => |break_stmt| {
             if (self.loop_level < 1) {

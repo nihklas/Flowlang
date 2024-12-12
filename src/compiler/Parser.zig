@@ -264,7 +264,7 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
         body;
 
     // TODO: make loop body an array of statements, since single statements are not allowed anyways
-    const loop = Stmt.createLoop(self.alloc, condition, Stmt.createBlock(self.alloc, loop_body));
+    const loop = Stmt.createLoop(self.alloc, condition, loop_body);
     outer_scope.append(loop) catch oom();
 
     if (maybe_increment) |increment| {
