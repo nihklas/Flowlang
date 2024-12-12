@@ -33,15 +33,15 @@ pub fn deinit(self: *Sema) void {
 
 pub fn analyse(self: *Sema) !void {
     for (self.program) |stmt| {
-        try self.scanGlobal(stmt);
+        self.scanGlobal(stmt);
     }
 
     for (self.program) |stmt| {
-        try self.scanFunction(stmt);
+        self.scanFunction(stmt);
     }
 
     for (self.program) |stmt| {
-        try self.statement(stmt);
+        self.statement(stmt);
     }
 
     if (self.constants.items.len > std.math.maxInt(u8)) {
@@ -53,14 +53,14 @@ pub fn analyse(self: *Sema) !void {
     }
 }
 
-fn scanGlobal(self: *Sema, stmt: *Stmt) !void {
+fn scanGlobal(self: *Sema, stmt: *Stmt) void {
     switch (stmt.*) {
-        .variable => try self.varDeclaration(stmt),
+        .variable => self.varDeclaration(stmt),
         else => {},
     }
 }
 
-fn scanFunction(self: *Sema, stmt: *Stmt) !void {
+fn scanFunction(self: *Sema, stmt: *Stmt) void {
     switch (stmt.*) {
         .function => |func| {
             const func_name = func.name.lexeme;
@@ -94,92 +94,127 @@ fn scanFunction(self: *Sema, stmt: *Stmt) !void {
     }
 }
 
-fn statement(self: *Sema, stmt: *Stmt) !void {
+fn statement(self: *Sema, stmt: *Stmt) void {
     self.last_expr_type = null;
     switch (stmt.*) {
         .expr => self.expression(stmt.expr.expr),
-        .@"if" => |if_stmt| {
-            self.expression(if_stmt.condition);
-            try self.statement(if_stmt.true_branch);
-            if (if_stmt.false_branch) |false_branch| {
-                try self.statement(false_branch);
-            }
-        },
-        .block => |block| {
-            self.beginScope();
-            for (block.stmts) |inner_stmt| {
-                try self.statement(inner_stmt);
-            }
-
-            var locals_count: usize = 0;
-            var stack_idx: usize = 0;
-            while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
-                const local = self.variables.at(stack_idx);
-                if (local.scope_depth < self.scope_depth) {
-                    break;
-                }
-                locals_count += 1;
-            }
-            stmt.block.local_count = locals_count;
-
-            self.endScope();
-        },
-        .loop => |loop| {
-            self.beginScope();
-            self.expression(loop.condition);
-            self.loop_level += 1;
-            for (loop.body) |body_stmt| {
-                try self.statement(body_stmt);
-            }
-            self.loop_level -= 1;
-            self.endScope();
-        },
-        .@"break" => |break_stmt| {
-            if (self.loop_level < 1) {
-                error_reporter.reportError(break_stmt.token, "'break' is only allowed in loops", .{});
-                self.has_error = true;
-            }
-        },
-        .@"continue" => |continue_stmt| {
-            if (self.loop_level < 1) {
-                error_reporter.reportError(continue_stmt.token, "'continue' is only allowed in loops", .{});
-                self.has_error = true;
-            }
-        },
-        .function => |func| {
-            self.beginScope();
-            self.current_function.push(self.functions.get(func.name.lexeme).?);
-            for (func.params) |param| {
-                self.variables.push(.{
-                    .token = param.variable.name,
-                    .constant = true,
-                    .scope_depth = self.scope_depth,
-                    .type = tokenToType(param.variable.type_hint.?),
-                });
-            }
-            for (func.body) |line| {
-                try self.statement(line);
-            }
-            _ = self.current_function.pop();
-            self.endScope();
-        },
-        .@"return" => |return_stmt| {
-            self.expression(return_stmt.value);
-            const func = self.current_function.at(0);
-            if (func.ret_type != self.last_expr_type.?) {
-                error_reporter.reportError(return_stmt.value.getToken(), "Return type mismatch. Expected '{s}', got '{s}'", .{
-                    @tagName(func.ret_type),
-                    @tagName(self.last_expr_type.?),
-                });
-                self.has_error = true;
-            }
-        },
-        .variable => try self.varDeclaration(stmt),
+        .@"if" => self.ifStatement(stmt),
+        .block => self.blockStatement(stmt),
+        .loop => self.loopStatement(stmt),
+        .@"break" => self.breakStatement(stmt),
+        .@"continue" => self.continueStatement(stmt),
+        .function => self.functionDeclaration(stmt),
+        .@"return" => self.returnStatement(stmt),
+        .variable => self.varDeclaration(stmt),
         else => panic("Illegal Instruction: {s}", .{@tagName(stmt.*)}),
     }
 }
 
-fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
+fn expression(self: *Sema, expr: *Expr) void {
+    switch (expr.*) {
+        .literal => self.literalExpression(expr),
+        .unary => self.unaryExpression(expr),
+        .grouping => self.expression(expr.grouping.expr),
+        .assignment => self.assignmentExpression(expr),
+        .binary => self.binaryExpression(expr),
+        .logical => self.logicalExpression(expr),
+        .variable => self.variableExpression(expr),
+        .call => self.callExpression(expr),
+        .append => @panic("TODO"),
+    }
+}
+
+fn ifStatement(self: *Sema, stmt: *Stmt) void {
+    const if_stmt = stmt.@"if";
+    self.expression(if_stmt.condition);
+    self.statement(if_stmt.true_branch);
+    if (if_stmt.false_branch) |false_branch| {
+        self.statement(false_branch);
+    }
+}
+
+fn blockStatement(self: *Sema, stmt: *Stmt) void {
+    const block = stmt.block;
+    self.beginScope();
+    for (block.stmts) |inner_stmt| {
+        self.statement(inner_stmt);
+    }
+
+    var locals_count: usize = 0;
+    var stack_idx: usize = 0;
+    while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
+        const local = self.variables.at(stack_idx);
+        if (local.scope_depth < self.scope_depth) {
+            break;
+        }
+        locals_count += 1;
+    }
+    stmt.block.local_count = locals_count;
+
+    self.endScope();
+}
+
+fn loopStatement(self: *Sema, stmt: *Stmt) void {
+    const loop = stmt.loop;
+    self.beginScope();
+    self.expression(loop.condition);
+    self.loop_level += 1;
+    for (loop.body) |body_stmt| {
+        self.statement(body_stmt);
+    }
+    self.loop_level -= 1;
+    self.endScope();
+}
+
+fn breakStatement(self: *Sema, stmt: *Stmt) void {
+    const break_stmt = stmt.@"break";
+    if (self.loop_level < 1) {
+        error_reporter.reportError(break_stmt.token, "'break' is only allowed in loops", .{});
+        self.has_error = true;
+    }
+}
+
+fn continueStatement(self: *Sema, stmt: *Stmt) void {
+    const continue_stmt = stmt.@"continue";
+    if (self.loop_level < 1) {
+        error_reporter.reportError(continue_stmt.token, "'continue' is only allowed in loops", .{});
+        self.has_error = true;
+    }
+}
+
+fn functionDeclaration(self: *Sema, stmt: *Stmt) void {
+    const func = stmt.function;
+    self.beginScope();
+    self.current_function.push(self.functions.get(func.name.lexeme).?);
+    for (func.params) |param| {
+        self.variables.push(.{
+            .token = param.variable.name,
+            .constant = true,
+            .scope_depth = self.scope_depth,
+            .type = tokenToType(param.variable.type_hint.?),
+        });
+    }
+    for (func.body) |line| {
+        self.statement(line);
+    }
+    _ = self.current_function.pop();
+    self.endScope();
+}
+
+fn returnStatement(self: *Sema, stmt: *Stmt) void {
+    const return_stmt = stmt.@"return";
+    self.expression(return_stmt.value);
+    const func = self.current_function.at(0);
+    if (func.ret_type != self.last_expr_type.?) {
+        error_reporter.reportError(return_stmt.value.getToken(), "Return type mismatch. Expected '{s}', got '{s}'", .{
+            @tagName(func.ret_type),
+            @tagName(self.last_expr_type.?),
+        });
+        self.has_error = true;
+    }
+}
+
+fn varDeclaration(self: *Sema, stmt: *Stmt) void {
     const name = stmt.variable.name.lexeme;
 
     if (builtins.get(name)) |_| {
@@ -272,84 +307,33 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) !void {
         };
 
         if (self.scope_depth == 0) {
-            try self.globals.put(stmt.variable.name.lexeme, variable);
+            self.globals.put(stmt.variable.name.lexeme, variable) catch oom();
         } else {
             self.variables.push(variable);
         }
     }
 }
 
-fn expression(self: *Sema, expr: *Expr) void {
-    switch (expr.*) {
-        .literal => {
-            self.last_expr_type = blk: switch (expr.literal.value) {
-                .int => |int| {
-                    self.constant(.{ .int = int });
-                    break :blk .int;
-                },
-                .float => |float| {
-                    self.constant(.{ .float = float });
-                    break :blk .float;
-                },
-                .string => |string| {
-                    self.constant(.{ .string = string });
-                    break :blk .string;
-                },
-                .null => .null,
-                .bool => .bool,
-            };
+fn literalExpression(self: *Sema, expr: *Expr) void {
+    self.last_expr_type = blk: switch (expr.literal.value) {
+        .int => |int| {
+            self.constant(.{ .int = int });
+            break :blk .int;
         },
-        .unary => self.unary(expr),
-        .grouping => self.expression(expr.grouping.expr),
-        .assignment => self.assignment(expr),
-        .append => @panic("TODO"),
-        .binary => self.binary(expr),
-        .logical => {
-            self.expression(expr.logical.lhs);
-            self.expression(expr.logical.rhs);
-            self.last_expr_type = .bool;
+        .float => |float| {
+            self.constant(.{ .float = float });
+            break :blk .float;
         },
-        .variable => self.variableExpr(expr),
-        .call => |call| {
-            self.expression(call.expr);
-            const name = call.expr.getToken().lexeme;
-            if (self.last_expr_type != .builtin_fn and self.last_expr_type != .function) {
-                error_reporter.reportError(call.expr.getToken(), "'{s}' is not callable", .{name});
-                self.has_error = true;
-            }
-
-            const maybe_builtin = builtins.get(name);
-
-            if (maybe_builtin) |builtin| {
-                if (builtin.arg_count != call.args.len) {
-                    error_reporter.reportError(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
-                        name,
-                        builtin.arg_count,
-                        call.args.len,
-                    });
-                    self.has_error = true;
-                }
-            }
-
-            for (expr.call.args, 0..) |arg, i| {
-                self.expression(arg);
-
-                if (maybe_builtin != null and maybe_builtin.?.arg_count == call.args.len and maybe_builtin.?.arg_types != null) {
-                    const arg_type = maybe_builtin.?.arg_types.?[i];
-                    if (self.last_expr_type != arg_type) {
-                        error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
-                            @tagName(arg_type),
-                            @tagName(self.last_expr_type.?),
-                        });
-                        self.has_error = true;
-                    }
-                }
-            }
+        .string => |string| {
+            self.constant(.{ .string = string });
+            break :blk .string;
         },
-    }
+        .null => .null,
+        .bool => .bool,
+    };
 }
 
-fn unary(self: *Sema, expr: *Expr) void {
+fn unaryExpression(self: *Sema, expr: *Expr) void {
     self.expression(expr.unary.expr);
     switch (expr.unary.op.type) {
         .@"!" => {
@@ -369,7 +353,7 @@ fn unary(self: *Sema, expr: *Expr) void {
     }
 }
 
-fn binary(self: *Sema, expr: *Expr) void {
+fn binaryExpression(self: *Sema, expr: *Expr) void {
     self.expression(expr.binary.lhs);
     const left_type = self.last_expr_type.?;
 
@@ -415,7 +399,13 @@ fn binary(self: *Sema, expr: *Expr) void {
     }
 }
 
-fn assignment(self: *Sema, expr: *Expr) void {
+fn logicalExpression(self: *Sema, expr: *Expr) void {
+    self.expression(expr.logical.lhs);
+    self.expression(expr.logical.rhs);
+    self.last_expr_type = .bool;
+}
+
+fn assignmentExpression(self: *Sema, expr: *Expr) void {
     self.expression(expr.assignment.value);
     const resulted_type = self.last_expr_type.?;
     const name = expr.assignment.name.lexeme;
@@ -468,7 +458,7 @@ fn assignment(self: *Sema, expr: *Expr) void {
     }
 }
 
-fn variableExpr(self: *Sema, expr: *Expr) void {
+fn variableExpression(self: *Sema, expr: *Expr) void {
     const name = expr.variable.name.lexeme;
 
     if (builtins.get(name)) |_| {
@@ -504,6 +494,45 @@ fn variableExpr(self: *Sema, expr: *Expr) void {
         expr.variable.local_idx = @intCast(idx);
     } else {
         expr.variable.global = true;
+    }
+}
+
+fn callExpression(self: *Sema, expr: *Expr) void {
+    const call = expr.call;
+
+    self.expression(call.expr);
+    const name = call.expr.getToken().lexeme;
+    if (self.last_expr_type != .builtin_fn and self.last_expr_type != .function) {
+        error_reporter.reportError(call.expr.getToken(), "'{s}' is not callable", .{name});
+        self.has_error = true;
+    }
+
+    const maybe_builtin = builtins.get(name);
+
+    if (maybe_builtin) |builtin| {
+        if (builtin.arg_count != call.args.len) {
+            error_reporter.reportError(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
+                name,
+                builtin.arg_count,
+                call.args.len,
+            });
+            self.has_error = true;
+        }
+    }
+
+    for (expr.call.args, 0..) |arg, i| {
+        self.expression(arg);
+
+        if (maybe_builtin != null and maybe_builtin.?.arg_count == call.args.len and maybe_builtin.?.arg_types != null) {
+            const arg_type = maybe_builtin.?.arg_types.?[i];
+            if (self.last_expr_type != arg_type) {
+                error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
+                    @tagName(arg_type),
+                    @tagName(self.last_expr_type.?),
+                });
+                self.has_error = true;
+            }
+        }
     }
 }
 
