@@ -195,6 +195,11 @@ fn runWhileSwitch(self: *VM) void {
                 const distance = self.short();
                 self.ip -= distance;
             },
+            .jump_if_true => {
+                const distance = self.short();
+                const value = self.value_stack.at(0);
+                if (value.isTrue()) self.ip += distance;
+            },
             .jump_if_false => {
                 const distance = self.short();
                 const value = self.value_stack.at(0);

@@ -210,6 +210,7 @@ fn expression(self: *Compiler, expr: *Expr) void {
         .literal => self.literalExpression(expr),
         .unary => self.unaryExpression(expr),
         .binary => self.binaryExpression(expr),
+        .logical => self.logicalExpression(expr),
         .variable => self.variableExpression(expr),
         .assignment => self.assignmentExpression(expr),
         .grouping => self.expression(expr.grouping.expr),
@@ -260,6 +261,17 @@ fn binaryExpression(self: *Compiler, expr: *Expr) void {
 
         else => unreachable,
     }
+}
+
+fn logicalExpression(self: *Compiler, expr: *Expr) void {
+    self.expression(expr.logical.lhs);
+
+    const jump_idx = self.emitJump(if (expr.logical.op.type == .@"and") .jump_if_false else .jump_if_true);
+
+    self.emitOpcode(.pop);
+    self.expression(expr.logical.rhs);
+
+    self.patchJump(jump_idx);
 }
 
 fn variableExpression(self: *Compiler, expr: *Expr) void {
