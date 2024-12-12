@@ -1,0 +1,4 @@
+const filename = readline("Filename:");
+const content = readfile(filename);
+
+print(content);

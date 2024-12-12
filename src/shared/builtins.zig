@@ -1,22 +1,36 @@
 pub const builtins: std.StaticStringMap(Function) = .initComptime(.{
     .{ "print", print },
     .{ "readline", readline },
+    .{ "readfile", readfile },
 });
 
 const impls = struct {
     fn print(_: Allocator, args: []FlowValue) FlowValue {
-        stdout.print("{}\n", .{args[0]}) catch panic("IO Error", .{});
+        stdout.print("{}\n", .{args[0]}) catch |err| panic("IO Error: {s}", .{@errorName(err)});
         return .null;
     }
 
     fn readline(gc_alloc: Allocator, args: []FlowValue) FlowValue {
         const prompt = args[0].string;
-        stdout.writeAll(prompt) catch panic("IO Error", .{});
-        stdout.writeByte('\n') catch panic("IO Error", .{});
+        stdout.writeAll(prompt) catch |err| panic("IO Error: {s}", .{@errorName(err)});
+        stdout.writeByte(' ') catch |err| panic("IO Error: {s}", .{@errorName(err)});
         var buf: [1024]u8 = undefined;
-        const read = stdin.readUntilDelimiter(&buf, '\n') catch panic("IO Error", .{});
+        const read = stdin.readUntilDelimiter(&buf, '\n') catch |err| panic("IO Error: {s}", .{@errorName(err)});
 
         return .{ .string = gc_alloc.dupe(u8, read) catch oom() };
+    }
+
+    fn readfile(gc_alloc: Allocator, args: []FlowValue) FlowValue {
+        const path = args[0].string;
+
+        const cwd = std.fs.cwd();
+
+        var file = cwd.openFile(path, .{}) catch |err| panic("FileSystem Error: {s}", .{@errorName(err)});
+        defer file.close();
+
+        // 1 MB
+        const content = file.readToEndAlloc(gc_alloc, 1024 * 1024 * 1024) catch |err| panic("Error on File Read: {s}", .{@errorName(err)});
+        return .{ .string = content };
     }
 };
 
@@ -32,6 +46,13 @@ const readline: Function = .{
     .arg_types = &.{.string},
     .ret_type = .string,
     .function = &impls.readline,
+};
+
+const readfile: Function = .{
+    .arg_count = 1,
+    .arg_types = &.{.string},
+    .ret_type = .string,
+    .function = &impls.readfile,
 };
 
 const Function = @import("definitions.zig").BuiltinFunction;
