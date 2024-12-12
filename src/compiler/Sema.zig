@@ -230,7 +230,6 @@ fn returnStatement(self: *Sema, stmt: *Stmt) void {
 }
 
 fn varDeclaration(self: *Sema, stmt: *Stmt) void {
-    // TODO: This is to complicated, pls rework
     const name = stmt.variable.name.lexeme;
 
     if (builtins.get(name)) |_| {
@@ -238,95 +237,89 @@ fn varDeclaration(self: *Sema, stmt: *Stmt) void {
         self.has_error = true;
     }
 
-    const is_local = self.scope_depth > 0;
-    stmt.variable.global = !is_local;
-
-    if (!is_local) {
+    stmt.variable.global = self.scope_depth == 0;
+    if (stmt.variable.global) {
         self.constant(.{ .string = name });
     }
 
-    if (stmt.variable.value) |value| {
-        self.expression(value);
-        const value_type = self.last_expr_type.?;
+    self.resolveValue(stmt);
 
-        if (value_type == .builtin_fn) {
-            error_reporter.reportError(value.getToken(), "Cannot reassign builtin '{s}'", .{value.getToken().lexeme});
-            self.has_error = true;
-            return;
-        }
-
-        if (stmt.variable.type_hint != null) {
-            const correct_type = if (value_type == .null)
-                true
-            else switch (stmt.variable.type_hint.?.type) {
-                .bool => value_type == .bool,
-                .string => value_type == .string,
-                .int => value_type == .int,
-                .float => value_type == .float,
-                else => |t| panic("Invalid Type Hint: {s}", .{@tagName(t)}),
-            };
-
-            if (!correct_type) {
-                error_reporter.reportError(
-                    stmt.variable.type_hint.?,
-                    "Type Mismatch: Expected '{s}', got '{?}'",
-                    .{
-                        @tagName(stmt.variable.type_hint.?.type),
-                        value_type,
-                    },
-                );
-                self.has_error = true;
-            }
-        } else if (value_type != .null) {
-            var expr_token = value.getToken();
-            expr_token.type = switch (value_type) {
-                .bool => .bool,
-                .int => .int,
-                .float => .float,
-                .string => .string,
-                .null, .builtin_fn, .function => unreachable,
-            };
-            stmt.variable.type_hint = expr_token;
-        }
+    const existent, _ = self.findLocal(name);
+    if (existent != null and existent.?.scope_depth == self.scope_depth) {
+        error_reporter.reportError(
+            stmt.variable.name,
+            "Variable '{s}' already defined at {d}:{d}, duplicated definition",
+            .{ name, existent.?.token.line, existent.?.token.column },
+        );
+        self.has_error = true;
     }
 
     if (stmt.variable.type_hint == null) {
         error_reporter.reportError(stmt.variable.name, "Cannot infer type of variable", .{});
         self.has_error = true;
+        return;
     }
 
-    const existent = blk: {
-        var stack_idx: usize = 0;
-        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
-            const local = self.variables.at(stack_idx);
-            if (local.scope_depth == self.scope_depth and std.mem.eql(u8, stmt.variable.name.lexeme, local.token.lexeme)) {
-                break :blk local;
-            }
-        }
-        break :blk null;
+    const type_hint = tokenToType(stmt.variable.type_hint.?);
+
+    const variable: Variable = .{
+        .token = stmt.variable.name,
+        .type = type_hint,
+        .constant = stmt.variable.constant,
+        .scope_depth = self.scope_depth,
     };
 
-    if (existent) |found| {
+    if (self.scope_depth == 0) {
+        self.globals.put(stmt.variable.name.lexeme, variable) catch oom();
+    } else {
+        self.variables.push(variable);
+    }
+}
+
+fn resolveValue(self: *Sema, stmt: *Stmt) void {
+    if (stmt.variable.value == null) return;
+
+    const value = stmt.variable.value.?;
+    self.expression(value);
+    const value_type = self.last_expr_type.?;
+
+    if (value_type == .null and stmt.variable.type_hint == null) return;
+
+    if (stmt.variable.type_hint == null) {
+        var expr_token = value.getToken();
+        expr_token.type = switch (value_type) {
+            .bool => .bool,
+            .int => .int,
+            .float => .float,
+            .string => .string,
+            .null, .builtin_fn, .function => unreachable,
+        };
+        stmt.variable.type_hint = expr_token;
+        return;
+    }
+
+    if (value_type == .null) {
+        return;
+    }
+
+    const correct_type = switch (stmt.variable.type_hint.?.type) {
+        .bool => value_type == .bool,
+        .string => value_type == .string,
+        .int => value_type == .int,
+        .float => value_type == .float,
+        else => unreachable,
+    };
+
+    if (!correct_type) {
         error_reporter.reportError(
-            stmt.variable.name,
-            "Variable '{s}' already defined at {d}:{d}, duplicated definition",
-            .{ name, found.token.line, found.token.column },
+            stmt.variable.type_hint.?,
+            "Type Mismatch: Expected '{s}', got '{?}'",
+            .{
+                @tagName(stmt.variable.type_hint.?.type),
+                value_type,
+            },
         );
         self.has_error = true;
-    } else if (stmt.variable.type_hint) |type_hint_token| {
-        const type_hint = tokenToType(type_hint_token);
-        const variable: Variable = .{
-            .token = stmt.variable.name,
-            .type = type_hint,
-            .constant = stmt.variable.constant,
-            .scope_depth = self.scope_depth,
-        };
-
-        if (self.scope_depth == 0) {
-            self.globals.put(stmt.variable.name.lexeme, variable) catch oom();
-        } else {
-            self.variables.push(variable);
-        }
     }
 }
 
@@ -370,47 +363,45 @@ fn unaryExpression(self: *Sema, expr: *Expr) void {
 }
 
 fn binaryExpression(self: *Sema, expr: *Expr) void {
-    // TODO: This needs to be done better, pls improve
     self.expression(expr.binary.lhs);
     const left_type = self.last_expr_type.?;
 
     self.expression(expr.binary.rhs);
     const right_type = self.last_expr_type.?;
 
-    if (left_type != right_type and expr.binary.op.type != .@"." and expr.binary.op.type != .@"==" and expr.binary.op.type != .@"!=") {
-        error_reporter.reportError(
-            expr.binary.op,
-            "Cannot compare value of type '{s}' to value of type '{s}'",
-            .{ @tagName(left_type), @tagName(right_type) },
-        );
-        self.has_error = true;
-    }
+    // set last_expr_type
+    self.last_expr_type = switch (expr.binary.op.type) {
+        .@"==", .@"!=", .@"<", .@"<=", .@">=", .@">" => .bool,
+        .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => left_type,
+        .@".", .@".=" => .string,
+        else => unreachable,
+    };
 
+    // Check types
     switch (expr.binary.op.type) {
-        .@"<", .@"<=", .@">=", .@">" => {
-            self.checkNumericOperands(
-                expr.binary.lhs.getToken(),
-                left_type,
-                expr.binary.rhs.getToken(),
-                right_type,
-                expr.binary.op.type,
-            );
-            self.last_expr_type = .bool;
-        },
-        .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => {
-            self.checkNumericOperands(
-                expr.binary.lhs.getToken(),
-                left_type,
-                expr.binary.rhs.getToken(),
-                right_type,
-                expr.binary.op.type,
-            );
-        },
+        // String concats always work
+        .@".", .@".=" => {},
+        // Equality works with same type and with null always
         .@"==", .@"!=" => {
-            self.last_expr_type = .bool;
+            if (left_type != .null and right_type != .null) {
+                if (left_type != right_type) {
+                    error_reporter.reportError(
+                        expr.binary.op,
+                        "Cannot compare value of type '{s}' to value of type '{s}'",
+                        .{ @tagName(left_type), @tagName(right_type) },
+                    );
+                    self.has_error = true;
+                }
+            }
         },
-        .@".", .@".=" => {
-            self.last_expr_type = .string;
+        .@"<", .@"<=", .@">=", .@">", .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => {
+            self.checkNumericOperands(
+                expr.binary.lhs.getToken(),
+                left_type,
+                expr.binary.rhs.getToken(),
+                right_type,
+                expr.binary.op.type,
+            );
         },
         else => unreachable,
     }
