@@ -71,7 +71,7 @@ pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_add
         if (self.managed_objects.get(key)) |_| {
             self.managed_objects.putAssumeCapacity(key, new_len);
         } else {
-            @panic("What just happened? You resized, but I don't know of that object");
+            @panic("What just happened? You resized, but I don't know that object yet");
         }
 
         if (comptime trace) {

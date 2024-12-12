@@ -4,41 +4,41 @@ gpa: Allocator,
 gc: Allocator,
 code: []const u8,
 ip: usize = 0,
-value_stack: Stack(FlowValue, STACK_SIZE, true),
-call_stack: Stack(CallFrame, STACK_SIZE, true),
+value_stack: Stack(FlowValue, STACK_SIZE),
+call_stack: Stack(CallFrame, STACK_SIZE),
 constants: [256]FlowValue = undefined,
 globals: std.StringHashMapUnmanaged(FlowValue),
 
-pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) !VM {
+pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) VM {
     return .{
         .gpa = gpa,
         .gc = gc,
         .code = code,
-        .value_stack = try .init(gpa),
-        .call_stack = try .init(gpa),
+        .value_stack = .init(gpa),
+        .call_stack = .init(gpa),
         .globals = .empty,
     };
 }
 
 pub fn deinit(self: *VM) void {
-    self.value_stack.deinit();
-    self.call_stack.deinit();
+    self.value_stack.deinit(self.gpa);
+    self.call_stack.deinit(self.gpa);
     self.globals.deinit(self.gpa);
     self.* = undefined;
 }
 
-pub fn run(self: *VM) !void {
-    try self.loadConstants();
-    try self.loadFunctions();
+pub fn run(self: *VM) void {
+    self.loadConstants();
+    self.loadFunctions();
     self.call_stack.push(.{
         .stack_bottom = 0,
         .ret_addr = self.ip,
     });
-    try self.runWhileSwitch();
+    self.runWhileSwitch();
     // try self.runSwitchContinue();
 }
 
-fn loadConstants(self: *VM) !void {
+fn loadConstants(self: *VM) void {
     var constants_counter: usize = 0;
     while (self.ip < self.code.len) {
         const op = self.instruction();
@@ -76,15 +76,12 @@ fn loadConstants(self: *VM) !void {
                 self.ip += len;
             },
             .constants_done => break,
-            else => {
-                std.debug.print("Illegal Instruction: {}\n", .{op});
-                return error.IllegalInstruction;
-            },
+            else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
     }
 }
 
-fn loadFunctions(self: *VM) !void {
+fn loadFunctions(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
         if (comptime debug_options.bytecode) {
@@ -98,27 +95,23 @@ fn loadFunctions(self: *VM) !void {
 
                 const name = self.constants[name_idx];
 
-                try self.globals.put(self.gpa, name.string, .{
+                self.globals.put(self.gpa, name.string, .{
                     .function = .{
                         .name = name.string,
                         .arg_count = argc,
                         .start_ip = self.ip,
                     },
-                });
+                }) catch oom();
 
                 self.ip += end - 1;
             },
             .functions_done => break,
-            else => {
-                std.debug.print("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op });
-                return error.IllegalInstruction;
-            },
+            else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
     }
 }
 
-// TODO: Better Errorhandling
-fn runWhileSwitch(self: *VM) !void {
+fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
         if (comptime debug_options.stack) {
@@ -128,54 +121,55 @@ fn runWhileSwitch(self: *VM) !void {
             std.debug.print("{x:0>4} {}\n", .{ self.ip, op });
         }
         switch (op) {
-            .true => self.value_stack.push(.{ .bool = true }),
-            .false => self.value_stack.push(.{ .bool = false }),
-            .null => self.value_stack.push(.null),
-            .pop => _ = self.value_stack.pop(),
+            .true => self.push(.{ .bool = true }),
+            .false => self.push(.{ .bool = false }),
+            .null => self.push(.null),
+            .pop => _ = self.pop(),
             .add, .sub, .mul, .div, .mod => self.arithmetic(op),
             .concat => self.concat(),
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .constant => {
                 const constant = self.constants[self.byte()];
-                self.value_stack.push(constant);
+                self.push(constant);
             },
             .negate => {
-                const value = self.value_stack.pop();
+                const value = self.pop();
                 const negated: FlowValue = switch (value) {
                     .float => .{ .float = -value.float },
                     .int => .{ .int = -value.int },
-                    .null, .bool, .string, .builtin_fn, .function => return error.CanOnlyNegateNumbers,
+
+                    .null, .bool, .string, .builtin_fn, .function => unreachable,
                 };
-                self.value_stack.push(negated);
+                self.push(negated);
             },
             .not => {
-                const value = self.value_stack.pop();
-                self.value_stack.push(.{ .bool = !value.isTrue() });
+                const value = self.pop();
+                self.push(.{ .bool = !value.isTrue() });
             },
             .equal, .unequal => {
-                const rhs = self.value_stack.pop();
-                const lhs = self.value_stack.pop();
+                const rhs = self.pop();
+                const lhs = self.pop();
                 const equal = lhs.equals(rhs);
                 if (op == .equal) {
-                    self.value_stack.push(.{ .bool = equal });
+                    self.push(.{ .bool = equal });
                 } else {
-                    self.value_stack.push(.{ .bool = !equal });
+                    self.push(.{ .bool = !equal });
                 }
             },
             .create_global => {
-                const name = self.value_stack.pop();
-                const value = self.value_stack.pop();
+                const name = self.pop();
+                const value = self.pop();
 
-                try self.globals.put(self.gpa, name.string, value);
+                self.globals.put(self.gpa, name.string, value) catch oom();
             },
             .get_global => {
-                const name = self.value_stack.pop();
+                const name = self.pop();
                 const value: FlowValue = self.globals.get(name.string) orelse .{ .builtin_fn = builtins.get(name.string).? };
 
-                self.value_stack.push(value);
+                self.push(value);
             },
             .set_global => {
-                const name = self.value_stack.pop();
+                const name = self.pop();
                 const value = self.value_stack.at(0);
 
                 // We can safely assume capacity, as this set only works if the global already exists
@@ -184,7 +178,7 @@ fn runWhileSwitch(self: *VM) !void {
             .get_local => {
                 const idx = self.byte();
                 const value = self.getLocal(idx);
-                self.value_stack.push(value);
+                self.push(value);
             },
             .set_local => {
                 const idx = self.byte();
@@ -206,35 +200,38 @@ fn runWhileSwitch(self: *VM) !void {
                 const value = self.value_stack.at(0);
                 if (!value.isTrue()) self.ip += distance;
             },
-            .call => {
-                self.call();
-            },
+            .call => self.call(),
             .@"return" => {
-                const ret_value = self.value_stack.pop();
+                const ret_value = self.pop();
                 const frame = self.call_stack.pop();
                 self.ip = frame.ret_addr;
                 self.value_stack.stack_top = frame.stack_bottom;
-                self.value_stack.push(ret_value);
+                self.push(ret_value);
             },
-            .string, .string_long, .integer, .float, .constants_done, .functions_done, .function => {
-                std.debug.print("Illegal Instruction: {}\n", .{op});
-                return error.IllegalInstruction;
-            },
+
+            .string,
+            .string_long,
+            .integer,
+            .float,
+            .constants_done,
+            .functions_done,
+            .function,
+            => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
     }
 }
 
 fn concat(self: *VM) void {
-    const rhs = self.value_stack.pop();
-    const lhs = self.value_stack.pop();
+    const rhs = self.pop();
+    const lhs = self.pop();
 
     const result = std.fmt.allocPrint(self.gc, "{}{}", .{ lhs, rhs }) catch oom();
-    self.value_stack.push(.{ .string = result });
+    self.push(.{ .string = result });
 }
 
 fn arithmetic(self: *VM, op: OpCode) void {
-    const rhs = self.value_stack.pop();
-    const lhs = self.value_stack.pop();
+    const rhs = self.pop();
+    const lhs = self.pop();
 
     // If one of the operands is a float, result is also a float
     // a division always results in a float
@@ -249,10 +246,10 @@ fn arithmetic(self: *VM, op: OpCode) void {
             .mul => .{ .float = left * right },
             .div => .{ .float = left / right },
             .mod => .{ .float = @mod(left, right) },
-            else => @panic("Unsupported Operation"),
+            else => unreachable,
         };
 
-        self.value_stack.push(result);
+        self.push(result);
         return;
     }
 
@@ -264,15 +261,15 @@ fn arithmetic(self: *VM, op: OpCode) void {
         .sub => .{ .int = left - right },
         .mul => .{ .int = left * right },
         .mod => .{ .int = @mod(left, right) },
-        else => @panic("Unsupported Operation"),
+        else => unreachable,
     };
 
-    self.value_stack.push(result);
+    self.push(result);
 }
 
 fn comparison(self: *VM, op: OpCode) void {
-    const rhs = self.value_stack.pop();
-    const lhs = self.value_stack.pop();
+    const rhs = self.pop();
+    const lhs = self.pop();
 
     const is_float = rhs == .float or lhs == .float;
     if (is_float) {
@@ -280,11 +277,11 @@ fn comparison(self: *VM, op: OpCode) void {
         const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.int);
 
         switch (op) {
-            .lower => self.value_stack.push(.{ .bool = left < right }),
-            .lower_equal => self.value_stack.push(.{ .bool = left <= right }),
-            .greater => self.value_stack.push(.{ .bool = left > right }),
-            .greater_equal => self.value_stack.push(.{ .bool = left >= right }),
-            else => @panic("Unsupported Operation"),
+            .lower => self.push(.{ .bool = left < right }),
+            .lower_equal => self.push(.{ .bool = left <= right }),
+            .greater => self.push(.{ .bool = left > right }),
+            .greater_equal => self.push(.{ .bool = left >= right }),
+            else => unreachable,
         }
         return;
     }
@@ -292,16 +289,16 @@ fn comparison(self: *VM, op: OpCode) void {
     const left = lhs.int;
     const right = rhs.int;
     switch (op) {
-        .lower => self.value_stack.push(.{ .bool = left < right }),
-        .lower_equal => self.value_stack.push(.{ .bool = left <= right }),
-        .greater => self.value_stack.push(.{ .bool = left > right }),
-        .greater_equal => self.value_stack.push(.{ .bool = left >= right }),
-        else => @panic("Unsupported Operation"),
+        .lower => self.push(.{ .bool = left < right }),
+        .lower_equal => self.push(.{ .bool = left <= right }),
+        .greater => self.push(.{ .bool = left > right }),
+        .greater_equal => self.push(.{ .bool = left >= right }),
+        else => unreachable,
     }
 }
 
 fn call(self: *VM) void {
-    const value = self.value_stack.pop();
+    const value = self.pop();
     switch (value) {
         .builtin_fn => self.callBuiltin(value),
         .function => self.callFlowFunction(value),
@@ -314,10 +311,10 @@ fn callBuiltin(self: *VM, value: FlowValue) void {
     const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
     const result = value.builtin_fn.function(args);
     for (0..arg_count) |_| {
-        _ = self.value_stack.pop();
+        _ = self.pop();
     }
 
-    self.value_stack.push(result);
+    self.push(result);
 }
 
 fn callFlowFunction(self: *VM, value: FlowValue) void {
@@ -338,6 +335,14 @@ fn getLocal(self: *VM, local_idx: usize) FlowValue {
 fn setLocal(self: *VM, local_idx: usize, value: FlowValue) void {
     const frame = self.call_stack.at(0);
     self.value_stack.stack[frame.stack_bottom + local_idx] = value;
+}
+
+fn push(self: *VM, value: FlowValue) void {
+    self.value_stack.push(value);
+}
+
+fn pop(self: *VM) FlowValue {
+    return self.value_stack.pop();
 }
 
 fn instruction(self: *VM) OpCode {
@@ -374,3 +379,5 @@ const builtins = @import("shared").builtins;
 const Stack = @import("shared").Stack;
 const oom = @import("shared").oom;
 const debug_options = @import("debug_options");
+
+const panic = std.debug.panic;

@@ -16,10 +16,10 @@ pub fn main() !void {
 
     const ast = try Parser.createAST(alloc, tokens);
 
-    var sema: Sema = try .init(alloc, ast);
+    var sema: Sema = .init(alloc, ast);
     try sema.analyse();
 
-    const bytecode = try Compiler.compile(alloc, ast, &sema);
+    const bytecode = Compiler.compile(alloc, ast, &sema);
 
     const output_file = try std.fs.cwd().createFile(output, .{});
     defer output_file.close();

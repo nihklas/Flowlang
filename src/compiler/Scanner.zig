@@ -15,32 +15,33 @@ pub fn scan(alloc: Allocator, input: []const u8) ![]const Token {
         .alloc = alloc,
         .tokens = .init(alloc),
     };
-    try scanner.scanTokens();
     errdefer scanner.tokens.deinit();
+
+    scanner.scanTokens();
 
     if (scanner.has_error) {
         return error.SyntaxError;
     }
 
-    return try scanner.tokens.toOwnedSlice();
+    return scanner.tokens.toOwnedSlice() catch oom();
 }
 
-fn scanTokens(self: *Scanner) !void {
+fn scanTokens(self: *Scanner) void {
     while (!self.isAtEnd()) {
         self.start = self.current;
         self.lexeme_column = self.column;
-        try self.nextToken();
+        self.nextToken();
     }
 
-    try self.tokens.append(.{
+    self.tokens.append(.{
         .type = .EOF,
         .lexeme = "",
         .line = self.line,
         .column = self.column,
-    });
+    }) catch oom();
 }
 
-fn nextToken(self: *Scanner) !void {
+fn nextToken(self: *Scanner) void {
     const c = self.advanceWithValue();
     switch (c) {
         ' ', '\t', '\r' => {},
@@ -49,54 +50,54 @@ fn nextToken(self: *Scanner) !void {
             self.column = 1;
             self.lexeme_column = 1;
         },
-        ',' => try self.makeToken(.@","),
-        ':' => try self.makeToken(.@":"),
-        ';' => try self.makeToken(.@";"),
-        '(' => try self.makeToken(.@"("),
-        ')' => try self.makeToken(.@")"),
-        '{' => try self.makeToken(.@"{"),
-        '}' => try self.makeToken(.@"}"),
-        '[' => try self.makeToken(.@"["),
-        ']' => try self.makeToken(.@"]"),
-        '.' => try self.makeToken(if (self.match('=')) .@".=" else .@"."),
-        '+' => try self.makeToken(if (self.match('=')) .@"+=" else .@"+"),
-        '*' => try self.makeToken(if (self.match('=')) .@"*=" else .@"*"),
-        '%' => try self.makeToken(if (self.match('=')) .@"%=" else .@"%"),
-        '=' => try self.makeToken(if (self.match('=')) .@"==" else .@"="),
-        '!' => try self.makeToken(if (self.match('=')) .@"!=" else .@"!"),
-        '>' => try self.makeToken(if (self.match('=')) .@">=" else .@">"),
-        '"' => try self.string(),
-        '0'...'9' => try self.number(),
+        ',' => self.makeToken(.@","),
+        ':' => self.makeToken(.@":"),
+        ';' => self.makeToken(.@";"),
+        '(' => self.makeToken(.@"("),
+        ')' => self.makeToken(.@")"),
+        '{' => self.makeToken(.@"{"),
+        '}' => self.makeToken(.@"}"),
+        '[' => self.makeToken(.@"["),
+        ']' => self.makeToken(.@"]"),
+        '.' => self.makeToken(if (self.match('=')) .@".=" else .@"."),
+        '+' => self.makeToken(if (self.match('=')) .@"+=" else .@"+"),
+        '*' => self.makeToken(if (self.match('=')) .@"*=" else .@"*"),
+        '%' => self.makeToken(if (self.match('=')) .@"%=" else .@"%"),
+        '=' => self.makeToken(if (self.match('=')) .@"==" else .@"="),
+        '!' => self.makeToken(if (self.match('=')) .@"!=" else .@"!"),
+        '>' => self.makeToken(if (self.match('=')) .@">=" else .@">"),
+        '"' => self.string(),
+        '0'...'9' => self.number(),
         '-' => {
             if (self.match('>')) {
-                try self.makeToken(.@"->");
+                self.makeToken(.@"->");
             } else if (self.match('=')) {
-                try self.makeToken(.@"-=");
+                self.makeToken(.@"-=");
             } else {
-                try self.makeToken(.@"-");
+                self.makeToken(.@"-");
             }
         },
         '/' => {
             if (self.match('/')) {
                 while (!self.check('\n')) self.advance();
             } else if (self.match('=')) {
-                try self.makeToken(.@"/=");
+                self.makeToken(.@"/=");
             } else {
-                try self.makeToken(.@"/");
+                self.makeToken(.@"/");
             }
         },
         '<' => {
             if (self.match('-')) {
-                try self.makeToken(.@"<-");
+                self.makeToken(.@"<-");
             } else if (self.match('=')) {
-                try self.makeToken(.@"<=");
+                self.makeToken(.@"<=");
             } else {
-                try self.makeToken(.@"<");
+                self.makeToken(.@"<");
             }
         },
         else => {
             if (std.ascii.isAlphabetic(c) or c == '_') {
-                try self.keywordOrIdentifier();
+                self.keywordOrIdentifier();
             } else {
                 self.has_error = true;
                 error_reporter.reportError(
@@ -109,7 +110,7 @@ fn nextToken(self: *Scanner) !void {
     }
 }
 
-fn string(self: *Scanner) !void {
+fn string(self: *Scanner) void {
     while (!self.check('"') and !self.isAtEnd()) {
         if (self.check('\n')) {
             self.has_error = true;
@@ -136,10 +137,10 @@ fn string(self: *Scanner) !void {
     self.advance(); // closing "
 
     const value = self.input[self.start + 1 .. self.current - 1];
-    try self.makeTokenWithValue(.string_literal, value);
+    self.makeTokenWithValue(.string_literal, value);
 }
 
-fn number(self: *Scanner) !void {
+fn number(self: *Scanner) void {
     while (std.ascii.isDigit(self.peek())) {
         self.advance();
     }
@@ -151,17 +152,17 @@ fn number(self: *Scanner) !void {
         }
     }
 
-    try self.makeToken(.number);
+    self.makeToken(.number);
 }
 
-fn keywordOrIdentifier(self: *Scanner) !void {
+fn keywordOrIdentifier(self: *Scanner) void {
     while (isAlphanumeric(self.peek())) {
         self.advance();
     }
 
     const text = self.input[self.start..self.current];
     const token_type: Token.Type = Token.ReservedKeywords.get(text) orelse .identifier;
-    try self.makeToken(token_type);
+    self.makeToken(token_type);
 }
 
 fn isAlphanumeric(c: u8) bool {
@@ -205,35 +206,23 @@ fn isAtEnd(self: *Scanner) bool {
     return self.current >= self.input.len;
 }
 
-fn makeToken(self: *Scanner, token_type: Token.Type) !void {
+fn makeToken(self: *Scanner, token_type: Token.Type) void {
     const lexeme = self.input[self.start..self.current];
-    try self.tokens.append(.{
+    self.tokens.append(.{
         .type = token_type,
         .lexeme = lexeme,
         .line = self.line,
         .column = self.lexeme_column,
-    });
+    }) catch oom();
 }
 
-fn makeTokenWithValue(self: *Scanner, token_type: Token.Type, value: []const u8) !void {
-    try self.tokens.append(.{
+fn makeTokenWithValue(self: *Scanner, token_type: Token.Type, value: []const u8) void {
+    self.tokens.append(.{
         .type = token_type,
         .lexeme = value,
         .line = self.line,
         .column = self.lexeme_column,
-    });
-}
-
-fn expectTokensEqual(actual: []const Token, expected: []const Token) !void {
-    try testing.expect(actual.len == expected.len);
-    if (actual.len == expected.len) {
-        for (expected, actual) |e, a| {
-            try testing.expectEqual(e.type, a.type);
-            try testing.expectEqual(e.line, a.line);
-            try testing.expectEqual(e.column, a.column);
-            try testing.expectEqualSlices(u8, e.lexeme, a.lexeme);
-        }
-    }
+    }) catch oom();
 }
 
 test "scan variable with string, constant with float" {
@@ -337,12 +326,26 @@ test "Unexpected Char in String" {
     });
 }
 
+fn expectTokensEqual(actual: []const Token, expected: []const Token) !void {
+    try testing.expect(actual.len == expected.len);
+    if (actual.len == expected.len) {
+        for (expected, actual) |e, a| {
+            try testing.expectEqual(e.type, a.type);
+            try testing.expectEqual(e.line, a.line);
+            try testing.expectEqual(e.column, a.column);
+            try testing.expectEqualSlices(u8, e.lexeme, a.lexeme);
+        }
+    }
+}
+
 const Scanner = @This();
 
 const std = @import("std");
 const Token = @import("Token.zig");
 const error_reporter = @import("error_reporter.zig");
 const Allocator = std.mem.Allocator;
+
+const oom = @import("shared").oom;
 
 const testing = std.testing;
 const testing_alloc = testing.allocator;

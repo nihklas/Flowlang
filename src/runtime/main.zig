@@ -10,18 +10,16 @@ pub fn main() !void {
     var gc: GC = .init(gpa.allocator());
     defer gc.deinit();
 
-    var vm: VM = try .init(gpa.allocator(), gc.allocator(), code);
+    var vm: VM = .init(gpa.allocator(), gc.allocator(), code);
     defer vm.deinit();
 
-    try vm.run();
+    vm.run();
 }
 
 const std = @import("std");
 const VM = @import("VM.zig");
 const GC = @import("GC.zig");
-const DumpTruck = @import("shared").BytecodeDumper;
+const DumpTruck = @import("debug/BytecodeDumper.zig");
 const debug_options = @import("debug_options");
 
 const code = @embedFile("input");
-// TODO: Add another @embedFile or @import for source code locations for error messages
-// Should be a kind of map, mapping the bytecode index to source code locations

@@ -39,7 +39,7 @@ fn parse(self: *Parser) ![]const *Stmt {
 }
 
 fn declaration(self: *Parser) ParserError!*Stmt {
-    if (self.matchEither(.@"var", .@"const")) |_| {
+    if (self.matchOneOf(&.{ .@"var", .@"const" })) |_| {
         return self.varDeclaration();
     }
 
@@ -54,12 +54,8 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
     // var or const
     const keyword = self.previous();
 
-    try self.consume(
-        .identifier,
-        std.fmt.allocPrint(self.alloc, "Expected identifier after {s}", .{
-            @tagName(keyword.type),
-        }) catch unreachable,
-    );
+    try self.consume(.identifier, "Expected variable identifier");
+
     const name = self.previous();
 
     const type_hint = self.typeHint();
@@ -85,18 +81,18 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
     const params = try self.parameters();
 
     try self.consume(.@")", "Expected ')' after function parameters");
+    const close_paren = self.previous();
 
-    const type_hint = blk: {
-        if (self.match(.string)) |string| break :blk string;
-        if (self.match(.int)) |int| break :blk int;
-        if (self.match(.float)) |float| break :blk float;
-        if (self.match(.bool)) |boolean| break :blk boolean;
-        if (self.match(.void)) |token| break :blk token;
-
-        error_reporter.reportError(self.peek(), "Expected return type before function body", .{});
-        self.has_error = true;
-        break :blk self.peek();
-    };
+    // null implies void
+    const type_hint: Token = if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token|
+        token
+    else
+        .{
+            .type = .null,
+            .line = close_paren.line,
+            .column = close_paren.column,
+            .lexeme = "null",
+        };
 
     try self.consume(.@"{", "Expected '{' before function body");
 
@@ -111,8 +107,10 @@ fn parameters(self: *Parser) ParserError![]*Stmt {
     var params: std.ArrayList(*Stmt) = .init(self.alloc);
     defer params.deinit();
 
-    while (self.param()) |parameter| {
-        params.append(parameter) catch oom();
+    while (!self.check(.@")") and !self.isAtEnd()) {
+        if (self.param()) |parameter| {
+            params.append(parameter) catch oom();
+        }
 
         if (self.match(.@",") == null) {
             break;
@@ -199,15 +197,11 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
 }
 
 fn returnStatement(self: *Parser) ParserError!*Stmt {
-    const value = blk: {
-        if (self.check(.@";")) {
-            break :blk Expr.createLiteral(self.alloc, self.previous(), .null);
-        }
+    const keyword = self.previous();
+    const value = if (!self.check(.@";")) try self.expression() else null;
 
-        break :blk try self.expression();
-    };
     try self.consume(.@";", "Expected ';' after return statement");
-    return Stmt.createReturn(self.alloc, value);
+    return Stmt.createReturn(self.alloc, keyword, value);
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {
@@ -245,10 +239,11 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     try self.consume(.@"{", "Expected '{' before loop body");
     const body = try self.block();
 
+    // for-loop gets desugared into this structure:
+    //
     // block
     // initializer
     // loop
-    //     block
     //     body
     //     inc
 
@@ -263,7 +258,7 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     else
         body;
 
-    const loop = Stmt.createLoop(self.alloc, condition, Stmt.createBlock(self.alloc, loop_body));
+    const loop = Stmt.createLoop(self.alloc, condition, loop_body);
     outer_scope.append(loop) catch oom();
 
     if (maybe_increment) |increment| {
@@ -344,7 +339,7 @@ fn equality(self: *Parser) ParserError!*Expr {
     var lhs = try self.comparison();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.matchEither(.@"!=", .@"==")) |op| {
+    while (self.matchOneOf(&.{ .@"!=", .@"==" })) |op| {
         const rhs = try self.comparison();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -356,8 +351,7 @@ fn comparison(self: *Parser) ParserError!*Expr {
     var lhs = try self.term();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.matchEither(.@"<", .@"<=") != null or self.matchEither(.@">=", .@">") != null) {
-        const op = self.previous();
+    while (self.matchOneOf(&.{ .@"<", .@"<=", .@">=", .@">" })) |op| {
         const rhs = try self.term();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -369,7 +363,7 @@ fn term(self: *Parser) ParserError!*Expr {
     var lhs = try self.factor();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.matchEither(.@"+", .@"-")) |op| {
+    while (self.matchOneOf(&.{ .@"+", .@"-" })) |op| {
         const rhs = try self.factor();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -381,8 +375,7 @@ fn factor(self: *Parser) ParserError!*Expr {
     var lhs = try self.unary();
     errdefer lhs.destroy(self.alloc);
 
-    while (self.match(.@"*") != null or self.match(.@"/") != null or self.match(.@"%") != null) {
-        const op = self.previous();
+    while (self.matchOneOf(&.{ .@"*", .@"/", .@"%" })) |op| {
         const rhs = try self.unary();
         lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
     }
@@ -391,7 +384,7 @@ fn factor(self: *Parser) ParserError!*Expr {
 }
 
 fn unary(self: *Parser) ParserError!*Expr {
-    if (self.matchEither(.@"-", .@"!")) |op| {
+    if (self.matchOneOf(&.{ .@"-", .@"!" })) |op| {
         const expr = try self.unary();
         errdefer expr.destroy(self.alloc);
         return Expr.createUnary(self.alloc, op, expr);
@@ -403,36 +396,33 @@ fn unary(self: *Parser) ParserError!*Expr {
 fn call(self: *Parser) ParserError!*Expr {
     const expr = try self.primary();
 
-    if (self.match(.@"(")) |_| {
-        const params: []*Expr = blk: {
-            if (!self.check(.@")")) {
-                var params_list: std.ArrayList(*Expr) = .init(self.alloc);
-                defer params_list.deinit();
-
-                params_list.append(try self.expression()) catch oom();
-
-                while (self.match(.@",")) |_| {
-                    params_list.append(try self.expression()) catch oom();
-                }
-
-                break :blk params_list.toOwnedSlice() catch oom();
-            }
-
-            break :blk &.{};
-        };
-
-        try self.consume(.@")", "Expected ')' after parameters");
-
-        return Expr.createCall(self.alloc, expr, params);
+    if (self.match(.@"(") == null) {
+        return expr;
     }
-    return expr;
+
+    const params: []*Expr = blk: {
+        var params_list: std.ArrayList(*Expr) = .init(self.alloc);
+        defer params_list.deinit();
+
+        while (!self.check(.@")") and !self.isAtEnd()) {
+            params_list.append(try self.expression()) catch oom();
+
+            if (self.match(.@",") == null) break;
+        }
+
+        break :blk params_list.toOwnedSlice() catch oom();
+    };
+
+    try self.consume(.@")", "Expected ')' after parameters");
+
+    return Expr.createCall(self.alloc, expr, params);
 }
 
 fn primary(self: *Parser) ParserError!*Expr {
     if (self.match(.null)) |token| {
         return Expr.createLiteral(self.alloc, token, .null);
     }
-    if (self.matchEither(.true, .false)) |token| {
+    if (self.matchOneOf(&.{ .true, .false })) |token| {
         return Expr.createLiteral(self.alloc, token, .{ .bool = token.type == .true });
     }
 
@@ -477,10 +467,9 @@ fn primary(self: *Parser) ParserError!*Expr {
 
 fn typeHint(self: *Parser) ?Token {
     if (self.match(.@":")) |colon| {
-        if (self.match(.string)) |string| return string;
-        if (self.match(.int)) |int| return int;
-        if (self.match(.float)) |float| return float;
-        if (self.match(.bool)) |boolean| return boolean;
+        if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
+            return token;
+        }
 
         error_reporter.reportError(colon, "Expected type after ':'", .{});
         self.has_error = true;
@@ -496,7 +485,7 @@ fn recover(self: *Parser) void {
         .@"for",
         .@"var",
         .func,
-        // .@"return",
+        .@"return",
         .@"{",
         => self.current -= 1,
         else => continue :recover self.advance().type,
@@ -520,11 +509,10 @@ fn match(self: *Parser, expected: Token.Type) ?Token {
     return null;
 }
 
-fn matchEither(self: *Parser, expected1: Token.Type, expected2: Token.Type) ?Token {
-    if (self.check(expected1) or self.check(expected2)) {
-        return self.advance();
+fn matchOneOf(self: *Parser, comptime expecteds: []const Token.Type) ?Token {
+    inline for (expecteds) |t_type| {
+        if (self.check(t_type)) return self.advance();
     }
-
     return null;
 }
 

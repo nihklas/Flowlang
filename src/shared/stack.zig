@@ -1,23 +1,17 @@
-pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) type {
+pub fn Stack(comptime T: type, size: usize) type {
     return struct {
         const Self = @This();
         stack: []T,
         stack_top: usize = 0,
-        alloc: Allocator,
 
-        fn StackReturn(comptime RT: type) type {
-            return if (panic_on_overflow) RT else (!RT);
-        }
-
-        pub fn init(alloc: Allocator) !Self {
+        pub fn init(alloc: Allocator) Self {
             return .{
-                .stack = try alloc.alloc(T, size),
-                .alloc = alloc,
+                .stack = alloc.alloc(T, size) catch oom(),
             };
         }
 
-        pub fn deinit(self: *Self) void {
-            self.alloc.free(self.stack);
+        pub fn deinit(self: *Self, alloc: Allocator) void {
+            alloc.free(self.stack);
             self.stack_top = 0;
             self.* = undefined;
         }
@@ -33,36 +27,28 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
             std.debug.print("\n", .{});
         }
 
-        pub fn push(self: *Self, value: T) StackReturn(void) {
-            if (self.stack_top == size) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
-            }
+        pub fn push(self: *Self, value: T) void {
+            if (self.stack_top == size) panic("Stackoverflow", .{});
             defer self.stack_top += 1;
             self.stack[self.stack_top] = value;
         }
 
-        pub fn pop(self: *Self) StackReturn(T) {
-            if (self.stack_top == 0) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
-            }
+        pub fn pop(self: *Self) T {
+            if (self.stack_top == 0) panic("Stackoverflow", .{});
             self.stack_top -= 1;
             return self.stack[self.stack_top];
         }
 
         /// 0 is at the top, 1 is the second from the top, and so on...
-        pub fn at(self: *Self, offset: usize) StackReturn(T) {
+        pub fn at(self: *Self, offset: usize) T {
             const i = self.stack_top - 1 - offset;
-            if (i > self.stack_top or i < 0) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
-            }
+            if (i > self.stack_top or i < 0) panic("Stackoverflow", .{});
             return self.stack[i];
         }
 
-        pub fn setAt(self: *Self, offset: usize, value: T) StackReturn(void) {
+        pub fn setAt(self: *Self, offset: usize, value: T) void {
             const i = self.stack_top - 1 - offset;
-            if (i > self.stack_top or i < 0) {
-                if (panic_on_overflow) @panic("Stackoverflow") else return error.Stackoverflow;
-            }
+            if (i > self.stack_top or i < 0) panic("Stackoverflow", .{});
             self.stack[i] = value;
         }
     };
@@ -70,3 +56,5 @@ pub fn Stack(comptime T: type, size: usize, comptime panic_on_overflow: bool) ty
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const panic = std.debug.panic;
+const oom = @import("root.zig").oom;

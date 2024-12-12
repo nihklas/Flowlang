@@ -1,25 +1,22 @@
-// TODO: better compile step errors?
-
 alloc: Allocator,
 byte_code: std.ArrayList(u8),
 constants: []const FlowValue,
-loop_levels: Stack(LoopLevel, 256, true),
+loop_levels: Stack(LoopLevel, 256),
 
-pub fn compile(alloc: Allocator, program: []const *Stmt, sema: *Sema) ![]const u8 {
+pub fn compile(alloc: Allocator, program: []const *Stmt, sema: *Sema) []const u8 {
     var compiler: Compiler = .{
         .alloc = alloc,
         .byte_code = .init(alloc),
         .constants = sema.constants.items,
-        .loop_levels = try .init(alloc),
+        .loop_levels = .init(alloc),
     };
-    errdefer compiler.byte_code.deinit();
-    defer compiler.loop_levels.deinit();
+    defer compiler.loop_levels.deinit(alloc);
 
     compiler.compileConstants();
     compiler.compileFunctions(program);
     compiler.traverse(program);
 
-    return try compiler.byte_code.toOwnedSlice();
+    return compiler.byte_code.toOwnedSlice() catch oom();
 }
 
 fn compileConstants(self: *Compiler) void {
@@ -44,7 +41,7 @@ fn compileConstants(self: *Compiler) void {
             self.emitOpcode(.float);
             self.emitMultibyte(c.float);
         },
-        .bool, .null, .builtin_fn, .function => @panic("not a constant"),
+        .bool, .null, .builtin_fn, .function => unreachable,
     };
     self.emitOpcode(.constants_done);
 }
@@ -91,28 +88,38 @@ fn traverse(self: *Compiler, program: []const *ast.Stmt) void {
 
 fn statement(self: *Compiler, stmt: *Stmt) void {
     switch (stmt.*) {
-        .expr => {
-            self.expression(stmt.expr.expr);
-            self.emitOpcode(.pop);
-        },
+        .expr => self.expressionStatement(stmt),
         .variable => self.varDeclaration(stmt),
         .@"if" => self.ifStatement(stmt),
-        .block => {
-            self.traverse(stmt.block.stmts);
-            for (0..stmt.block.local_count) |_| {
-                self.emitOpcode(.pop);
-            }
-        },
+        .block => self.blockStatement(stmt),
         .loop => self.loopStatement(stmt),
         .@"break" => self.breakStatement(),
         .@"continue" => self.continueStatement(),
-        .@"return" => |return_stmt| {
-            self.expression(return_stmt.value);
-            self.emitOpcode(.@"return");
-        },
-        .function => {},
-        else => @panic("Not yet implemented"),
+        .@"return" => self.returnStatement(stmt),
+        .function => {}, // This is not an error state, global functions are already handled
+        else => panic("{s} is not yet implemented", .{@tagName(stmt.*)}),
     }
+}
+
+fn expressionStatement(self: *Compiler, stmt: *Stmt) void {
+    self.expression(stmt.expr.expr);
+    self.emitOpcode(.pop);
+}
+
+fn blockStatement(self: *Compiler, stmt: *Stmt) void {
+    self.traverse(stmt.block.stmts);
+    for (0..stmt.block.local_count) |_| {
+        self.emitOpcode(.pop);
+    }
+}
+
+fn returnStatement(self: *Compiler, stmt: *Stmt) void {
+    if (stmt.@"return".value) |value| {
+        self.expression(value);
+    } else {
+        self.emitOpcode(.null);
+    }
+    self.emitOpcode(.@"return");
 }
 
 fn varDeclaration(self: *Compiler, stmt: *Stmt) void {
@@ -150,7 +157,9 @@ fn loopStatement(self: *Compiler, stmt: *Stmt) void {
     const exit_jump = self.emitJump(.jump_if_false);
     self.emitOpcode(.pop);
 
-    self.statement(stmt.loop.body);
+    for (stmt.loop.body) |body| {
+        self.statement(body);
+    }
 
     self.emitLoop(loop_start);
     self.patchJump(exit_jump);
@@ -198,80 +207,95 @@ fn ifStatement(self: *Compiler, stmt: *Stmt) void {
 
 fn expression(self: *Compiler, expr: *Expr) void {
     switch (expr.*) {
-        .literal => |literal| switch (literal.value) {
-            .int => |int| self.emitConstant(.{ .int = int }),
-            .float => |float| self.emitConstant(.{ .float = float }),
-            .bool => |boolean| self.emitOpcode(if (boolean) .true else .false),
-            .null => self.emitOpcode(.null),
-            .string => |string| self.emitConstant(.{ .string = string }),
-        },
-        .unary => |unary| {
-            self.expression(unary.expr);
-            switch (unary.op.type) {
-                .@"!" => self.emitOpcode(.not),
-                .@"-" => self.emitOpcode(.negate),
-                else => @panic("Wrong Operation"),
-            }
-        },
-        .binary => |binary| {
-            self.expression(binary.lhs);
-            self.expression(binary.rhs);
-            switch (binary.op.type) {
-                .@"+", .@"+=" => self.emitOpcode(.add),
-                .@"-", .@"-=" => self.emitOpcode(.sub),
-                .@"*", .@"*=" => self.emitOpcode(.mul),
-                .@"/", .@"/=" => self.emitOpcode(.div),
-                .@"%", .@"%=" => self.emitOpcode(.mod),
-
-                .@"==" => self.emitOpcode(.equal),
-                .@"!=" => self.emitOpcode(.unequal),
-
-                .@"<" => self.emitOpcode(.lower),
-                .@"<=" => self.emitOpcode(.lower_equal),
-                .@">" => self.emitOpcode(.greater),
-                .@">=" => self.emitOpcode(.greater_equal),
-
-                .@".", .@".=" => self.emitOpcode(.concat),
-
-                else => @panic("Wrong Operation"),
-            }
-        },
-        .variable => |variable| {
-            if (variable.global) {
-                self.emitConstant(.{ .string = variable.name.lexeme });
-                self.emitOpcode(.get_global);
-            } else {
-                self.emitOpcode(.get_local);
-                self.emitByte(variable.local_idx);
-            }
-        },
-        .assignment => |assignment| {
-            self.expression(assignment.value);
-            if (assignment.global) {
-                self.emitConstant(.{ .string = assignment.name.lexeme });
-                self.emitOpcode(.set_global);
-            } else {
-                self.emitOpcode(.set_local);
-                self.emitByte(assignment.local_idx);
-            }
-        },
+        .literal => self.literalExpression(expr),
+        .unary => self.unaryExpression(expr),
+        .binary => self.binaryExpression(expr),
+        .variable => self.variableExpression(expr),
+        .assignment => self.assignmentExpression(expr),
         .grouping => self.expression(expr.grouping.expr),
-        .call => |call| {
-            for (call.args) |arg| {
-                self.expression(arg);
-            }
-            self.expression(call.expr);
-            self.emitOpcode(.call);
-        },
-        else => @panic("Not yet implemented"),
+        .call => self.callExpression(expr),
+        else => panic("{s} is not yet implemented", .{@tagName(expr.*)}),
     }
+}
+
+fn literalExpression(self: *Compiler, expr: *Expr) void {
+    switch (expr.literal.value) {
+        .int => |int| self.emitConstant(.{ .int = int }),
+        .float => |float| self.emitConstant(.{ .float = float }),
+        .bool => |boolean| self.emitOpcode(if (boolean) .true else .false),
+        .null => self.emitOpcode(.null),
+        .string => |string| self.emitConstant(.{ .string = string }),
+    }
+}
+
+fn unaryExpression(self: *Compiler, expr: *Expr) void {
+    self.expression(expr.unary.expr);
+    switch (expr.unary.op.type) {
+        .@"!" => self.emitOpcode(.not),
+        .@"-" => self.emitOpcode(.negate),
+        else => unreachable,
+    }
+}
+
+fn binaryExpression(self: *Compiler, expr: *Expr) void {
+    const binary = expr.binary;
+    self.expression(binary.lhs);
+    self.expression(binary.rhs);
+    switch (binary.op.type) {
+        .@"+", .@"+=" => self.emitOpcode(.add),
+        .@"-", .@"-=" => self.emitOpcode(.sub),
+        .@"*", .@"*=" => self.emitOpcode(.mul),
+        .@"/", .@"/=" => self.emitOpcode(.div),
+        .@"%", .@"%=" => self.emitOpcode(.mod),
+
+        .@"==" => self.emitOpcode(.equal),
+        .@"!=" => self.emitOpcode(.unequal),
+
+        .@"<" => self.emitOpcode(.lower),
+        .@"<=" => self.emitOpcode(.lower_equal),
+        .@">" => self.emitOpcode(.greater),
+        .@">=" => self.emitOpcode(.greater_equal),
+
+        .@".", .@".=" => self.emitOpcode(.concat),
+
+        else => unreachable,
+    }
+}
+
+fn variableExpression(self: *Compiler, expr: *Expr) void {
+    if (expr.variable.global) {
+        self.emitConstant(.{ .string = expr.variable.name.lexeme });
+        self.emitOpcode(.get_global);
+    } else {
+        self.emitOpcode(.get_local);
+        self.emitByte(expr.variable.local_idx);
+    }
+}
+
+fn assignmentExpression(self: *Compiler, expr: *Expr) void {
+    self.expression(expr.assignment.value);
+    if (expr.assignment.global) {
+        self.emitConstant(.{ .string = expr.assignment.name.lexeme });
+        self.emitOpcode(.set_global);
+    } else {
+        self.emitOpcode(.set_local);
+        self.emitByte(expr.assignment.local_idx);
+    }
+}
+
+fn callExpression(self: *Compiler, expr: *Expr) void {
+    for (expr.call.args) |arg| {
+        self.expression(arg);
+    }
+    self.expression(expr.call.expr);
+    self.emitOpcode(.call);
 }
 
 fn emitLoop(self: *Compiler, jump_idx: usize) void {
     const jump_to = self.byte_code.items.len - jump_idx + 3;
 
     if (jump_to > std.math.maxInt(u16)) {
-        @panic("Jump too long");
+        panic("Jump too long: {d}", .{jump_to});
     }
 
     self.emitOpcode(.jump_back);
@@ -294,9 +318,8 @@ fn patchJump(self: *Compiler, jump_idx: usize) void {
     // another - 2 to account for the jmp length in the jmp instruction
     const exact_jump_length = self.byte_code.items.len - 3 - jump_idx;
 
-    // TODO: Do we need to allow bigger jumps?
     if (exact_jump_length > std.math.maxInt(u16)) {
-        @panic("Jump too long");
+        panic("Jump too long: {d}", .{exact_jump_length});
     }
 
     const jump_length: u16 = @intCast(exact_jump_length);
@@ -315,10 +338,7 @@ fn emitConstant(self: *Compiler, value: FlowValue) void {
 fn resolveConstant(self: *Compiler, value: FlowValue) u8 {
     return for (self.constants, 0..) |c, i| {
         if (c.equals(value)) break @intCast(i);
-    } else {
-        std.debug.print("Could not find constant {}\n", .{value});
-        @panic("UnknownConstant");
-    };
+    } else unreachable;
 }
 
 fn emitOpcode(self: *Compiler, op: OpCode) void {
@@ -386,11 +406,11 @@ fn testBytecode(input: []const u8, expected_bytecode: []const u8) !void {
         node.destroy(testing_allocator);
     };
 
-    var sema: Sema = try .init(testing_allocator, program);
+    var sema: Sema = .init(testing_allocator, program);
     defer sema.deinit();
     try sema.analyse();
 
-    const bytecode = try compile(testing_allocator, program, &sema);
+    const bytecode = compile(testing_allocator, program, &sema);
     defer testing_allocator.free(bytecode);
 
     try testing.expectEqualSlices(u8, expected_bytecode, bytecode);
@@ -421,3 +441,4 @@ const Allocator = std.mem.Allocator;
 
 const testing = std.testing;
 const testing_allocator = testing.allocator;
+const panic = std.debug.panic;
