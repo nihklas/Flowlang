@@ -1,4 +1,4 @@
-# Flow / FlowVM (`.flow/.fvm`)
+# FlowLang
 
 A language that is highly inspired by Golang's Goroutines and Channels.
 
@@ -15,7 +15,7 @@ Non-exhaustive list of some of the biggest and most important features planned:
 - Gargabe Collection
 - Byte-Code VM shipped in the final executable
 - Uses the Zig Buildsystem for Compilation
-- Extendable VM (`.fvm`-Files)
+- Extendable VM (through Zig Modules)
 - Type-Safe
 
 ## Try it out!
@@ -60,6 +60,65 @@ zig fetch --save=flow git+https://gitlab.com/nihklas/flowlang.git
 
 Now you can run `zig build` to compile your project and get the binary under `zig-out/bin/<binary>`
 or you run the code with `zig build run` directly.
+
+### Extensions
+
+Flow supports extensions for the runtime and compiler. That means, you can write
+Zig Modules to implement performance critical tasks and export them to be
+globally available functions in Flow-Land. For an example on how to write an
+extension yourself, you can look at [betterAdd](https://gitlab.com/flowlang/betteradd).
+
+You can fetch the module via Zig's package manager:
+
+```bash
+zig fetch --save git+https://gitlab.com/flowlang/betteradd
+```
+
+You also need a Zig file, where you re-export all the functions you need. That
+way, you can also import a Module, but only use a single function, and the rest
+of the Module will not be included in the compiled output. The `exports.zig` of
+the example looks simply like this:
+
+```zig
+const lib = @import("betterAdd");
+
+pub const betterAdd = lib.betterAdd;
+```
+
+This `exports.zig` includes all modules exports the functions that are needed.
+You can define different names for these functions in here as well, to avoid
+naming collisions.
+
+Here is the modified `build.zig` from above to include this example module:
+
+```zig
+const std = @import("std");
+const flow = @import("flow");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const betterAdd = b.dependency("betterAdd", .{});
+
+    const flow_out = flow.compile(b, .{
+        .name = "flow-example",
+        .source = b.path("src/test.flow"),
+        .target = target,
+        .optimize = optimize,
+        .extension = .{
+            .modules = &.{.{ .name = "betterAdd", .module = betterAdd.module("betterAdd") }},
+            .export_file = b.path("exports.zig"),
+        },
+    });
+
+    b.installArtifact(flow_out);
+
+    const run_flow = b.addRunArtifact(flow_out);
+    const run_step = b.step("run", "Run the code directly");
+    run_step.dependOn(&run_flow.step);
+}
+```
 
 ## Syntax and Grammar
 

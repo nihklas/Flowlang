@@ -99,8 +99,12 @@ for var i = 0; i < 10; i = i + 1 {
 
 addAndPrint(1, 2);
 
-func addAndPrint(a: int, b: int) void {
+func addAndPrint(a: int, b: int) {
     const result = a + b;
     print(result);
 }
 
+print("We have extensions!");
+
+const result = betterAdd(1, 2);
+print("Result from betterAdd: " . result);

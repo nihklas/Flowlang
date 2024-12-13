@@ -5,11 +5,17 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const betterAdd = b.dependency("betterAdd", .{});
+
     const flow_out = flow.compile(b, .{
         .name = "flow-example",
         .source = b.path("src/main.flow"),
         .target = target,
         .optimize = optimize,
+        .extension = .{
+            .modules = &.{.{ .name = "betterAdd", .module = betterAdd.module("betterAdd") }},
+            .export_file = b.path("exports.zig"),
+        },
     });
 
     b.installArtifact(flow_out);
