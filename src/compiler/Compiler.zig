@@ -243,11 +243,7 @@ fn binaryExpression(self: *Compiler, expr: *Expr) void {
     self.expression(binary.lhs);
     self.expression(binary.rhs);
     switch (binary.op.type) {
-        .@"+", .@"+=" => self.emitOpcode(.add),
-        .@"-", .@"-=" => self.emitOpcode(.sub),
-        .@"*", .@"*=" => self.emitOpcode(.mul),
-        .@"/", .@"/=" => self.emitOpcode(.div),
-        .@"%", .@"%=" => self.emitOpcode(.mod),
+        .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=", .@"+", .@"+=" => self.emitArithmetic(expr),
 
         .@"==" => self.emitOpcode(.equal),
         .@"!=" => self.emitOpcode(.unequal),
@@ -301,6 +297,19 @@ fn callExpression(self: *Compiler, expr: *Expr) void {
     }
     self.expression(expr.call.expr);
     self.emitOpcode(.call);
+}
+
+fn emitArithmetic(self: *Compiler, expr: *Expr) void {
+    const binary = expr.binary;
+
+    switch (binary.op.type) {
+        .@"+", .@"+=" => self.emitOpcode(if (binary.type == .int) .add_i else .add_f),
+        .@"-", .@"-=" => self.emitOpcode(if (binary.type == .int) .sub_i else .sub_f),
+        .@"*", .@"*=" => self.emitOpcode(if (binary.type == .int) .mul_i else .mul_f),
+        .@"/", .@"/=" => self.emitOpcode(if (binary.type == .int) .div_i else .div_f),
+        .@"%", .@"%=" => self.emitOpcode(if (binary.type == .int) .mod_i else .mod_f),
+        else => unreachable,
+    }
 }
 
 fn emitLoop(self: *Compiler, jump_idx: usize) void {

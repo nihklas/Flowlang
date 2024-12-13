@@ -401,6 +401,7 @@ fn binaryExpression(self: *Sema, expr: *Expr) void {
                 right_type,
                 expr.binary.op.type,
             );
+            expr.binary.type = left_type;
         },
         else => unreachable,
     }

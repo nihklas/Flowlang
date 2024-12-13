@@ -18,11 +18,18 @@ pub const OpCode = enum(u8) {
     not,
 
     concat,
-    add,
-    sub,
-    div,
-    mul,
-    mod,
+
+    add_i,
+    sub_i,
+    div_i,
+    mul_i,
+    mod_i,
+
+    add_f,
+    sub_f,
+    div_f,
+    mul_f,
+    mod_f,
 
     equal,
     unequal,

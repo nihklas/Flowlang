@@ -10,7 +10,7 @@ pub const Expr = union(enum) {
     literal: struct { token: Token, value: Literal },
     grouping: struct { expr: *Expr },
     unary: struct { op: Token, expr: *Expr },
-    binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
+    binary: struct { lhs: *Expr, op: Token, rhs: *Expr, type: ?FlowType = null },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
     append: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
