@@ -8,7 +8,6 @@ functions: std.StringHashMap(Function),
 scope_depth: usize = 0,
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
-last_function_ret_type: ?FlowType = null,
 loop_level: usize = 0,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
@@ -463,11 +462,10 @@ fn assignment(self: *Sema, expr: *Expr) void {
 fn variableExpr(self: *Sema, expr: *Expr) void {
     const name = expr.variable.name.lexeme;
 
-    if (builtins.get(name)) |builtin| {
+    if (builtins.get(name)) |_| {
         self.constant(.{ .string = name });
         expr.variable.global = true;
         self.last_expr_type = .builtin_fn;
-        self.last_function_ret_type = builtin.ret_type;
         return;
     }
 
@@ -488,11 +486,6 @@ fn variableExpr(self: *Sema, expr: *Expr) void {
         return;
     };
     self.last_expr_type = variable.type;
-
-    if (variable.type == .function) {
-        const func = self.functions.get(variable.token.lexeme).?;
-        self.last_function_ret_type = func.ret_type;
-    }
 
     if (local_idx) |idx| {
         if (idx > std.math.maxInt(u8)) {
