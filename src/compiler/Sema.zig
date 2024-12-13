@@ -8,7 +8,6 @@ functions: std.StringHashMap(Function),
 scope_depth: usize = 0,
 has_error: bool = false,
 last_expr_type: ?FlowType = null,
-last_expr_sideeffect: bool = false,
 loop_level: usize = 0,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
@@ -407,6 +406,98 @@ fn binaryExpression(self: *Sema, expr: *Expr) void {
     }
 }
 
+fn assignment(self: *Sema, expr: *Expr) void {
+    self.expression(expr.assignment.value);
+    const resulted_type = self.last_expr_type.?;
+    const name = expr.assignment.name.lexeme;
+
+    const maybe_variable, const local_idx = blk: {
+        var stack_idx: usize = 0;
+        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
+            const local = self.variables.at(stack_idx);
+            if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
+                break :blk .{ local, stack_idx };
+            }
+        }
+        break :blk .{ null, null };
+    };
+
+    const variable = maybe_variable orelse self.globals.get(name) orelse {
+        error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
+        self.has_error = true;
+        return;
+    };
+
+    if (variable.constant) {
+        error_reporter.reportError(
+            expr.assignment.value.getToken(),
+            "Cannot assign to a constant",
+            .{},
+        );
+        self.has_error = true;
+    }
+
+    if (resulted_type != .null and variable.type != resulted_type) {
+        error_reporter.reportError(
+            expr.assignment.value.getToken(),
+            "Type mismatch: Expected value of type '{s}', got '{s}'",
+            .{ @tagName(variable.type), @tagName(resulted_type) },
+        );
+        self.has_error = true;
+    }
+
+    self.last_expr_type = variable.type;
+
+    if (local_idx) |idx| {
+        if (idx > std.math.maxInt(u8)) {
+            // This kinda should not be really possible, hopefully
+            @panic("Too many locals");
+        }
+        expr.assignment.local_idx = @intCast(idx);
+    } else {
+        expr.assignment.global = true;
+    }
+}
+
+fn variableExpr(self: *Sema, expr: *Expr) void {
+    const name = expr.variable.name.lexeme;
+
+    if (builtins.get(name)) |_| {
+        self.constant(.{ .string = name });
+        expr.variable.global = true;
+        self.last_expr_type = .builtin_fn;
+        return;
+    }
+
+    const maybe_variable, const local_idx = blk: {
+        var stack_idx: usize = 0;
+        while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
+            const local = self.variables.at(stack_idx);
+            if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
+                break :blk .{ local, self.variables.stack_top - 1 - stack_idx };
+            }
+        }
+        break :blk .{ null, null };
+    };
+
+    const variable = maybe_variable orelse self.globals.get(name) orelse {
+        error_reporter.reportError(expr.variable.name, "Undefined variable: '{s}'", .{name});
+        self.has_error = true;
+        return;
+    };
+    self.last_expr_type = variable.type;
+
+    if (local_idx) |idx| {
+        if (idx > std.math.maxInt(u8)) {
+            // This kinda should not be really possible, hopefully
+            @panic("Too many locals");
+        }
+        expr.variable.local_idx = @intCast(idx);
+    } else {
+        expr.variable.global = true;
+    }
+}
+
 fn checkNumericOperands(self: *Sema, left: Token, lhs: FlowType, right: Token, rhs: FlowType, op: Token.Type) void {
     if (!isNumeric(lhs)) {
         error_reporter.reportError(
@@ -528,35 +619,47 @@ fn callExpression(self: *Sema, expr: *Expr) void {
     if (self.last_expr_type != .builtin_fn and self.last_expr_type != .function) {
         error_reporter.reportError(call.expr.getToken(), "'{s}' is not callable", .{name});
         self.has_error = true;
+        return;
     }
 
-    const maybe_builtin = builtins.get(name);
+    const expected_args, const ret_type = self.getFunctionSignature(name) orelse unreachable;
 
-    if (maybe_builtin) |builtin| {
-        if (builtin.arg_count != call.args.len) {
-            error_reporter.reportError(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
-                name,
-                builtin.arg_count,
-                call.args.len,
-            });
-            self.has_error = true;
-        }
+    if (expected_args.len != call.args.len) {
+        error_reporter.reportError(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
+            name,
+            expected_args.len,
+            call.args.len,
+        });
+        self.has_error = true;
+    } else {
+        self.checkArgs(call.args, expected_args);
     }
 
-    for (expr.call.args, 0..) |arg, i| {
+    self.last_expr_type = ret_type;
+}
+
+fn getFunctionSignature(self: *Sema, name: []const u8) ?struct { []const FlowType, FlowType } {
+    if (builtins.get(name)) |builtin| {
+        return .{ builtin.arg_types, builtin.ret_type };
+    }
+
+    if (self.functions.get(name)) |func| {
+        return .{ func.param_types, func.ret_type };
+    }
+
+    return null;
+}
+
+fn checkArgs(self: *Sema, args: []*Expr, expected: []const FlowType) void {
+    for (args, expected) |arg, arg_type| {
         self.expression(arg);
 
-        if (maybe_builtin) |builtin| {
-            if (builtin.arg_count == call.args.len and builtin.arg_types != null) {
-                const arg_type = builtin.arg_types.?[i];
-                if (self.last_expr_type != arg_type) {
-                    error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
-                        @tagName(arg_type),
-                        @tagName(self.last_expr_type.?),
-                    });
-                    self.has_error = true;
-                }
-            }
+        if (arg_type != .null and self.last_expr_type != arg_type) {
+            error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
+                @tagName(arg_type),
+                @tagName(self.last_expr_type.?),
+            });
+            self.has_error = true;
         }
     }
 }
