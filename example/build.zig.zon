@@ -5,6 +5,10 @@
         .flow = .{
             .path = "../",
         },
+        .betterAdd = .{
+            .url = "git+https://gitlab.com/flowlang/betteradd#6d5ae8fc26905c1e3fbba3ccaec6bd538bf875b5",
+            .hash = "122015373fad0b93e699ada1201add24b6c14cecc9b219bb166ebb484392fe508062",
+        },
     },
     .paths = .{
         "build.zig",
