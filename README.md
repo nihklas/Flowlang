@@ -1,4 +1,4 @@
-# Flow / FlowVM (`.flow/.fvm`)
+# FlowLang
 
 A language that is highly inspired by Golang's Goroutines and Channels.
 
@@ -15,7 +15,7 @@ Non-exhaustive list of some of the biggest and most important features planned:
 - Gargabe Collection
 - Byte-Code VM shipped in the final executable
 - Uses the Zig Buildsystem for Compilation
-- Extendable VM (`.fvm`-Files)
+- Extendable VM (through Zig Modules)
 - Type-Safe
 
 ## Try it out!
