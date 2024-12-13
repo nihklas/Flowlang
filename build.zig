@@ -1,8 +1,11 @@
 const std = @import("std");
-const Step = std.Build.Step;
+const Build = std.Build;
+const Step = Build.Step;
 const Compile = Step.Compile;
+const Module = Build.Module;
+const LazyPath = Build.LazyPath;
 
-pub fn build(b: *std.Build) !void {
+pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const example = b.option([]const u8, "example", "The path to a .flow file to be executed. Useful for compiler development");
@@ -20,6 +23,9 @@ pub fn build(b: *std.Build) !void {
     debug_options.addOption(bool, "bytecode", trace_bytecode);
     debug_options.addOption(bool, "memory", trace_memory);
 
+    const extension_options = b.addOptions();
+    extension_options.addOption(bool, "enabled", false);
+
     // Shared code between compiler and runtime
     // such as value types and representations
     const shared = b.addModule("shared", .{
@@ -28,6 +34,15 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("src/shared/root.zig"),
     });
     shared.addOptions("module_debug_options", debug_options);
+    shared.addOptions("extensions", extension_options);
+
+    const flow_std = b.addModule("flow_std", .{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("src/std/root.zig"),
+    });
+    flow_std.addImport("shared", shared);
+    shared.addImport("flow_std", flow_std);
 
     // Compiler executable
     const compiler = b.addExecutable(.{
@@ -87,7 +102,7 @@ pub fn build(b: *std.Build) !void {
             .source = b.path(path),
             .target = target,
             .optimize = optimize,
-        }, compiler, runtime);
+        }, compiler, runtime, shared);
 
         const run_flow = b.addRunArtifact(flow_out);
         b.getInstallStep().dependOn(&run_flow.step);
@@ -95,14 +110,23 @@ pub fn build(b: *std.Build) !void {
 }
 
 const CompileOptions = struct {
-    target: std.Build.ResolvedTarget,
+    target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode = .ReleaseSafe,
     name: []const u8,
-    source: std.Build.LazyPath,
+    source: LazyPath,
+    extension: ?Extension = null,
+};
+
+const Extension = struct {
+    modules: []const struct {
+        name: []const u8,
+        module: *Module,
+    },
+    export_file: LazyPath,
 };
 
 pub fn compile(
-    b: *std.Build,
+    b: *Build,
     options: CompileOptions,
 ) *Compile {
     const flow = b.dependency("flow", .{
@@ -111,13 +135,17 @@ pub fn compile(
     });
     const compiler = flow.artifact("compiler");
     const runtime = flow.artifact("runtime");
+    const shared = flow.module("shared");
+
     runtime.name = options.name;
     runtime.out_filename = options.name;
 
-    return compileImpl(b, options, compiler, runtime);
+    return compileImpl(b, options, compiler, runtime, shared);
 }
 
-fn compileImpl(b: *std.Build, options: CompileOptions, compiler: *Compile, runtime: *Compile) *Compile {
+fn compileImpl(b: *Build, options: CompileOptions, compiler: *Compile, runtime: *Compile, shared: *Module) *Compile {
+    includeExtensions(b, options, shared);
+
     const compile_step = b.addRunArtifact(compiler);
     compile_step.addFileArg(options.source);
     const bytecode = compile_step.addOutputFileArg("out.f");
@@ -128,4 +156,26 @@ fn compileImpl(b: *std.Build, options: CompileOptions, compiler: *Compile, runti
     runtime.root_module.optimize = options.optimize;
 
     return runtime;
+}
+
+fn includeExtensions(b: *Build, options: CompileOptions, shared: *Module) void {
+    const extension_options = b.addOptions();
+    extension_options.addOption(bool, "enabled", options.extension != null);
+
+    if (options.extension) |exts| {
+        const extension = b.addModule("flow_ext", .{
+            .target = options.target,
+            .optimize = options.optimize,
+            .root_source_file = exts.export_file,
+        });
+
+        for (exts.modules) |mod| {
+            mod.module.addImport("shared", shared);
+            extension.addImport(mod.name, mod.module);
+        }
+
+        shared.addImport("flow_ext", extension);
+    }
+
+    shared.addOptions("extensions", extension_options);
 }
