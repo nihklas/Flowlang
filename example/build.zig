@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
 
     const flow_out = flow.compile(b, .{
         .name = "flow-example",
-        .source = b.path("src/test.flow"),
+        .source = b.path("src/main.flow"),
         .target = target,
         .optimize = optimize,
         .extension = .{
