@@ -2,6 +2,8 @@ pub const builtins: std.StaticStringMap(Function) = .initComptime(.{
     .{ "print", print },
     .{ "readline", readline },
     .{ "readfile", readfile },
+    .{ "writefile", writefile },
+    .{ "time", time },
 });
 
 const impls = struct {
@@ -32,11 +34,29 @@ const impls = struct {
         const content = file.readToEndAlloc(gc_alloc, 1024 * 1024 * 1024) catch |err| panic("Error on File Read: {s}", .{@errorName(err)});
         return .{ .string = content };
     }
+
+    fn writefile(_: Allocator, args: []FlowValue) FlowValue {
+        const path = args[0].string;
+        const content = args[1];
+
+        const cwd = std.fs.cwd();
+
+        var file = cwd.createFile(path, .{}) catch |err| panic("Error on File Write: {s}", .{@errorName(err)});
+        defer file.close();
+
+        file.writer().print("{}", .{content}) catch |err| panic("Error on File Write: {s}", .{@errorName(err)});
+
+        return .null;
+    }
+
+    fn time(_: Allocator, _: []FlowValue) FlowValue {
+        return .{ .int = std.time.milliTimestamp() };
+    }
 };
 
 const print: Function = .{
     .arg_count = 1,
-    .arg_types = null,
+    .arg_types = &.{.null},
     .ret_type = .null,
     .function = &impls.print,
 };
@@ -53,6 +73,20 @@ const readfile: Function = .{
     .arg_types = &.{.string},
     .ret_type = .string,
     .function = &impls.readfile,
+};
+
+const writefile: Function = .{
+    .arg_count = 2,
+    .arg_types = &.{ .string, .string },
+    .ret_type = .null,
+    .function = &impls.writefile,
+};
+
+const time: Function = .{
+    .arg_count = 0,
+    .arg_types = &.{},
+    .ret_type = .int,
+    .function = &impls.time,
 };
 
 const Function = @import("definitions.zig").BuiltinFunction;

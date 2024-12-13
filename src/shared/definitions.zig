@@ -3,8 +3,8 @@ pub const Float = f64;
 
 pub const BuiltinFunction = struct {
     arg_count: u8,
-    /// If this is set to null, Semantic analysing won't perform compile time type checking
-    arg_types: ?[]const FlowType,
+    /// The position with type of .null will not be checked and has to be checked at runtime
+    arg_types: []const FlowType,
     ret_type: FlowType,
     function: *const fn (std.mem.Allocator, []FlowValue) FlowValue,
 };

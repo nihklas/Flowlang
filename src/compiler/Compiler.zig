@@ -350,7 +350,7 @@ fn emitConstant(self: *Compiler, value: FlowValue) void {
 fn resolveConstant(self: *Compiler, value: FlowValue) u8 {
     return for (self.constants, 0..) |c, i| {
         if (c.equals(value)) break @intCast(i);
-    } else unreachable;
+    } else panic("Constant not found '{}'\n", .{value});
 }
 
 fn emitOpcode(self: *Compiler, op: OpCode) void {

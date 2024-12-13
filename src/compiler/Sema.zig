@@ -626,6 +626,7 @@ fn callExpression(self: *Sema, expr: *Expr) void {
     if (self.last_expr_type != .builtin_fn and self.last_expr_type != .function) {
         error_reporter.reportError(call.expr.getToken(), "'{s}' is not callable", .{name});
         self.has_error = true;
+        return;
     }
 
     const maybe_builtin = builtins.get(name);
@@ -638,23 +639,27 @@ fn callExpression(self: *Sema, expr: *Expr) void {
                 call.args.len,
             });
             self.has_error = true;
+        } else {
+            self.checkArgs(call.args, builtin.arg_types);
         }
+
+        self.last_expr_type = builtin.ret_type;
+        return;
     }
 
-    for (expr.call.args, 0..) |arg, i| {
+    // TODO: checking for userland functions
+}
+
+fn checkArgs(self: *Sema, args: []*Expr, expected: []const FlowType) void {
+    for (args, expected) |arg, arg_type| {
         self.expression(arg);
 
-        if (maybe_builtin) |builtin| {
-            if (builtin.arg_count == call.args.len and builtin.arg_types != null) {
-                const arg_type = builtin.arg_types.?[i];
-                if (self.last_expr_type != arg_type) {
-                    error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
-                        @tagName(arg_type),
-                        @tagName(self.last_expr_type.?),
-                    });
-                    self.has_error = true;
-                }
-            }
+        if (arg_type != .null and self.last_expr_type != arg_type) {
+            error_reporter.reportError(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
+                @tagName(arg_type),
+                @tagName(self.last_expr_type.?),
+            });
+            self.has_error = true;
         }
     }
 }
