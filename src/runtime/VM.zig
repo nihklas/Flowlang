@@ -125,7 +125,8 @@ fn runWhileSwitch(self: *VM) void {
             .false => self.push(.{ .bool = false }),
             .null => self.push(.null),
             .pop => _ = self.pop(),
-            .add, .sub, .mul, .div, .mod => self.arithmetic(op),
+            .add_i, .sub_i, .mul_i, .div_i, .mod_i => self.arithmeticInt(op),
+            .add_f, .sub_f, .mul_f, .div_f, .mod_f => self.arithmeticFloat(op),
             .concat => self.concat(),
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .constant => {
@@ -234,38 +235,38 @@ fn concat(self: *VM) void {
     self.push(.{ .string = result });
 }
 
-fn arithmetic(self: *VM, op: OpCode) void {
+fn arithmeticInt(self: *VM, op: OpCode) void {
     const rhs = self.pop();
     const lhs = self.pop();
 
-    // If one of the operands is a float, result is also a float
-    // a division always results in a float
-    const is_float = rhs == .float or lhs == .float;
-    if (is_float or op == .div) {
-        const right: Float = if (rhs == .float) rhs.float else @floatFromInt(rhs.int);
-        const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.int);
-
-        const result: FlowValue = switch (op) {
-            .add => .{ .float = left + right },
-            .sub => .{ .float = left - right },
-            .mul => .{ .float = left * right },
-            .div => .{ .float = left / right },
-            .mod => .{ .float = @mod(left, right) },
-            else => unreachable,
-        };
-
-        self.push(result);
-        return;
-    }
-
-    const right = rhs.int;
-    const left = lhs.int;
+    const right: Integer = rhs.int;
+    const left: Integer = lhs.int;
 
     const result: FlowValue = switch (op) {
-        .add => .{ .int = left + right },
-        .sub => .{ .int = left - right },
-        .mul => .{ .int = left * right },
-        .mod => .{ .int = @mod(left, right) },
+        .add_i => .{ .int = left + right },
+        .sub_i => .{ .int = left - right },
+        .mul_i => .{ .int = left * right },
+        .div_i => .{ .int = @divTrunc(left, right) },
+        .mod_i => .{ .int = @mod(left, right) },
+        else => unreachable,
+    };
+
+    self.push(result);
+}
+
+fn arithmeticFloat(self: *VM, op: OpCode) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+
+    const right: Float = rhs.float;
+    const left: Float = lhs.float;
+
+    const result: FlowValue = switch (op) {
+        .add_f => .{ .float = left + right },
+        .sub_f => .{ .float = left - right },
+        .mul_f => .{ .float = left * right },
+        .div_f => .{ .float = left / right },
+        .mod_f => .{ .float = @mod(left, right) },
         else => unreachable,
     };
 

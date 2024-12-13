@@ -1,10 +1,12 @@
 const before = time();
 
-for var i = 0; i < 100000; i += 1 {
-    print("At: " . i);
+var sum = 0;
+for var i = 0; i < 1000000; i += 1 {
+    sum += i;
 }
 
 const after = time();
 
+print("Result: " . sum);
 print("This took " . after - before . " ms");
 
