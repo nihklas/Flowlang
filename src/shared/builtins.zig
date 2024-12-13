@@ -55,35 +55,30 @@ const impls = struct {
 };
 
 const print: Function = .{
-    .arg_count = 1,
     .arg_types = &.{.null},
     .ret_type = .null,
     .function = &impls.print,
 };
 
 const readline: Function = .{
-    .arg_count = 1,
     .arg_types = &.{.string},
     .ret_type = .string,
     .function = &impls.readline,
 };
 
 const readfile: Function = .{
-    .arg_count = 1,
     .arg_types = &.{.string},
     .ret_type = .string,
     .function = &impls.readfile,
 };
 
 const writefile: Function = .{
-    .arg_count = 2,
     .arg_types = &.{ .string, .string },
     .ret_type = .null,
     .function = &impls.writefile,
 };
 
 const time: Function = .{
-    .arg_count = 0,
     .arg_types = &.{},
     .ret_type = .int,
     .function = &impls.time,

@@ -629,25 +629,32 @@ fn callExpression(self: *Sema, expr: *Expr) void {
         return;
     }
 
-    const maybe_builtin = builtins.get(name);
+    const expected_args, const ret_type = self.getFunctionSignature(name) orelse unreachable;
 
-    if (maybe_builtin) |builtin| {
-        if (builtin.arg_count != call.args.len) {
-            error_reporter.reportError(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
-                name,
-                builtin.arg_count,
-                call.args.len,
-            });
-            self.has_error = true;
-        } else {
-            self.checkArgs(call.args, builtin.arg_types);
-        }
-
-        self.last_expr_type = builtin.ret_type;
-        return;
+    if (expected_args.len != call.args.len) {
+        error_reporter.reportError(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
+            name,
+            expected_args.len,
+            call.args.len,
+        });
+        self.has_error = true;
+    } else {
+        self.checkArgs(call.args, expected_args);
     }
 
-    // TODO: checking for userland functions
+    self.last_expr_type = ret_type;
+}
+
+fn getFunctionSignature(self: *Sema, name: []const u8) ?struct { []const FlowType, FlowType } {
+    if (builtins.get(name)) |builtin| {
+        return .{ builtin.arg_types, builtin.ret_type };
+    }
+
+    if (self.functions.get(name)) |func| {
+        return .{ func.param_types, func.ret_type };
+    }
+
+    return null;
 }
 
 fn checkArgs(self: *Sema, args: []*Expr, expected: []const FlowType) void {
