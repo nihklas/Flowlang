@@ -74,6 +74,21 @@ You can fetch the module via Zig's package manager:
 zig fetch --save git+https://gitlab.com/flowlang/betteradd
 ```
 
+You also need a Zig file, where you re-export all the functions you need. That
+way, you can also import a Module, but only use a single function, and the rest
+of the Module will not be included in the compiled output. The `exports.zig` of
+the example looks simply like this:
+
+```zig
+const lib = @import("betterAdd");
+
+pub const betterAdd = lib.betterAdd;
+```
+
+This `exports.zig` includes all modules exports the functions that are needed.
+You can define different names for these functions in here as well, to avoid
+naming collisions.
+
 Here is the modified `build.zig` from above to include this example module:
 
 ```zig
