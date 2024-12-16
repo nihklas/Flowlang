@@ -517,6 +517,15 @@ fn checkNumericOperands(self: *Sema, left: Token, lhs: FlowType, right: Token, r
         );
         self.has_error = true;
     }
+
+    if (lhs != rhs) {
+        error_reporter.reportError(
+            right,
+            "Expected operands of '{s}' to be the same. Got left: '{s}', right: '{s}'",
+            .{ @tagName(op), @tagName(lhs), @tagName(rhs) },
+        );
+        self.has_error = true;
+    }
 }
 
 fn isNumeric(value_type: FlowType) bool {
