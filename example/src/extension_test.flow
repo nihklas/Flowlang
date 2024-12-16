@@ -1,0 +1,4 @@
+print("We have extensions!");
+
+const result = betterAdd(1, 2);
+print("Result from betterAdd: " . result);

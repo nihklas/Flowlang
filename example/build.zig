@@ -4,12 +4,13 @@ const flow = @import("flow");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const src_file = b.option([]const u8, "main", "Flow file to execute") orelse "src/main.flow";
 
     const betterAdd = b.dependency("betterAdd", .{});
 
     const flow_out = flow.compile(b, .{
         .name = "flow-example",
-        .source = b.path("src/main.flow"),
+        .source = b.path(src_file),
         .target = target,
         .optimize = optimize,
         .extension = .{
