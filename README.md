@@ -55,7 +55,7 @@ course do some more crazy things, but this setup is enough to get you started wi
 Now, to get flow itself, you need to fetch it with this:
 
 ```bash
-zig fetch --save=flow git+https://gitlab.com/nihklas/flowlang.git
+zig fetch --save=flow git+https://gitlab.com/flowlang/flowlang.git
 ```
 
 Now you can run `zig build` to compile your project and get the binary under `zig-out/bin/<binary>`
