@@ -93,7 +93,7 @@ fn makeExes(b: *std.Build, shared: *Module, debug_options: *Step.Options) struct
     const compiler = b.addExecutable(.{
         .name = "compiler",
         .root_source_file = b.path("src/compiler/main.zig"),
-        .target = b.host,
+        .target = b.resolveTargetQuery(.{}),
         .optimize = .Debug,
     });
     compiler.root_module.addOptions("debug_options", debug_options);
@@ -102,7 +102,7 @@ fn makeExes(b: *std.Build, shared: *Module, debug_options: *Step.Options) struct
     const runtime = b.addExecutable(.{
         .name = "runtime",
         .root_source_file = b.path("src/runtime/main.zig"),
-        .target = b.host,
+        .target = b.resolveTargetQuery(.{}),
         .optimize = .Debug,
     });
     runtime.root_module.addOptions("debug_options", debug_options);
@@ -113,3 +113,5 @@ fn makeExes(b: *std.Build, shared: *Module, debug_options: *Step.Options) struct
         .runtime = runtime,
     };
 }
+
+const builtin = @import("builtin");
