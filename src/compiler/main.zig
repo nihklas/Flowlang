@@ -22,14 +22,11 @@ pub fn main() !void {
 
     const ast = try Parser.createAST(arena, tokens);
 
-    var sema_old: SemaOld = .init(arena, ast);
-    try sema_old.analyse();
-
     var sema: Sema = .init(gpa, ast);
     defer sema.deinit();
     try sema.analyse();
 
-    const bytecode = Compiler.compile(gpa, ast, &sema_old);
+    const bytecode = Compiler.compile(gpa, ast, &sema);
     defer gpa.free(bytecode);
 
     const output_file = try std.fs.cwd().createFile(output, .{});
@@ -51,5 +48,4 @@ const Token = @import("Token.zig");
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
-const SemaOld = @import("Sema.zig");
-const Sema = @import("SemaNew.zig");
+const Sema = @import("Sema.zig");
