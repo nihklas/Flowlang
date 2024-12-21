@@ -1,7 +1,11 @@
 pub fn main() !void {
-    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
+    var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
+    defer std.debug.assert(gpa_state.deinit() == .ok);
+    const gpa = gpa_state.allocator();
+
+    var arena_state: std.heap.ArenaAllocator = .init(gpa_state.allocator());
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
 
     var args = std.process.args();
     _ = args.next();
@@ -10,16 +14,20 @@ pub fn main() !void {
 
     const output = args.next() orelse return error.MissingArgument;
 
-    const flow_source = try readFile(alloc, input);
+    const flow_source = try readFile(gpa, input);
+    defer gpa.free(flow_source);
 
-    const tokens = try Scanner.scan(alloc, flow_source);
+    const tokens = try Scanner.scan(gpa, flow_source);
+    defer gpa.free(tokens);
 
-    const ast = try Parser.createAST(alloc, tokens);
+    const ast = try Parser.createAST(arena, tokens);
 
-    var sema: Sema = .init(alloc, ast);
+    var sema: Sema = .init(gpa, ast);
+    defer sema.deinit();
     try sema.analyse();
 
-    const bytecode = Compiler.compile(alloc, ast, &sema);
+    const bytecode = Compiler.compile(gpa, ast, &sema);
+    defer gpa.free(bytecode);
 
     const output_file = try std.fs.cwd().createFile(output, .{});
     defer output_file.close();
