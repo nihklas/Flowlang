@@ -1,5 +1,6 @@
 .{
-    .name = "flowlang",
+    .name = .flowlang,
+    .fingerprint = 0x9dad8aea98a70c72,
     .version = "0.0.0",
     .dependencies = .{},
     .paths = .{

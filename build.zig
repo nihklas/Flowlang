@@ -8,7 +8,7 @@ const LazyPath = Build.LazyPath;
 pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const example = b.option([]const u8, "example", "The path to a .flow file to be executed. Useful for compiler development");
+    const flow_src = b.option([]const u8, "run", "The path to a .flow file to be executed. Useful for compiler development");
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
@@ -39,7 +39,7 @@ pub fn build(b: *Build) !void {
     const flow_std = b.addModule("flow_std", .{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("src/std/root.zig"),
+        .root_source_file = b.path("src/std/stdlib.zig"),
     });
     flow_std.addImport("shared", shared);
     shared.addImport("flow_std", flow_std);
@@ -96,7 +96,7 @@ pub fn build(b: *Build) !void {
     check_step.dependOn(&runtime.step);
 
     // Example compilation
-    if (example) |path| {
+    if (flow_src) |path| {
         const flow_out = compileImpl(b, .{
             .name = "flow_out",
             .source = b.path(path),
