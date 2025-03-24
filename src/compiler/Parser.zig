@@ -58,7 +58,20 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
 
     const name = self.previous();
 
-    const type_hint = self.typeHint();
+    const type_hint = blk: {
+        if (self.match(.@":")) |colon| {
+            const result = self.typeHint();
+
+            if (result == null) {
+                error_reporter.reportError(colon, "Expected typehint after ':'", .{});
+                return ParserError.UnexpectedToken;
+            }
+
+            break :blk result;
+        }
+
+        break :blk null;
+    };
 
     const value = blk: {
         if (self.match(.@"=")) |_| {
@@ -83,16 +96,26 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
     try self.consume(.@")", "Expected ')' after function parameters");
     const close_paren = self.previous();
 
-    // null implies void
-    const type_hint: Token = if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token|
-        token
-    else
-        .{
-            .type = .null,
-            .line = close_paren.line,
-            .column = close_paren.column,
-            .lexeme = "null",
-        };
+    const type_hint: ast.TypeHint = blk: {
+        if (self.check(.@"{")) {
+            break :blk .{
+                .type = .{
+                    .type = .null,
+                    .line = close_paren.line,
+                    .column = close_paren.column,
+                    .lexeme = "null",
+                },
+                .order = 0,
+            };
+        }
+
+        const result = self.typeHint();
+        if (result == null) {
+            error_reporter.reportError(self.peek(), "Unexpected Token, expected either typehint or '{{'", .{});
+            return error.UnexpectedToken;
+        }
+        break :blk result.?;
+    };
 
     try self.consume(.@"{", "Expected '{' before function body");
 
@@ -122,6 +145,10 @@ fn parameters(self: *Parser) ParserError![]*Stmt {
 
 fn param(self: *Parser) ?*Stmt {
     if (self.match(.identifier)) |name| {
+        self.consume(.@":", "Expected ':' in front of type hint") catch {
+            self.has_error = true;
+            return null;
+        };
         const type_hint = self.typeHint();
         if (type_hint == null) {
             error_reporter.reportError(name, "Expected type hint after parameter name", .{});
@@ -465,14 +492,14 @@ fn primary(self: *Parser) ParserError!*Expr {
     return ParserError.UnexpectedToken;
 }
 
-fn typeHint(self: *Parser) ?Token {
-    if (self.match(.@":")) |colon| {
-        if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
-            return token;
-        }
+fn typeHint(self: *Parser) ?ast.TypeHint {
+    var order: u8 = 0;
+    while (self.match(.@"[") != null and self.match(.@"]") != null) {
+        order += 1;
+    }
 
-        error_reporter.reportError(colon, "Expected type after ':'", .{});
-        self.has_error = true;
+    if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
+        return .{ .type = token, .order = order };
     }
 
     return null;

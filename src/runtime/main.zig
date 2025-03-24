@@ -5,7 +5,7 @@ pub fn main() !void {
     const code = try readByteCode(gpa.allocator());
     defer gpa.allocator().free(code);
 
-    if (comptime debug_options.dump) {
+    if (comptime debug_options.dump_bc) {
         DumpTruck.dump(code);
         return;
     }

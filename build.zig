@@ -10,14 +10,16 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
-    const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
+    const dump_bytecode = b.option(bool, "dump-bc", "Dump the Bytecode instead of running the VM") orelse false;
+    const dump_ast = b.option(bool, "dump-ast", "Dump the AST and exit") orelse false;
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
     const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
     const integration_test_case = b.option([]const u8, "case", "Specific integration test case to run");
 
     const debug_options = b.addOptions();
-    debug_options.addOption(bool, "dump", dump_bytecode);
+    debug_options.addOption(bool, "dump_bc", dump_bytecode);
+    debug_options.addOption(bool, "dump_ast", dump_ast);
     debug_options.addOption(bool, "stack", trace_stack);
     debug_options.addOption(bool, "bytecode", trace_bytecode);
     debug_options.addOption(bool, "memory", trace_memory);

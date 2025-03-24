@@ -1,3 +1,9 @@
+pub const TypeHint = struct {
+    type: Token,
+    /// order (dimension) of the array, 0 means no array, 1 means []type, 2 means [][]type, ...
+    order: u8 = 0,
+};
+
 pub const Expr = union(enum) {
     pub const Literal = union(enum) {
         null: void,
@@ -10,11 +16,11 @@ pub const Expr = union(enum) {
     literal: struct { token: Token, value: Literal },
     grouping: struct { expr: *Expr },
     unary: struct { op: Token, expr: *Expr },
-    binary: struct { lhs: *Expr, op: Token, rhs: *Expr, type: ?FlowType = null },
+    binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
-    assignment: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
-    append: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
-    variable: struct { name: Token, global: bool = false, local_idx: u8 = 0 },
+    assignment: struct { name: Token, value: *Expr },
+    append: struct { name: Token, value: *Expr },
+    variable: struct { name: Token },
     call: struct { expr: *Expr, args: []*Expr },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
@@ -136,7 +142,7 @@ pub const Expr = union(enum) {
 pub const Stmt = union(enum) {
     expr: struct { expr: *Expr },
 
-    block: struct { stmts: []*Stmt, local_count: usize = 0 },
+    block: struct { stmts: []*Stmt },
 
     loop: struct { condition: *Expr, body: []*Stmt, inc: ?*Stmt = null },
     @"break": struct { token: Token },
@@ -151,13 +157,10 @@ pub const Stmt = union(enum) {
         name: Token,
         constant: bool,
         value: ?*Expr,
-        type_hint: ?Token,
-        array: bool = false,
-        global: bool = false,
-        local_index: ?u8 = null,
+        type_hint: ?TypeHint,
     },
 
-    function: struct { name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt },
+    function: struct { name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt },
     @"return": struct { token: Token, value: ?*Expr },
 
     pub fn createExpr(alloc: Allocator, expr: *Expr) *Stmt {
@@ -232,7 +235,7 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createVariable(alloc: Allocator, name: Token, type_hint: ?Token, constant: bool, value: ?*Expr) *Stmt {
+    pub fn createVariable(alloc: Allocator, name: Token, type_hint: ?TypeHint, constant: bool, value: ?*Expr) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .variable = .{
@@ -245,7 +248,7 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createFunction(alloc: Allocator, name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt) *Stmt {
+    pub fn createFunction(alloc: Allocator, name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .function = .{ .name = name, .ret_type = ret_type, .params = params, .body = body },

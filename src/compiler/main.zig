@@ -12,7 +12,7 @@ pub fn main() !void {
 
     const input = args.next() orelse return error.MissingArgument;
 
-    const output = args.next() orelse return error.MissingArgument;
+    // const output = args.next() orelse return error.MissingArgument;
 
     const flow_source = try readFile(gpa, input);
     defer gpa.free(flow_source);
@@ -22,21 +22,25 @@ pub fn main() !void {
 
     const ast = try Parser.createAST(arena, tokens);
 
-    var sema: Sema = .init(gpa, ast);
-    defer sema.deinit();
-    try sema.analyse();
+    if (comptime debug_options.dump_ast) {
+        ast_dumper.dump(std.io.getStdOut().writer(), ast);
+    }
 
-    const bytecode = Compiler.compile(gpa, ast, &sema);
-    defer gpa.free(bytecode);
-
-    const output_file = try std.fs.cwd().createFile(output, .{ .mode = 0o755 });
-    defer output_file.close();
-
-    try output_file.writeAll(vm);
-    try output_file.writeAll(bytecode);
-
-    const bytecode_len: [8]u8 = @bitCast(bytecode.len);
-    try output_file.writeAll(&bytecode_len);
+    // var sema: Sema = .init(gpa, ast);
+    // defer sema.deinit();
+    // try sema.analyse();
+    //
+    // const bytecode = Compiler.compile(gpa, ast, &sema);
+    // defer gpa.free(bytecode);
+    //
+    // const output_file = try std.fs.cwd().createFile(output, .{ .mode = 0o755 });
+    // defer output_file.close();
+    //
+    // try output_file.writeAll(vm);
+    // try output_file.writeAll(bytecode);
+    //
+    // const bytecode_len: [8]u8 = @bitCast(bytecode.len);
+    // try output_file.writeAll(&bytecode_len);
 }
 
 fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
@@ -46,6 +50,7 @@ fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
     return try file.readToEndAlloc(alloc, 1 * 1024 * 1024);
 }
 
+const debug_options = @import("debug_options");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Token = @import("Token.zig");
@@ -55,3 +60,4 @@ const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
 
 const vm = @embedFile("runtime");
+const ast_dumper = @import("debug/ast_dumper.zig");

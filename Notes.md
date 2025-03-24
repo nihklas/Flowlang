@@ -2,6 +2,26 @@
 
 Notes I have during development, that don't yet have a better place to be.
 
+## General Notes
+
+- Source Code gets parsed into the AST
+- Sema happens on the AST
+- Symbol Table, Scope Table and Intern Pool gets created outside of Sema and passed into it
+- Symbol Table holds information about types and existence of symbols
+- Keys of the symbol tables gets created through combination of name and scope id
+- Intern Pool holds a copy of all literal strings
+- Sema checks for any compile time errors
+    - Resolves Types and checks them by building the symbol table
+    - Checks scope of variables, constantness etc.
+    - String literals are saved into the Intern Pool
+- After Compile Time checking, AST gets turned into a CFG
+- CFG consists of Blocks of Instructions and Jumps between those
+    - Instructions should roughly translate per line
+- Special jumps are "_entry" and "_exit"
+- Optimisation passes happen on the CFG
+    - for example Dead-Code-Elimination
+- Jumps are defined as predecessors and successors
+
 ## IR
 
 We have the AST on the one end and Bytecode on the other end.
@@ -74,25 +94,4 @@ const CFGInstruction = struct {
 Instruction Kind will be filled with all needed instructions, extra will hold
 any extra information needed, like index into the symbol table, small integer
 and float literals.
-
-## General Notes
-
-- Source Code gets parsed into the AST
-- Sema happens on the AST
-- Symbol Table, Scope Table and Intern Pool gets created outside of Sema and passed into it
-- Symbol Table holds information about types and existence of symbols
-- Keys of the symbol tables gets created through combination of name and scope id
-- Intern Pool holds a copy of all literal strings
-- Sema checks for any compile time errors
-    - Resolves Types and checks them by building the symbol table
-    - Checks scope of variables, constantness etc.
-    - String literals are saved into the Intern Pool
-- After Compile Time checking, AST gets turned into a CFG
-- CFG consists of Blocks of Instructions and Jumps between those
-    - Instructions should roughly translate per line
-- Special jumps are "_entry" and "_exit"
-- Optimisation passes happen on the CFG
-    - for example Dead-Code-Elimination
-- Jumps are defined as predecessors and successors
-
 
