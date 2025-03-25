@@ -15,6 +15,7 @@ pub fn main() !void {
     var output_arg: ?[]const u8 = null;
     var dump_bc = debug_options.dump_bc;
     var dump_ast = debug_options.dump_ast;
+    var dump_to_stdout = false;
     while (args.next()) |argument| {
         if (!std.mem.startsWith(u8, argument, "--")) {
             switch (argument_counter) {
@@ -33,6 +34,8 @@ pub fn main() !void {
             dump_ast = true;
         } else if (std.mem.eql(u8, argument, "--help")) {
             printHelpAndQuit(0);
+        } else if (std.mem.eql(u8, argument, "--stdout")) {
+            dump_to_stdout = true;
         }
     }
 
@@ -45,6 +48,8 @@ pub fn main() !void {
     const output_file = try std.fs.cwd().createFile(output, .{});
     defer output_file.close();
 
+    const dump_writer = if (dump_to_stdout) std.io.getStdOut().writer() else output_file.writer();
+
     const flow_source = try readFile(gpa, input);
     defer gpa.free(flow_source);
 
@@ -53,31 +58,31 @@ pub fn main() !void {
 
     const ast = try Parser.createAST(arena, tokens);
     if (dump_ast) {
-        ASTDumper.dump(output_file.writer(), ast);
+        ASTDumper.dump(dump_writer, ast);
         return;
     }
 
-    var sema: Sema = .init(gpa, ast);
-    defer sema.deinit();
-    try sema.analyse();
-
-    const bytecode = Compiler.compile(gpa, ast, &sema);
-    defer gpa.free(bytecode);
-
-    if (dump_bc) {
-        BytecodeDumper.dump(output_file.writer().any(), bytecode);
-        return;
-    }
-
-    try output_file.chmod(0o755);
-
-    try output_file.writeAll(vm);
-    try output_file.writeAll(bytecode);
-
-    const bytecode_len: [8]u8 = @bitCast(bytecode.len);
-    try output_file.writeAll(&bytecode_len);
-
-    try output_file.writeAll(bytecode);
+    // var sema: Sema = .init(gpa, ast);
+    // defer sema.deinit();
+    // try sema.analyse();
+    //
+    // const bytecode = Compiler.compile(gpa, ast, &sema);
+    // defer gpa.free(bytecode);
+    //
+    // if (dump_bc) {
+    //     BytecodeDumper.dump(output_file.writer().any(), bytecode);
+    //     return;
+    // }
+    //
+    // try output_file.chmod(0o755);
+    //
+    // try output_file.writeAll(vm);
+    // try output_file.writeAll(bytecode);
+    //
+    // const bytecode_len: [8]u8 = @bitCast(bytecode.len);
+    // try output_file.writeAll(&bytecode_len);
+    //
+    // try output_file.writeAll(bytecode);
 }
 
 fn printHelpAndQuit(exit_code: u8) noreturn {
@@ -89,10 +94,13 @@ fn printHelpAndQuit(exit_code: u8) noreturn {
         \\                              instead of building an executable
         \\          --dump-ast          Dump the resulting Abstract Syntax Tree to the output File
         \\                              instead of building an executable
+        \\          --dump-to-stdout    Dump output of the other dump options are printed to stdout 
+        \\                              instead of the output file
         \\
         \\      Arguments
         \\          SOURCE              Path to the .flow Source file
-        \\          OUTPUT              Path to the target output file
+        \\          OUTPUT              Path to the target output file, 
+        \\                              default is filename of the SOURCE argument without extension
         \\
     ;
 
