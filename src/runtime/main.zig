@@ -6,7 +6,7 @@ pub fn main() !void {
     defer gpa.allocator().free(code);
 
     if (comptime debug_options.dump_bc) {
-        DumpTruck.dump(code);
+        BytecodeDumper.dump(code);
         return;
     }
 
@@ -52,5 +52,5 @@ fn readByteCode(alloc: std.mem.Allocator) ![]const u8 {
 const std = @import("std");
 const VM = @import("VM.zig");
 const GC = @import("GC.zig");
-const DumpTruck = @import("debug/BytecodeDumper.zig");
+const BytecodeDumper = @import("shared").debug.BytecodeDumper;
 const debug_options = @import("debug_options");

@@ -8,11 +8,42 @@ pub fn main() !void {
     const arena = arena_state.allocator();
 
     var args = std.process.args();
-    _ = args.next();
+    _ = args.next(); // skip program name
 
-    const input = args.next() orelse return error.MissingArgument;
+    var argument_counter: usize = 0;
+    var input_arg: ?[]const u8 = null;
+    var output_arg: ?[]const u8 = null;
+    var dump_bc = debug_options.dump_bc;
+    var dump_ast = debug_options.dump_ast;
+    while (args.next()) |argument| {
+        if (!std.mem.startsWith(u8, argument, "--")) {
+            switch (argument_counter) {
+                0 => input_arg = argument,
+                1 => output_arg = argument,
+                else => {},
+            }
 
-    // const output = args.next() orelse return error.MissingArgument;
+            argument_counter += 1;
+            continue;
+        }
+
+        if (std.mem.eql(u8, argument, "--dump-bc")) {
+            dump_bc = true;
+        } else if (std.mem.eql(u8, argument, "--dump-ast")) {
+            dump_ast = true;
+        } else if (std.mem.eql(u8, argument, "--help")) {
+            printHelpAndQuit(0);
+        }
+    }
+
+    const input = input_arg orelse printHelpAndQuit(1);
+    const output = output_arg orelse out: {
+        const basename = std.fs.path.basename(input);
+        break :out basename[0 .. basename.len - std.fs.path.extension(input).len];
+    };
+
+    const output_file = try std.fs.cwd().createFile(output, .{});
+    defer output_file.close();
 
     const flow_source = try readFile(gpa, input);
     defer gpa.free(flow_source);
@@ -21,33 +52,60 @@ pub fn main() !void {
     defer gpa.free(tokens);
 
     const ast = try Parser.createAST(arena, tokens);
-
-    if (comptime debug_options.dump_ast) {
-        ast_dumper.dump(std.io.getStdOut().writer(), ast);
+    if (dump_ast) {
+        ASTDumper.dump(output_file.writer(), ast);
+        return;
     }
 
-    // var sema: Sema = .init(gpa, ast);
-    // defer sema.deinit();
-    // try sema.analyse();
-    //
-    // const bytecode = Compiler.compile(gpa, ast, &sema);
-    // defer gpa.free(bytecode);
-    //
-    // const output_file = try std.fs.cwd().createFile(output, .{ .mode = 0o755 });
-    // defer output_file.close();
-    //
-    // try output_file.writeAll(vm);
-    // try output_file.writeAll(bytecode);
-    //
-    // const bytecode_len: [8]u8 = @bitCast(bytecode.len);
-    // try output_file.writeAll(&bytecode_len);
+    var sema: Sema = .init(gpa, ast);
+    defer sema.deinit();
+    try sema.analyse();
+
+    const bytecode = Compiler.compile(gpa, ast, &sema);
+    defer gpa.free(bytecode);
+
+    if (dump_bc) {
+        BytecodeDumper.dump(output_file.writer().any(), bytecode);
+        return;
+    }
+
+    try output_file.chmod(0o755);
+
+    try output_file.writeAll(vm);
+    try output_file.writeAll(bytecode);
+
+    const bytecode_len: [8]u8 = @bitCast(bytecode.len);
+    try output_file.writeAll(&bytecode_len);
+
+    try output_file.writeAll(bytecode);
+}
+
+fn printHelpAndQuit(exit_code: u8) noreturn {
+    const help =
+        \\flow_compiler [SOURCE] [OUTPUT] (options)
+        \\
+        \\      Options
+        \\          --dump-bc           Dump the resulting Bytecode into the output File 
+        \\                              instead of building an executable
+        \\          --dump-ast          Dump the resulting Abstract Syntax Tree to the output File
+        \\                              instead of building an executable
+        \\
+        \\      Arguments
+        \\          SOURCE              Path to the .flow Source file
+        \\          OUTPUT              Path to the target output file
+        \\
+    ;
+
+    std.io.getStdErr().writeAll(help) catch {};
+
+    std.posix.exit(exit_code);
 }
 
 fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    return try file.readToEndAlloc(alloc, 1 * 1024 * 1024);
+    return try file.readToEndAlloc(alloc, 1 * 1024 * 1024); // 1 GB
 }
 
 const debug_options = @import("debug_options");
@@ -60,4 +118,5 @@ const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
 
 const vm = @embedFile("runtime");
-const ast_dumper = @import("debug/ast_dumper.zig");
+const ASTDumper = @import("debug/ASTDumper.zig");
+const BytecodeDumper = @import("shared").debug.BytecodeDumper;

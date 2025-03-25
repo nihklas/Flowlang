@@ -8,6 +8,9 @@ const LazyPath = Build.LazyPath;
 pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const zig_self_hosted_backend = target.result.os.tag == .linux and target.result.cpu.arch == .x86_64 and optimize == .Debug;
+
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const dump_bytecode = b.option(bool, "dump-bc", "Dump the Bytecode instead of running the VM") orelse false;
@@ -27,20 +30,24 @@ pub fn build(b: *Build) !void {
     const extension_options = b.addOptions();
     extension_options.addOption(bool, "enabled", false);
 
+    // Option to output compiler errors in tests
+    const test_options = b.addOptions();
+    test_options.addOption(bool, "use_stderr", use_stderr);
+
     // Shared code between compiler and runtime
     // such as value types and representations
     const shared = b.addModule("shared", .{
+        .root_source_file = b.path("src/shared/root.zig"),
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("src/shared/root.zig"),
     });
     shared.addOptions("module_debug_options", debug_options);
     shared.addOptions("extensions", extension_options);
 
     const flow_std = b.addModule("flow_std", .{
+        .root_source_file = b.path("src/std/stdlib.zig"),
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("src/std/stdlib.zig"),
     });
     flow_std.addImport("shared", shared);
     shared.addImport("flow_std", flow_std);
@@ -55,7 +62,12 @@ pub fn build(b: *Build) !void {
             .{ .name = "shared", .module = shared },
         },
     });
-    const runtime = b.addExecutable(.{ .name = "runtime", .root_module = runtime_mod });
+    const runtime = b.addExecutable(.{
+        .name = "runtime",
+        .root_module = runtime_mod,
+        .use_lld = !zig_self_hosted_backend,
+        .use_llvm = !zig_self_hosted_backend,
+    });
     b.installArtifact(runtime);
     runtime.step.dependOn(&debug_options.step);
 
@@ -80,11 +92,10 @@ pub fn build(b: *Build) !void {
         .root_source_file = b.path("src/testing.zig"),
         .target = target,
         .optimize = optimize,
+        .use_lld = !zig_self_hosted_backend,
+        .use_llvm = !zig_self_hosted_backend,
     });
     exe_unit_tests.root_module.addImport("shared", shared);
-    // Option to output compiler errors
-    const test_options = b.addOptions();
-    test_options.addOption(bool, "use_stderr", use_stderr);
     exe_unit_tests.root_module.addOptions("testing_options", test_options);
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
@@ -99,4 +110,13 @@ pub fn build(b: *Build) !void {
     const check_step = b.step("check", "Check Step for LSP");
     check_step.dependOn(&compiler.step);
     check_step.dependOn(&runtime.step);
+
+    const run_compiler = b.addRunArtifact(compiler);
+    run_compiler.addArg("--dump-bc");
+    const compile_step = b.step("compile", "Only run the compiler and dump the resulting bytecode in a human readable form");
+    compile_step.dependOn(&run_compiler.step);
+
+    if (b.args) |args| {
+        run_compiler.addArgs(args);
+    }
 }
