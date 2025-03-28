@@ -9,8 +9,6 @@ pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zig_self_hosted_backend = target.result.os.tag == .linux and target.result.cpu.arch == .x86_64 and optimize == .Debug;
-
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const dump_bytecode = b.option(bool, "dump-bc", "Dump the Bytecode instead of running the VM") orelse false;
@@ -65,8 +63,6 @@ pub fn build(b: *Build) !void {
     const runtime = b.addExecutable(.{
         .name = "runtime",
         .root_module = runtime_mod,
-        .use_lld = !zig_self_hosted_backend,
-        .use_llvm = !zig_self_hosted_backend,
     });
     b.installArtifact(runtime);
     runtime.step.dependOn(&debug_options.step);
@@ -92,8 +88,6 @@ pub fn build(b: *Build) !void {
         .root_source_file = b.path("src/testing.zig"),
         .target = target,
         .optimize = optimize,
-        .use_lld = !zig_self_hosted_backend,
-        .use_llvm = !zig_self_hosted_backend,
     });
     exe_unit_tests.root_module.addImport("shared", shared);
     exe_unit_tests.root_module.addOptions("testing_options", test_options);
