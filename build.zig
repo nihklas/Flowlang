@@ -67,11 +67,7 @@ pub fn build(b: *Build) !void {
             .{ .name = "shared", .module = shared },
         },
     });
-    compiler_mod.addAnonymousImport("runtime", .{
-        .root_source_file = .{
-            .cwd_relative = b.getInstallPath(.bin, "runtime"),
-        },
-    });
+    compiler_mod.addAnonymousImport("runtime", .{ .root_source_file = runtime.getEmittedBin() });
     const compiler = b.addExecutable(.{ .name = "compiler", .root_module = compiler_mod });
     b.installArtifact(compiler);
     compiler.step.dependOn(&debug_options.step);
