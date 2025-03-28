@@ -29,10 +29,14 @@ pub fn main() !void {
     const bytecode = Compiler.compile(gpa, ast, &sema);
     defer gpa.free(bytecode);
 
-    const output_file = try std.fs.cwd().createFile(output, .{});
+    const output_file = try std.fs.cwd().createFile(output, .{ .mode = 0o755 });
     defer output_file.close();
 
+    try output_file.writeAll(vm);
     try output_file.writeAll(bytecode);
+
+    const bytecode_len: [8]u8 = @bitCast(bytecode.len);
+    try output_file.writeAll(&bytecode_len);
 }
 
 fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
@@ -49,3 +53,5 @@ const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
+
+const vm = @embedFile("runtime");

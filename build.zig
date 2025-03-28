@@ -8,7 +8,6 @@ const LazyPath = Build.LazyPath;
 pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const flow_src = b.option([]const u8, "run", "The path to a .flow file to be executed. Useful for compiler development");
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const dump_bytecode = b.option(bool, "dump", "Dump the Bytecode instead of running the VM") orelse false;
@@ -44,31 +43,39 @@ pub fn build(b: *Build) !void {
     flow_std.addImport("shared", shared);
     shared.addImport("flow_std", flow_std);
 
-    // Compiler executable
-    const compiler = b.addExecutable(.{
-        .name = "compiler",
-        .root_source_file = b.path("src/compiler/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    compiler.root_module.addOptions("debug_options", debug_options);
-    compiler.root_module.addImport("shared", shared);
-    b.installArtifact(compiler);
-
-    // Runtime executable
-    const runtime = b.addExecutable(.{
-        .name = "runtime",
+    // Runtime
+    const runtime_mod = b.addModule("runtime", .{
         .root_source_file = b.path("src/runtime/main.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "debug_options", .module = debug_options.createModule() },
+            .{ .name = "shared", .module = shared },
+        },
     });
-    runtime.root_module.addOptions("debug_options", debug_options);
-    runtime.root_module.addImport("shared", shared);
-    // Add empty file as byte-code input, to allow compilation in lsp check step
-    runtime.root_module.addAnonymousImport("input", .{
-        .root_source_file = b.addWriteFiles().add("dummy", ""),
-    });
+    const runtime = b.addExecutable(.{ .name = "runtime", .root_module = runtime_mod });
     b.installArtifact(runtime);
+    runtime.step.dependOn(&debug_options.step);
+
+    // Compiler
+    const compiler_mod = b.addModule("compiler", .{
+        .root_source_file = b.path("src/compiler/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "debug_options", .module = debug_options.createModule() },
+            .{ .name = "shared", .module = shared },
+        },
+    });
+    compiler_mod.addAnonymousImport("runtime", .{
+        .root_source_file = .{
+            .cwd_relative = b.getInstallPath(.bin, "runtime"),
+        },
+    });
+    const compiler = b.addExecutable(.{ .name = "compiler", .root_module = compiler_mod });
+    b.installArtifact(compiler);
+    compiler.step.dependOn(&debug_options.step);
+    compiler.step.dependOn(&runtime.step);
 
     // Unit tests in compiler and runtime
     const exe_unit_tests = b.addTest(.{
@@ -88,94 +95,10 @@ pub fn build(b: *Build) !void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     // Integration tests
-    try @import("tests/integration.zig").addIntegrationTest(b, shared, debug_options, integration_test_case);
+    try @import("tests/integration.zig").addIntegrationTest(b, compiler, integration_test_case);
 
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
     check_step.dependOn(&compiler.step);
     check_step.dependOn(&runtime.step);
-
-    // Example compilation
-    if (flow_src) |path| {
-        const flow_out = compileImpl(b, .{
-            .name = "flow_out",
-            .source = b.path(path),
-            .target = target,
-            .optimize = optimize,
-        }, compiler, runtime, shared);
-
-        const run_flow = b.addRunArtifact(flow_out);
-        b.getInstallStep().dependOn(&run_flow.step);
-    }
-}
-
-const CompileOptions = struct {
-    target: Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode = .ReleaseSafe,
-    name: []const u8,
-    source: LazyPath,
-    extension: ?Extension = null,
-};
-
-const Extension = struct {
-    modules: []const struct {
-        name: []const u8,
-        module: *Module,
-    },
-    export_file: LazyPath,
-};
-
-pub fn compile(
-    b: *Build,
-    options: CompileOptions,
-) *Compile {
-    const flow = b.dependency("flow", .{
-        .target = options.target,
-        .optimize = options.optimize,
-    });
-    const compiler = flow.artifact("compiler");
-    const runtime = flow.artifact("runtime");
-    const shared = flow.module("shared");
-
-    runtime.name = options.name;
-    runtime.out_filename = options.name;
-
-    return compileImpl(b, options, compiler, runtime, shared);
-}
-
-fn compileImpl(b: *Build, options: CompileOptions, compiler: *Compile, runtime: *Compile, shared: *Module) *Compile {
-    includeExtensions(b, options, shared);
-
-    const compile_step = b.addRunArtifact(compiler);
-    compile_step.addFileArg(options.source);
-    const bytecode = compile_step.addOutputFileArg("out.f");
-
-    runtime.root_module.addAnonymousImport("input", .{
-        .root_source_file = bytecode,
-    });
-    runtime.root_module.optimize = options.optimize;
-
-    return runtime;
-}
-
-fn includeExtensions(b: *Build, options: CompileOptions, shared: *Module) void {
-    const extension_options = b.addOptions();
-    extension_options.addOption(bool, "enabled", options.extension != null);
-
-    if (options.extension) |exts| {
-        const extension = b.addModule("flow_ext", .{
-            .target = options.target,
-            .optimize = options.optimize,
-            .root_source_file = exts.export_file,
-        });
-
-        for (exts.modules) |mod| {
-            mod.module.addImport("shared", shared);
-            extension.addImport(mod.name, mod.module);
-        }
-
-        shared.addImport("flow_ext", extension);
-    }
-
-    shared.addOptions("extensions", extension_options);
 }
