@@ -45,10 +45,14 @@ pub fn main() !void {
         break :out basename[0 .. basename.len - std.fs.path.extension(input).len];
     };
 
-    const output_file = try std.fs.cwd().createFile(output, .{});
-    defer output_file.close();
-
-    const dump_writer = if (dump_to_stdout) std.io.getStdOut().writer() else output_file.writer();
+    const output_file, const output_writer = blk: {
+        if (dump_to_stdout) {
+            break :blk .{ null, std.io.getStdOut().writer() };
+        }
+        const file = try std.fs.cwd().createFile(output, .{});
+        break :blk .{ file, file.writer() };
+    };
+    defer if (output_file) |file| file.close();
 
     const flow_source = try readFile(gpa, input);
     defer gpa.free(flow_source);
@@ -58,7 +62,8 @@ pub fn main() !void {
 
     const ast = try Parser.createAST(arena, tokens);
     if (dump_ast) {
-        ASTDumper.dump(dump_writer, ast);
+        try ASTDumper.dump(output_writer, ast);
+        try output_writer.writeByte('\n');
         return;
     }
 
@@ -89,18 +94,19 @@ fn printHelpAndQuit(exit_code: u8) noreturn {
     const help =
         \\flow_compiler [SOURCE] [OUTPUT] (options)
         \\
-        \\      Options
-        \\          --dump-bc           Dump the resulting Bytecode into the output File 
-        \\                              instead of building an executable
-        \\          --dump-ast          Dump the resulting Abstract Syntax Tree to the output File
-        \\                              instead of building an executable
-        \\          --dump-to-stdout    Dump output of the other dump options are printed to stdout 
-        \\                              instead of the output file
+        \\    Options
+        \\        --dump-bc           Dump the resulting Bytecode into the output File 
+        \\                            instead of building an executable
+        \\        --dump-ast          Dump the resulting Abstract Syntax Tree to the output File
+        \\                            instead of building an executable
+        \\        --stdout            Dump output of the other dump options are printed to stdout 
+        \\                            instead of the output file
+        \\        --help              Print this message
         \\
-        \\      Arguments
-        \\          SOURCE              Path to the .flow Source file
-        \\          OUTPUT              Path to the target output file, 
-        \\                              default is filename of the SOURCE argument without extension
+        \\    Arguments
+        \\        SOURCE              Path to the .flow Source file
+        \\        OUTPUT              Path to the target output file, 
+        \\                            default is filename of the SOURCE argument without extension
         \\
     ;
 
@@ -126,5 +132,6 @@ const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
 
 const vm = @embedFile("runtime");
+
 const ASTDumper = @import("debug/ASTDumper.zig");
 const BytecodeDumper = @import("shared").debug.BytecodeDumper;

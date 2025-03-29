@@ -65,7 +65,6 @@ pub fn build(b: *Build) !void {
         .root_module = runtime_mod,
     });
     b.installArtifact(runtime);
-    runtime.step.dependOn(&debug_options.step);
 
     // Compiler
     const compiler_mod = b.addModule("compiler", .{
@@ -78,9 +77,11 @@ pub fn build(b: *Build) !void {
         },
     });
     compiler_mod.addAnonymousImport("runtime", .{ .root_source_file = runtime.getEmittedBin() });
-    const compiler = b.addExecutable(.{ .name = "compiler", .root_module = compiler_mod });
+    const compiler = b.addExecutable(.{
+        .name = "compiler",
+        .root_module = compiler_mod,
+    });
     b.installArtifact(compiler);
-    compiler.step.dependOn(&debug_options.step);
     compiler.step.dependOn(&runtime.step);
 
     // Unit tests in compiler and runtime
@@ -106,8 +107,7 @@ pub fn build(b: *Build) !void {
     check_step.dependOn(&runtime.step);
 
     const run_compiler = b.addRunArtifact(compiler);
-    run_compiler.addArg("--dump-bc");
-    const compile_step = b.step("compile", "Only run the compiler and dump the resulting bytecode in a human readable form");
+    const compile_step = b.step("compile", "Run the compiler, pass --help to get more information");
     compile_step.dependOn(&run_compiler.step);
 
     if (b.args) |args| {
