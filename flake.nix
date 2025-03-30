@@ -1,9 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-
-    zig-overlay.url = "github:mitchellh/zig-overlay";
-    zig-overlay.inputs.nixpkgs.follows = "nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     zls.url = "github:zigtools/zls/0.14.0";
     zls.inputs.nixpkgs.follows = "nixpkgs";
@@ -11,7 +8,6 @@
 
   outputs = {
     nixpkgs,
-    zig-overlay,
     zls,
     ...
   }: let
@@ -22,24 +18,22 @@
           inherit system;
           target = builtins.replaceStrings ["darwin"] ["macos"] system;
           pkgs = nixpkgs.legacyPackages.${system};
-          zig = zig-overlay.packages.${system}."0.14.0";
         });
   in {
     devShells = eachSystem ({
       system,
       pkgs,
-      zig,
       ...
     }: {
       default = pkgs.mkShellNoCC {
         packages = [
           zls.packages.${system}.default
-          zig
+          pkgs.zig
         ];
       };
 
       pipeline = pkgs.mkShellNoCC {
-        packages = [zig];
+        packages = [pkgs.zig];
       };
     });
   };
