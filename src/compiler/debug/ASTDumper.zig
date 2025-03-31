@@ -5,8 +5,14 @@ pub fn dump(writer: anytype, program: []const *ast.Stmt) !void {
 }
 
 fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
-    try writeIndent(writer, depth);
+    if (stmt.* != .block) {
+        try writeIndent(writer, depth);
+    }
+
     switch (stmt.*) {
+        .block => |block| for (block.stmts) |inner_stmt| {
+            try dumpStmt(writer, inner_stmt, depth);
+        },
         .expr => {
             try writer.writeAll("[Expression Stmt]\n");
             try dumpExpr(writer, stmt.expr.expr, depth + 1);
@@ -33,6 +39,47 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
                 try dumpExpr(writer, value, depth + 1);
             }
         },
+        .@"if" => |if_stmt| {
+            try writer.writeAll("[if Stmt]\n");
+
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Condition)\n");
+            try dumpExpr(writer, if_stmt.condition, depth + 2);
+
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(True Branch)\n");
+            try dumpStmt(writer, if_stmt.true_branch, depth + 2);
+
+            if (if_stmt.false_branch) |false_branch| {
+                try writeIndent(writer, depth + 1);
+                try writer.writeAll("(False Branch)\n");
+                try dumpStmt(writer, false_branch, depth + 2);
+            }
+        },
+        .loop => |loop| {
+            try writer.writeAll("[loop Stmt]\n");
+
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Condition)\n");
+            try dumpExpr(writer, loop.condition, depth + 2);
+
+            if (loop.inc) |inc| {
+                try writeIndent(writer, depth + 1);
+                try writer.writeAll("(Increment)\n");
+                try dumpStmt(writer, inc, depth + 2);
+            }
+
+            if (loop.body.len > 0) {
+                try writeIndent(writer, depth + 1);
+                try writer.writeAll("(Body)\n");
+                for (loop.body) |body_stmt| {
+                    if (body_stmt == loop.inc) continue;
+                    try dumpStmt(writer, body_stmt, depth + 2);
+                }
+            }
+        },
+        .@"break" => try writer.writeAll("[Break Stmt]\n"),
+        .@"continue" => try writer.writeAll("[Continue Stmt]\n"),
         else => std.debug.panic("{s}-Stmt is not supported in printing yet", .{@tagName(stmt.*)}),
     }
 }
