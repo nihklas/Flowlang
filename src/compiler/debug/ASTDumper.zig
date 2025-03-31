@@ -10,6 +10,8 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
     }
 
     switch (stmt.*) {
+        .@"break" => try writer.writeAll("[Break Stmt]\n"),
+        .@"continue" => try writer.writeAll("[Continue Stmt]\n"),
         .block => |block| for (block.stmts) |inner_stmt| {
             try dumpStmt(writer, inner_stmt, depth);
         },
@@ -78,22 +80,52 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
                 }
             }
         },
-        .@"break" => try writer.writeAll("[Break Stmt]\n"),
-        .@"continue" => try writer.writeAll("[Continue Stmt]\n"),
-        else => std.debug.panic("{s}-Stmt is not supported in printing yet", .{@tagName(stmt.*)}),
+        .function => |function| {
+            try writer.print("[Function Declaration '{s}' ", .{function.name.lexeme});
+            for (0..function.ret_type.order) |_| {
+                try writer.writeAll("[]");
+            }
+            try writer.print("'{s}']\n", .{function.ret_type.type.lexeme});
+
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Parameters)\n");
+            for (function.params) |param| {
+                try dumpStmt(writer, param, depth + 2);
+            }
+
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Body)\n");
+            for (function.body) |body_stmt| {
+                try dumpStmt(writer, body_stmt, depth + 2);
+            }
+        },
+        .@"return" => {
+            try writer.writeAll("[Return Stmt]\n");
+            if (stmt.@"return".value) |value| {
+                try dumpExpr(writer, value, depth + 1);
+            }
+        },
+        .channel, .channel_read, .channel_write => @panic("Channels are not yet support"),
     }
 }
 
 fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
     try writeIndent(writer, depth);
     switch (expr.*) {
+        .literal => |literal| try writer.print("(Literal Expr '{s}')\n", .{literal.token.lexeme}),
+        .grouping => |group| {
+            try writer.writeAll("(Grouping Expr)\n");
+            try dumpExpr(writer, group.expr, depth + 1);
+        },
         .binary => |binary| {
             try writer.print("(Binary Expr '{s}')\n", .{binary.op.lexeme});
             try dumpExpr(writer, binary.lhs, depth + 1);
             try dumpExpr(writer, binary.rhs, depth + 1);
         },
-        .literal => |literal| {
-            try writer.print("(Literal Expr '{s}')\n", .{literal.token.lexeme});
+        .logical => |logical| {
+            try writer.print("(Logical Expr '{s}')\n", .{logical.op.lexeme});
+            try dumpExpr(writer, logical.lhs, depth + 1);
+            try dumpExpr(writer, logical.rhs, depth + 1);
         },
         .call => |call| {
             try writer.writeAll("(Call Expr)\n");
@@ -117,7 +149,10 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
             try writer.print("(Assignment Expr '{s}')\n", .{assign.name.lexeme});
             try dumpExpr(writer, assign.value, depth + 1);
         },
-        else => std.debug.panic("{s}-Expr is not supported in printing yet", .{@tagName(expr.*)}),
+        .append => |append| {
+            try writer.print("(Append Expr '{s}')\n", .{append.name.lexeme});
+            try dumpExpr(writer, append.value, depth + 1);
+        },
     }
 }
 
