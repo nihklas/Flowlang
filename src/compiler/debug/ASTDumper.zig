@@ -50,13 +50,25 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
         },
         .call => |call| {
             try writer.writeAll("(Call Expr)\n");
-            try dumpExpr(writer, call.expr, depth + 1);
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Callee)\n");
+            try dumpExpr(writer, call.expr, depth + 2);
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Arguments)\n");
             for (call.args) |arg| {
-                try dumpExpr(writer, arg, depth + 1);
+                try dumpExpr(writer, arg, depth + 2);
             }
         },
         .variable => |variable| {
             try writer.print("(Variable Expr '{s}')\n", .{variable.name.lexeme});
+        },
+        .unary => |unary| {
+            try writer.print("(Unary Expr '{s}')\n", .{unary.op.lexeme});
+            try dumpExpr(writer, unary.expr, depth + 1);
+        },
+        .assignment => |assign| {
+            try writer.print("(Assignment Expr '{s}')\n", .{assign.name.lexeme});
+            try dumpExpr(writer, assign.value, depth + 1);
         },
         else => std.debug.panic("{s}-Expr is not supported in printing yet", .{@tagName(expr.*)}),
     }
@@ -67,8 +79,6 @@ fn writeIndent(writer: anytype, depth: usize) !void {
     for (0..depth * DEPTH_DISTANCE) |i| {
         if (i % DEPTH_DISTANCE == 0) {
             try writer.writeByte('|');
-        } else if (i + DEPTH_DISTANCE > depth + 1) {
-            try writer.writeByte('-');
         } else {
             try writer.writeByte(' ');
         }
