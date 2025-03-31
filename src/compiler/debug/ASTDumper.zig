@@ -11,6 +11,28 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
             try writer.writeAll("[Expression Stmt]\n");
             try dumpExpr(writer, stmt.expr.expr, depth + 1);
         },
+        .variable => |variable| {
+            try writer.writeAll("[");
+            if (variable.constant) {
+                try writer.writeAll("Constant ");
+            } else {
+                try writer.writeAll("Variable ");
+            }
+            try writer.print("'{s}'", .{variable.name.lexeme});
+
+            if (variable.type_hint) |type_hint| {
+                try writer.writeAll(" ");
+                for (0..type_hint.order) |_| {
+                    try writer.writeAll("[]");
+                }
+                try writer.print("'{s}'", .{type_hint.type.lexeme});
+            }
+
+            try writer.writeAll("]\n");
+            if (variable.value) |value| {
+                try dumpExpr(writer, value, depth + 1);
+            }
+        },
         else => std.debug.panic("{s}-Stmt is not supported in printing yet", .{@tagName(stmt.*)}),
     }
 }
@@ -25,6 +47,16 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
         },
         .literal => |literal| {
             try writer.print("(Literal Expr '{s}')\n", .{literal.token.lexeme});
+        },
+        .call => |call| {
+            try writer.writeAll("(Call Expr)\n");
+            try dumpExpr(writer, call.expr, depth + 1);
+            for (call.args) |arg| {
+                try dumpExpr(writer, arg, depth + 1);
+            }
+        },
+        .variable => |variable| {
+            try writer.print("(Variable Expr '{s}')\n", .{variable.name.lexeme});
         },
         else => std.debug.panic("{s}-Expr is not supported in printing yet", .{@tagName(expr.*)}),
     }
