@@ -41,6 +41,7 @@ pub fn main() !void {
 
     const input = input_arg orelse printHelpAndQuit(1);
     const output = output_arg orelse out: {
+        // Use only the base filename of the input file
         const basename = std.fs.path.basename(input);
         break :out basename[0 .. basename.len - std.fs.path.extension(input).len];
     };
