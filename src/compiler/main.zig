@@ -38,6 +38,7 @@ pub fn main() !void {
             dump_to_stdout = true;
         }
     }
+    dump_to_stdout = dump_to_stdout and (dump_bc or dump_ast);
 
     const input = input_arg orelse printHelpAndQuit(1);
     const output = output_arg orelse out: {
@@ -68,15 +69,15 @@ pub fn main() !void {
         return;
     }
 
-    // var sema: Sema = .init(gpa, ast);
-    // defer sema.deinit();
-    // try sema.analyse();
-    //
+    var sema: Sema = .init(gpa, ast);
+    defer sema.deinit();
+    try sema.analyse();
+
     // const bytecode = Compiler.compile(gpa, ast, &sema);
     // defer gpa.free(bytecode);
     //
     // if (dump_bc) {
-    //     BytecodeDumper.dump(output_file.writer().any(), bytecode);
+    //     BytecodeDumper.dump(output_writer.any(), bytecode);
     //     return;
     // }
     //
