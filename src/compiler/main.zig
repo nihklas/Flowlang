@@ -7,63 +7,25 @@ pub fn main() !void {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var args = std.process.args();
-    _ = args.next(); // skip program name
-
-    var argument_counter: usize = 0;
-    var input_arg: ?[]const u8 = null;
-    var output_arg: ?[]const u8 = null;
-    var dump_bc = debug_options.dump_bc;
-    var dump_ast = debug_options.dump_ast;
-    var dump_to_stdout = false;
-    while (args.next()) |argument| {
-        if (!std.mem.startsWith(u8, argument, "--")) {
-            switch (argument_counter) {
-                0 => input_arg = argument,
-                1 => output_arg = argument,
-                else => {},
-            }
-
-            argument_counter += 1;
-            continue;
-        }
-
-        if (std.mem.eql(u8, argument, "--dump-bc")) {
-            dump_bc = true;
-        } else if (std.mem.eql(u8, argument, "--dump-ast")) {
-            dump_ast = true;
-        } else if (std.mem.eql(u8, argument, "--help")) {
-            printHelpAndQuit(0);
-        } else if (std.mem.eql(u8, argument, "--stdout")) {
-            dump_to_stdout = true;
-        }
-    }
-    dump_to_stdout = dump_to_stdout and (dump_bc or dump_ast);
-
-    const input = input_arg orelse printHelpAndQuit(1);
-    const output = output_arg orelse out: {
-        // Use only the base filename of the input file
-        const basename = std.fs.path.basename(input);
-        break :out basename[0 .. basename.len - std.fs.path.extension(input).len];
-    };
+    const cli_opts = @import("cli.zig").parse();
 
     const output_file, const output_writer = blk: {
-        if (dump_to_stdout) {
+        if (cli_opts.dump_stdout) {
             break :blk .{ null, std.io.getStdOut().writer() };
         }
-        const file = try std.fs.cwd().createFile(output, .{});
+        const file = try std.fs.cwd().createFile(cli_opts.output, .{});
         break :blk .{ file, file.writer() };
     };
     defer if (output_file) |file| file.close();
 
-    const flow_source = try readFile(gpa, input);
+    const flow_source = try readFile(gpa, cli_opts.source);
     defer gpa.free(flow_source);
 
     const tokens = try Scanner.scan(gpa, flow_source);
     defer gpa.free(tokens);
 
     const ast = try Parser.createAST(arena, tokens);
-    if (dump_ast) {
+    if (cli_opts.dump_ast) {
         try ASTDumper.dump(output_writer, ast);
         try output_writer.writeByte('\n');
         return;
