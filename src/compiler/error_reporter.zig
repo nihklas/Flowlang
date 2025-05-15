@@ -1,14 +1,18 @@
 pub var source: []const u8 = "";
 
 pub fn reportError(token: Token, comptime fmt: []const u8, args: anytype) void {
-    stderr.print(fmt, args) catch {};
-    stderr.print(" at {d}:{d}\n", .{ token.line, token.column }) catch {};
-    stderr.print("{d: >4} | {s}\n", .{ token.line, getLineAt(token.line) orelse "" }) catch {};
-    stderr.writeAll("       ") catch {};
+    reportErrorFailing(token, fmt, args) catch {};
+}
+
+fn reportErrorFailing(token: Token, comptime fmt: []const u8, args: anytype) !void {
+    try stderr.print(fmt, args);
+    try stderr.print(" at {d}:{d}\n", .{ token.line, token.column });
+    try stderr.print("{d: >4} | {s}\n", .{ token.line, getLineAt(token.line) orelse "" });
+    try stderr.writeAll("       ");
     for (0..token.column - 1) |_| {
-        stderr.writeByte(' ') catch {};
+        try stderr.writeByte(' ');
     }
-    stderr.writeAll("^~~~~ Here\n") catch {};
+    try stderr.writeAll("^~~~~ Here\n");
 }
 
 fn getLineAt(line_num: usize) ?[]const u8 {

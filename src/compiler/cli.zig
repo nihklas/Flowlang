@@ -1,4 +1,4 @@
-const Options = struct {
+pub const Options = struct {
     source: []const u8,
     output: []const u8,
     dump_bc: bool = debug_options.dump_bc,

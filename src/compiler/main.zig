@@ -7,16 +7,7 @@ pub fn main() !void {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    const cli_opts = @import("cli.zig").parse();
-
-    const output_file, const output_writer = blk: {
-        if (cli_opts.dump_stdout) {
-            break :blk .{ null, std.io.getStdOut().writer() };
-        }
-        const file = try std.fs.cwd().createFile(cli_opts.output, .{});
-        break :blk .{ file, file.writer() };
-    };
-    defer if (output_file) |file| file.close();
+    const cli_opts = cli.parse();
 
     const flow_source = try readFile(gpa, cli_opts.source);
     defer gpa.free(flow_source);
@@ -26,8 +17,14 @@ pub fn main() !void {
 
     const ast = try Parser.createAST(arena, tokens);
     if (cli_opts.dump_ast) {
-        try ASTDumper.dump(output_writer, ast);
-        try output_writer.writeByte('\n');
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        defer buf.deinit(gpa);
+
+        const writer = buf.writer(gpa);
+        try ASTDumper.dump(writer, ast);
+        try writer.writeByte('\n');
+
+        try writeOutput(buf.items, cli_opts);
         return;
     }
 
@@ -54,29 +51,16 @@ pub fn main() !void {
     // try output_file.writeAll(bytecode);
 }
 
-fn printHelpAndQuit(exit_code: u8) noreturn {
-    const help =
-        \\flow_compiler [SOURCE] [OUTPUT] (options)
-        \\
-        \\    Options
-        \\        --dump-bc           Dump the resulting Bytecode into the output File 
-        \\                            instead of building an executable
-        \\        --dump-ast          Dump the resulting Abstract Syntax Tree to the output File
-        \\                            instead of building an executable
-        \\        --stdout            Dump output of the other dump options are printed to stdout 
-        \\                            instead of the output file
-        \\        --help              Print this message
-        \\
-        \\    Arguments
-        \\        SOURCE              Path to the .flow Source file
-        \\        OUTPUT              Path to the target output file, 
-        \\                            default is filename of the SOURCE argument without extension
-        \\
-    ;
+fn writeOutput(output: []const u8, cli_opts: cli.Options) !void {
+    if (cli_opts.dump_stdout) {
+        try std.io.getStdOut().writeAll(output);
+        return;
+    }
 
-    std.io.getStdErr().writeAll(help) catch {};
+    const file = try std.fs.cwd().createFile(cli_opts.output, .{});
+    defer file.close();
 
-    std.posix.exit(exit_code);
+    try file.writeAll(output);
 }
 
 fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
@@ -94,6 +78,8 @@ const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
+
+const cli = @import("cli.zig");
 
 const vm = @embedFile("runtime");
 
