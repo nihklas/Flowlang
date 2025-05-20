@@ -3,11 +3,11 @@ byte_code: std.ArrayList(u8),
 constants: []const FlowValue,
 loop_levels: Stack(LoopLevel, 256),
 
-pub fn compile(alloc: Allocator, program: []const *Stmt, sema: *Sema) []const u8 {
+pub fn compile(alloc: Allocator, program: []const *Stmt, constants: []const FlowValue) []const u8 {
     var compiler: Compiler = .{
         .alloc = alloc,
         .byte_code = .init(alloc),
-        .constants = sema.constants.items,
+        .constants = constants,
         .loop_levels = .init(alloc),
     };
     defer compiler.loop_levels.deinit(alloc);

@@ -1,7 +1,2 @@
-const msg = "Hallo";
+1 + 2;
 
-print(msg);
-
-for var i = 0; i < 10; i = i + 1 {
-    print("Counter: " . i);
-}

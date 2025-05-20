@@ -32,23 +32,36 @@ pub fn main() !void {
     defer sema.deinit();
     try sema.analyse();
 
+    // TODO: Optimisatios
+    // - Dead Code Elimination
+    // - Constants evaluation
+
     // const bytecode = Compiler.compile(gpa, ast, &sema);
     // defer gpa.free(bytecode);
     //
-    // if (dump_bc) {
-    //     BytecodeDumper.dump(output_writer.any(), bytecode);
+    // if (cli_opts.dump_bc) {
+    //     var buf: std.ArrayListUnmanaged(u8) = .empty;
+    //     defer buf.deinit(gpa);
+    //
+    //     const writer = buf.writer(gpa);
+    //     BytecodeDumper.dump(writer.any(), bytecode);
+    //
+    //     try writeOutput(buf.items, cli_opts);
     //     return;
     // }
     //
-    // try output_file.chmod(0o755);
+    // const file = try std.fs.cwd().createFile(cli_opts.output, .{});
+    // defer file.close();
     //
-    // try output_file.writeAll(vm);
-    // try output_file.writeAll(bytecode);
+    // try file.chmod(0o755);
+    //
+    // try file.writeAll(vm);
+    // try file.writeAll(bytecode);
     //
     // const bytecode_len: [8]u8 = @bitCast(bytecode.len);
-    // try output_file.writeAll(&bytecode_len);
+    // try file.writeAll(&bytecode_len);
     //
-    // try output_file.writeAll(bytecode);
+    // try file.writeAll(bytecode);
 }
 
 fn writeOutput(output: []const u8, cli_opts: cli.Options) !void {
