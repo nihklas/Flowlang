@@ -5,12 +5,14 @@ pub const TypeHint = struct {
 };
 
 pub const Expr = union(enum) {
-    pub const Literal = union(enum) {
+    pub const Literal = union(FlowType) {
         null: void,
         bool: bool,
         int: Integer,
         float: Float,
         string: []const u8,
+        builtin_fn: void,
+        function: void,
     };
 
     literal: struct { token: Token, value: Literal },

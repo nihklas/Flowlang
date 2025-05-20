@@ -26,7 +26,7 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
             } else {
                 try writer.writeAll("Variable ");
             }
-            try writer.print("'{s}'", .{variable.name.lexeme});
+            try writer.print("Stmt '{s}'", .{variable.name.lexeme});
 
             if (variable.type_hint) |type_hint| {
                 try writer.writeAll(" ");
