@@ -2,15 +2,12 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    zig2nix.url = "github:Cloudef/zig2nix";
-
     zls.url = "github:nihklas/zls/0.14.0";
     zls.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = {
     nixpkgs,
-    zig2nix,
     zls,
     ...
   }: let
@@ -21,28 +18,30 @@
           inherit system;
           target = builtins.replaceStrings ["darwin"] ["macos"] system;
           pkgs = nixpkgs.legacyPackages.${system};
-          zig = zig2nix.packages.${system}.zig-0_14_0;
         });
   in {
     devShells = eachSystem ({
       system,
       pkgs,
-      zig,
       ...
     }: {
       default = pkgs.mkShellNoCC {
         packages = [
           zls.packages.${system}.default
-          zig
+          pkgs.zig
         ];
       };
 
       pipeline = pkgs.mkShellNoCC {
-        packages = [zig];
+        packages = [pkgs.zig];
       };
     });
 
-    packages = eachSystem ({pkgs, target, ...}: {
+    packages = eachSystem ({
+      pkgs,
+      target,
+      ...
+    }: {
       default = pkgs.stdenvNoCC.mkDerivation {
         name = "flowc";
         src = ./.;
