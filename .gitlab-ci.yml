@@ -3,11 +3,10 @@ stages:
 
 tests:
   stage: test
-  image: nixos/nix
-  before_script:
-    - echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
   script:
-    - nix develop --command bash -c "zig build check --summary all"
-    - nix develop --command bash -c "zig build unit-test --summary all"
-    - nix develop --command bash -c "zig build integration-test --summary all"
+    - nix develop .#pipeline --command bash -c "zig build check --summary all"
+    - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
+    - nix develop .#pipeline --command bash -c "zig build integration-test --summary all"
+  tags:
+    - nix
 
