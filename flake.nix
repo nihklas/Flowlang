@@ -36,6 +36,20 @@
         packages = [pkgs.zig];
       };
     });
+
+    packages = eachSystem ({pkgs, ...}: {
+      default = pkgs.stdenvNoCC.mkDerivation {
+        name = "flowc";
+        src = ./.;
+        nativeBuildInputs = [pkgs.zig];
+        buildPhase = ''
+          zig build -Doptimize=ReleaseSafe --global-cache-dir "$(mktemp -d)"
+        '';
+        installPhase = ''
+          mkdir -p $out
+          mv zig-out/bin/compiler $out/flowc
+        '';
+      };
+    });
   };
 }
-
