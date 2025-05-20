@@ -46,8 +46,8 @@
           zig build -Doptimize=ReleaseSafe --global-cache-dir "$(mktemp -d)"
         '';
         installPhase = ''
-          mkdir -p $out
-          mv zig-out/bin/compiler $out/flowc
+          mkdir -p $out/bin
+          mv zig-out/bin/compiler $out/bin/flowc
         '';
       };
     });
