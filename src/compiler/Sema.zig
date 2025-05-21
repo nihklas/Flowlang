@@ -26,11 +26,6 @@ pub fn deinit(self: *Sema) void {
 ///
 /// collects all errors in a list and prints them through `error_reporter.zig`.
 pub fn analyse(self: *Sema) !void {
-    // TODO: analysis
-
-    // can i just iterate over everything once or do i need multiple passes?
-    // -> I try for once, if it aint working i do more passes
-
     for (self.program) |stmt| {
         self.analyseStmt(stmt);
     }
@@ -44,7 +39,52 @@ pub fn analyse(self: *Sema) !void {
 fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
     switch (stmt.*) {
         .expr => |expr_stmt| self.analyseExpr(expr_stmt.expr),
-        else => std.debug.panic("Unhandled Stmt type: {s}\n", .{@tagName(stmt.*)}),
+        .block => |block_stmt| {
+            // TODO: add scope level|
+            for (block_stmt.stmts) |inner_stmt| {
+                self.analyseStmt(inner_stmt);
+            }
+        },
+        .loop => |loop_stmt| {
+            self.analyseExpr(loop_stmt.condition);
+            for (loop_stmt.body) |inner_stmt| {
+                self.analyseStmt(inner_stmt);
+            }
+            if (loop_stmt.inc) |inc| {
+                self.analyseStmt(inc);
+            }
+        },
+        .@"break", .@"continue" => {},
+        .@"if" => |if_stmt| {
+            self.analyseExpr(if_stmt.condition);
+            self.analyseStmt(if_stmt.true_branch);
+            if (if_stmt.false_branch) |false_branch| {
+                self.analyseStmt(false_branch);
+            }
+        },
+        .channel, .channel_read, .channel_write => std.debug.panic("Channels are not yet supported\n", .{}),
+        .variable => |var_stmt| {
+            // TODO: Variable handling
+            if (var_stmt.value) |value| {
+                self.analyseExpr(value);
+            }
+            // TODO: Variables have to have either a type hint or initial value
+        },
+        .function => |function| {
+            // TODO: assign callable to variable handling
+            // TODO: open scope
+            for (function.params) |param| {
+                self.analyseStmt(param);
+            }
+            for (function.body) |inner_stmt| {
+                self.analyseStmt(inner_stmt);
+            }
+        },
+        .@"return" => |return_stmt| {
+            if (return_stmt.value) |value| {
+                self.analyseExpr(value);
+            }
+        },
     }
 }
 

@@ -144,6 +144,7 @@ pub const Stmt = union(enum) {
     channel_read: struct { channel: Token, result: Token },
     channel_write: struct { channel: Token, value: *Expr },
     channel: struct { name: Token, type: FlowType },
+
     variable: struct {
         name: Token,
         constant: bool,
