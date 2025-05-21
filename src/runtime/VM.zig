@@ -133,14 +133,14 @@ fn runWhileSwitch(self: *VM) void {
                 const constant = self.constants[self.byte()];
                 self.push(constant);
             },
-            .negate => {
+            .negate_i => {
                 const value = self.pop();
-                const negated: FlowValue = switch (value) {
-                    .float => .{ .float = -value.float },
-                    .int => .{ .int = -value.int },
-
-                    .null, .bool, .string, .builtin_fn, .function => unreachable,
-                };
+                const negated: FlowValue = .{ .int = -value.int };
+                self.push(negated);
+            },
+            .negate_f => {
+                const value = self.pop();
+                const negated: FlowValue = .{ .float = -value.float };
                 self.push(negated);
             },
             .not => {

@@ -16,7 +16,7 @@ pub const Expr = union(enum) {
     };
 
     literal: struct { token: Token, value: Literal },
-    grouping: struct { expr: *Expr },
+    grouping: struct { token: Token, expr: *Expr },
     unary: struct { op: Token, expr: *Expr },
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
@@ -33,10 +33,10 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
-    pub fn createGrouping(alloc: Allocator, expr: *Expr) *Expr {
+    pub fn createGrouping(alloc: Allocator, token: Token, expr: *Expr) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
-            .grouping = .{ .expr = expr },
+            .grouping = .{ .token = token, .expr = expr },
         };
         return new_expr;
     }
@@ -125,7 +125,7 @@ pub const Expr = union(enum) {
     pub fn getToken(self: *Expr) Token {
         return switch (self.*) {
             .literal => self.literal.token,
-            .grouping => self.grouping.expr.getToken(),
+            .grouping => self.grouping.token,
             .unary => self.unary.op,
             .binary => self.binary.op,
             .logical => self.logical.op,

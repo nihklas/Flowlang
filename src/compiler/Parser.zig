@@ -479,13 +479,13 @@ fn primary(self: *Parser) ParserError!*Expr {
         return Expr.createVariable(self.alloc, token);
     }
 
-    if (self.match(.@"(")) |_| {
+    if (self.match(.@"(")) |open_paren| {
         const expr = try self.expression();
         errdefer expr.destroy(self.alloc);
 
         try self.consume(.@")", "Expected ')' after Expression");
 
-        return Expr.createGrouping(self.alloc, expr);
+        return Expr.createGrouping(self.alloc, open_paren, expr);
     }
 
     error_reporter.reportError(self.peek(), "UnexpectedToken: Expected Expression, got '{s}'", .{@tagName(self.peek().type)});

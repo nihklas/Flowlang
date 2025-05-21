@@ -14,7 +14,8 @@ pub const OpCode = enum(u8) {
     pop,
     constant,
 
-    negate,
+    negate_i,
+    negate_f,
     not,
 
     concat,

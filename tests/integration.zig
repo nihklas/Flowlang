@@ -1,9 +1,3 @@
-const std = @import("std");
-const File = std.fs.File;
-const Step = std.Build.Step;
-const Module = std.Build.Module;
-const Compile = Step.Compile;
-
 const cases_dir = "tests/cases";
 const split_marker = "=====";
 
@@ -47,10 +41,10 @@ fn buildTest(
     integration_tests: *Step,
 ) !void {
     const test_content = try test_file.readToEndAlloc(b.allocator, 1024 * 1024); // 1 MB
-    const split_mark = std.mem.indexOf(u8, test_content, split_marker) orelse return error.MalformedTestCase;
 
-    const flow_src = test_content[0..split_mark];
-    const expected = std.mem.trimLeft(u8, test_content[split_mark + split_marker.len ..], " \n");
+    var iterator = std.mem.splitSequence(u8, test_content, split_marker);
+    const flow_src = iterator.next().?;
+    const expected = iterator.next() orelse return error.MalformedTestCase;
 
     const write_file = b.addWriteFiles();
     const src_path = write_file.add("code.flow", flow_src);
@@ -88,3 +82,8 @@ fn makeTest(
 }
 
 const builtin = @import("builtin");
+const std = @import("std");
+const File = std.fs.File;
+const Step = std.Build.Step;
+const Module = std.Build.Module;
+const Compile = Step.Compile;

@@ -51,6 +51,24 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
 fn analyseExpr(self: *Sema, expr: *const Expr) void {
     switch (expr.*) {
         .literal => self.putType(expr, expr.literal.value),
+        .grouping => {
+            self.analyseExpr(expr.grouping.expr);
+            self.putType(expr, self.getType(expr.grouping.expr).?);
+        },
+        .unary => |unary| {
+            self.analyseExpr(unary.expr);
+            switch (unary.op.type) {
+                .@"-" => {
+                    const value_type = self.getType(unary.expr).?;
+                    if (value_type != .int and value_type != .float) {
+                        self.pushError(.{ .token = unary.op, .err = TypeError.NegateWithNonNumeric });
+                    }
+                    self.putType(expr, value_type);
+                },
+                .@"!" => self.putType(expr, .bool),
+                else => unreachable,
+            }
+        },
         .binary => |binary| {
             self.analyseExpr(binary.lhs);
             self.analyseExpr(binary.rhs);
@@ -66,14 +84,17 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                     self.putType(expr, .bool);
                 },
                 .@"<", .@"<=", .@">=", .@">", .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => {
-                    if (left_type != right_type) {
-                        self.pushError(.{ .token = binary.op, .err = TypeError.ArithmeticWithUnequalTypes });
-                    }
+                    var both_numeric = true;
                     if (left_type != .int and left_type != .float) {
                         self.pushError(.{ .token = binary.lhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric });
+                        both_numeric = false;
                     }
                     if (right_type != .int and right_type != .float) {
                         self.pushError(.{ .token = binary.rhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric });
+                        both_numeric = false;
+                    }
+                    if (both_numeric and left_type != right_type) {
+                        self.pushError(.{ .token = binary.op, .err = TypeError.ArithmeticWithUnequalTypes });
                     }
                     // as they have to be of equal types, we can just use one of them to keep going.
                     // we go with the left one just because.
@@ -108,6 +129,7 @@ fn printError(self: *Sema) void {
             TypeError.EqualityCheckOfUnequalTypes => error_reporter.reportError(e.token, "Operands of Equality-Check (== and !=) have to be of the same type", .{}),
             TypeError.ArithmeticWithNonNumeric => error_reporter.reportError(e.token, "Operand of Arithmetic Operations has to be either int or float", .{}),
             TypeError.ArithmeticWithUnequalTypes => error_reporter.reportError(e.token, "Operands of Arithmetic Operations have to be of the same numeric type", .{}),
+            TypeError.NegateWithNonNumeric => error_reporter.reportError(e.token, "Operand of Negate Operations has to be either int or float", .{}),
         }
     }
 }
@@ -127,6 +149,7 @@ const TypeError = error{
     EqualityCheckOfUnequalTypes,
     ArithmeticWithNonNumeric,
     ArithmeticWithUnequalTypes,
+    NegateWithNonNumeric,
 };
 
 // TODO: Add warnings?
