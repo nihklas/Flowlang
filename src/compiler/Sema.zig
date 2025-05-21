@@ -3,6 +3,7 @@ program: []const *Stmt,
 errors: ErrorList = .empty,
 types: TypeTable = .empty,
 variables: VariableList = .empty,
+current_scope: u8 = 0,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
@@ -40,7 +41,9 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
     switch (stmt.*) {
         .expr => |expr_stmt| self.analyseExpr(expr_stmt.expr),
         .block => |block_stmt| {
-            // TODO: add scope level|
+            self.scopeIncr();
+            defer self.scopeDecr();
+
             for (block_stmt.stmts) |inner_stmt| {
                 self.analyseStmt(inner_stmt);
             }
@@ -78,6 +81,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 .name = var_stmt.name,
                 .constant = var_stmt.constant,
                 .type = self.typeFromVariable(stmt),
+                .scope = self.current_scope,
             };
             // TODO: Check for duplicate variable name
             self.putVariable(variable);
@@ -236,6 +240,25 @@ fn findVariable(self: *Sema, name: Token) ?Variable {
     return null;
 }
 
+fn scopeIncr(self: *Sema) void {
+    self.current_scope += 1;
+}
+
+fn scopeDecr(self: *Sema) void {
+    self.current_scope -= 1;
+
+    var write_idx: usize = 0;
+    for (self.variables.items, 0..) |variable, read_idx| {
+        if (variable.scope <= self.current_scope) {
+            if (write_idx != read_idx) {
+                self.variables.items[write_idx] = variable;
+            }
+            write_idx += 1;
+        }
+    }
+    self.variables.shrinkRetainingCapacity(write_idx);
+}
+
 fn isCallable(t: FlowType) bool {
     return t == .function or t == .builtin_fn;
 }
@@ -303,6 +326,7 @@ const Variable = struct {
     name: Token,
     constant: bool,
     type: FlowType,
+    scope: u8,
 };
 
 const Sema = @This();

@@ -1,9 +1,14 @@
 pub fn main() !void {
-    var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer std.debug.assert(gpa_state.deinit() == .ok);
-    const gpa = gpa_state.allocator();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const gpa, const is_debug = switch (@import("builtin").mode) {
+        .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+    };
+    defer if (is_debug) {
+        _ = debug_allocator.deinit();
+    };
 
-    var arena_state: std.heap.ArenaAllocator = .init(gpa_state.allocator());
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 

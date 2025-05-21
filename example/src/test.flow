@@ -15,7 +15,10 @@ const foo = "Hallo";
 var sup: int;
 var wassup: int = 2.0;
 var bar = 1.5;
-var p;
+{
+    var p;
+    var notfound = "i am here!";
+}
 
 1 + hallo;
 1 + foo;
