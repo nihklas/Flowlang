@@ -21,7 +21,6 @@ pub const Expr = union(enum) {
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
     assignment: struct { name: Token, value: *Expr },
-    append: struct { name: Token, value: *Expr },
     variable: struct { name: Token },
     call: struct { expr: *Expr, args: []*Expr },
 
@@ -73,14 +72,6 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
-    pub fn createAppend(alloc: Allocator, name: Token, expr: *Expr) *Expr {
-        const new_expr = Expr.create(alloc);
-        new_expr.* = .{
-            .append = .{ .name = name, .value = expr },
-        };
-        return new_expr;
-    }
-
     pub fn createVariable(alloc: Allocator, name: Token) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
@@ -104,7 +95,6 @@ pub const Expr = union(enum) {
             .grouping => |grouping| grouping.expr.destroy(alloc),
             .unary => |unary| unary.expr.destroy(alloc),
             .assignment => |assignment| assignment.value.destroy(alloc),
-            .append => |append| append.value.destroy(alloc),
             .binary => |binary| {
                 binary.lhs.destroy(alloc);
                 binary.rhs.destroy(alloc);
@@ -130,7 +120,6 @@ pub const Expr = union(enum) {
             .binary => self.binary.op,
             .logical => self.logical.op,
             .assignment => self.assignment.name,
-            .append => self.append.name,
             .variable => self.variable.name,
             .call => self.call.expr.getToken(),
         };

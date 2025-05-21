@@ -69,6 +69,11 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 else => unreachable,
             }
         },
+        .logical => |logical| {
+            self.analyseExpr(logical.lhs);
+            self.analyseExpr(logical.rhs);
+            self.putType(expr, .bool);
+        },
         .binary => |binary| {
             self.analyseExpr(binary.lhs);
             self.analyseExpr(binary.rhs);

@@ -149,10 +149,6 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
             try writer.print("(Assignment Expr '{s}')\n", .{assign.name.lexeme});
             try dumpExpr(writer, assign.value, depth + 1);
         },
-        .append => |append| {
-            try writer.print("(Append Expr '{s}')\n", .{append.name.lexeme});
-            try dumpExpr(writer, append.value, depth + 1);
-        },
     }
 }
 
