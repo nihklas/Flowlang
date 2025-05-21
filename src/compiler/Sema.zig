@@ -69,11 +69,6 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 else => unreachable,
             }
         },
-        .logical => |logical| {
-            self.analyseExpr(logical.lhs);
-            self.analyseExpr(logical.rhs);
-            self.putType(expr, .bool);
-        },
         .binary => |binary| {
             self.analyseExpr(binary.lhs);
             self.analyseExpr(binary.rhs);
@@ -110,7 +105,29 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 else => unreachable,
             }
         },
-        else => std.debug.panic("Unhandled Expr type: {s}\n", .{@tagName(expr.*)}),
+        .logical => |logical| {
+            self.analyseExpr(logical.lhs);
+            self.analyseExpr(logical.rhs);
+            self.putType(expr, .bool);
+        },
+        .assignment => |assignment| {
+            self.analyseExpr(assignment.value);
+            // TODO: Check for existing variable and check if expected type is correct
+            self.putType(expr, self.getType(assignment.value).?);
+        },
+        .variable => std.debug.panic("Variable Expressions are not yet supported bei Sema\n", .{}),
+        .call => |call| {
+            self.analyseExpr(call.expr);
+            for (call.args) |arg_expr| {
+                self.analyseExpr(arg_expr);
+            }
+
+            if (!isCallable(self.getType(call.expr).?)) {
+                self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable });
+            }
+            // TODO: resolve correct return type
+            self.putType(expr, .null);
+        },
     }
 }
 
@@ -126,6 +143,10 @@ fn pushError(self: *Sema, err: ErrorInfo) void {
     self.errors.append(self.alloc, err) catch oom();
 }
 
+fn isCallable(t: FlowType) bool {
+    return t == .function or t == .builtin_fn;
+}
+
 fn printError(self: *Sema) void {
     // TODO: Do we need to filter out duplicate errors? Are identical errors a bug in sema?
 
@@ -135,6 +156,7 @@ fn printError(self: *Sema) void {
             TypeError.ArithmeticWithNonNumeric => error_reporter.reportError(e.token, "Operand of Arithmetic Operations has to be either int or float", .{}),
             TypeError.ArithmeticWithUnequalTypes => error_reporter.reportError(e.token, "Operands of Arithmetic Operations have to be of the same numeric type", .{}),
             TypeError.NegateWithNonNumeric => error_reporter.reportError(e.token, "Operand of Negate Operations has to be either int or float", .{}),
+            TypeError.NotACallable => error_reporter.reportError(e.token, "Can only call callables", .{}),
         }
     }
 }
@@ -155,6 +177,7 @@ const TypeError = error{
     ArithmeticWithNonNumeric,
     ArithmeticWithUnequalTypes,
     NegateWithNonNumeric,
+    NotACallable,
 };
 
 // TODO: Add warnings?
