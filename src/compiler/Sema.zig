@@ -1,20 +1,20 @@
 alloc: Allocator,
 program: []const *Stmt,
-errors: std.ArrayListUnmanaged(ErrorInfo),
-types: std.AutoHashMapUnmanaged(*const Expr, FlowType),
+errors: ErrorList = .empty,
+types: TypeTable = .empty,
+variables: VariableList = .empty,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
         .program = program,
         .alloc = alloc,
-        .errors = .empty,
-        .types = .empty,
     };
 }
 
 pub fn deinit(self: *Sema) void {
     self.errors.deinit(self.alloc);
     self.types.deinit(self.alloc);
+    self.variables.deinit(self.alloc);
 }
 
 /// Analyses the ast. Applies the following checks:
@@ -54,6 +54,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.analyseStmt(inc);
             }
         },
+        // TODO: Check for loop context
         .@"break", .@"continue" => {},
         .@"if" => |if_stmt| {
             self.analyseExpr(if_stmt.condition);
@@ -64,11 +65,34 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
         },
         .channel, .channel_read, .channel_write => std.debug.panic("Channels are not yet supported\n", .{}),
         .variable => |var_stmt| {
-            // TODO: Variable handling
+            if (var_stmt.type_hint == null and var_stmt.value == null) {
+                self.pushError(.{ .token = var_stmt.name, .err = VariableError.UnresolvableType });
+                return;
+            }
+
             if (var_stmt.value) |value| {
                 self.analyseExpr(value);
             }
-            // TODO: Variables have to have either a type hint or initial value
+
+            const variable: Variable = .{
+                .name = var_stmt.name,
+                .constant = var_stmt.constant,
+                .type = self.typeFromVariable(stmt),
+                .order = 0,
+            };
+            // TODO: Check for duplicate variable name
+            self.putVariable(variable);
+
+            if (var_stmt.value) |value| {
+                if (self.getType(value).? != variable.type) {
+                    self.pushError(.{
+                        .token = value.getToken(),
+                        .err = TypeError.UnexpectedType,
+                        .extra_info1 = @tagName(variable.type),
+                        .extra_info2 = @tagName(self.getType(value).?),
+                    });
+                }
+            }
         },
         .function => |function| {
             // TODO: assign callable to variable handling
@@ -101,7 +125,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 .@"-" => {
                     const value_type = self.getType(unary.expr).?;
                     if (value_type != .int and value_type != .float) {
-                        self.pushError(.{ .token = unary.op, .err = TypeError.NegateWithNonNumeric });
+                        self.pushError(.{ .token = unary.op, .err = TypeError.NegateWithNonNumeric, .extra_info1 = @tagName(value_type) });
                     }
                     self.putType(expr, value_type);
                 },
@@ -119,22 +143,32 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 .@"==", .@"!=" => {
                     // if the two types are non-null and different, print error
                     if (left_type != .null and right_type != .null and left_type != right_type) {
-                        self.pushError(.{ .token = binary.op, .err = TypeError.EqualityCheckOfUnequalTypes });
+                        self.pushError(.{
+                            .token = binary.op,
+                            .err = TypeError.EqualityCheckOfUnequalTypes,
+                            .extra_info1 = @tagName(left_type),
+                            .extra_info2 = @tagName(right_type),
+                        });
                     }
                     self.putType(expr, .bool);
                 },
                 .@"<", .@"<=", .@">=", .@">", .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => {
                     var both_numeric = true;
                     if (left_type != .int and left_type != .float) {
-                        self.pushError(.{ .token = binary.lhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric });
+                        self.pushError(.{ .token = binary.lhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(left_type) });
                         both_numeric = false;
                     }
                     if (right_type != .int and right_type != .float) {
-                        self.pushError(.{ .token = binary.rhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric });
+                        self.pushError(.{ .token = binary.rhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(right_type) });
                         both_numeric = false;
                     }
                     if (both_numeric and left_type != right_type) {
-                        self.pushError(.{ .token = binary.op, .err = TypeError.ArithmeticWithUnequalTypes });
+                        self.pushError(.{
+                            .token = binary.op,
+                            .err = TypeError.ArithmeticWithUnequalTypes,
+                            .extra_info1 = @tagName(left_type),
+                            .extra_info2 = @tagName(right_type),
+                        });
                     }
                     // as they have to be of equal types, we can just use one of them to keep going.
                     // we go with the left one just because.
@@ -163,7 +197,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             }
 
             if (!isCallable(self.getType(call.expr).?)) {
-                self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable });
+                self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable, .extra_info1 = call.expr.getToken().lexeme });
             }
             // TODO: resolve correct return type
             self.putType(expr, .null);
@@ -179,6 +213,10 @@ fn getType(self: *Sema, expr: *const Expr) ?FlowType {
     return self.types.get(expr);
 }
 
+fn putVariable(self: *Sema, variable: Variable) void {
+    self.variables.append(self.alloc, variable) catch oom();
+}
+
 fn pushError(self: *Sema, err: ErrorInfo) void {
     self.errors.append(self.alloc, err) catch oom();
 }
@@ -187,30 +225,50 @@ fn isCallable(t: FlowType) bool {
     return t == .function or t == .builtin_fn;
 }
 
+fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
+    std.debug.assert(stmt.* == .variable);
+    const variable = stmt.variable;
+
+    const t = variable.type_hint orelse return self.getType(variable.value.?).?;
+    return switch (t.type.type) {
+        .bool => .bool,
+        .string => .string,
+        .int => .int,
+        .float => .float,
+        else => unreachable,
+    };
+}
+
 fn printError(self: *Sema) void {
     // TODO: Do we need to filter out duplicate errors? Are identical errors a bug in sema?
 
     for (self.errors.items) |e| {
         switch (e.err) {
-            TypeError.EqualityCheckOfUnequalTypes => error_reporter.reportError(e.token, "Operands of Equality-Check (== and !=) have to be of the same type", .{}),
-            TypeError.ArithmeticWithNonNumeric => error_reporter.reportError(e.token, "Operand of Arithmetic Operations has to be either int or float", .{}),
-            TypeError.ArithmeticWithUnequalTypes => error_reporter.reportError(e.token, "Operands of Arithmetic Operations have to be of the same numeric type", .{}),
-            TypeError.NegateWithNonNumeric => error_reporter.reportError(e.token, "Operand of Negate Operations has to be either int or float", .{}),
-            TypeError.NotACallable => error_reporter.reportError(e.token, "Can only call callables", .{}),
+            TypeError.EqualityCheckOfUnequalTypes => error_reporter.reportError(e.token, "Operands of Equality-Check (== and !=) have to be of the same type, got '{s}' and '{s}'", .{ e.extra_info1, e.extra_info2 }),
+            TypeError.ArithmeticWithNonNumeric => error_reporter.reportError(e.token, "Operand of Arithmetic Operations has to be either int or float, got '{s}'", .{e.extra_info1}),
+            TypeError.ArithmeticWithUnequalTypes => error_reporter.reportError(e.token, "Operands of Arithmetic Operations have to be of the same numeric type, got '{s}' and '{s}'", .{ e.extra_info1, e.extra_info2 }),
+            TypeError.NegateWithNonNumeric => error_reporter.reportError(e.token, "Operand of Negate Operations has to be either int or float, got '{s}'", .{e.extra_info1}),
+            TypeError.NotACallable => error_reporter.reportError(e.token, "'{s}' is not a callable", .{e.extra_info1}),
+            TypeError.UnexpectedType => error_reporter.reportError(e.token, "Unexpected type, expected '{s}', got '{s}'", .{ e.extra_info1, e.extra_info2 }),
+
+            VariableError.UnresolvableType => error_reporter.reportError(e.token, "Type of Variable could not be resolved. Consider adding an explicit Typehint", .{}),
         }
     }
 }
 
-// -------------------------- UNIT TESTS --------------------------
-// TODO:
+const VariableList = std.ArrayListUnmanaged(Variable);
+const TypeTable = std.AutoHashMapUnmanaged(*const Expr, FlowType);
+const ErrorList = std.ArrayListUnmanaged(ErrorInfo);
 
 const ErrorInfo = struct {
     token: Token,
     err: SemaError,
+    extra_info1: []const u8 = "",
+    extra_info2: []const u8 = "",
 };
 
 // combine all possible errors here
-const SemaError = TypeError;
+const SemaError = TypeError || VariableError;
 
 const TypeError = error{
     EqualityCheckOfUnequalTypes,
@@ -218,9 +276,18 @@ const TypeError = error{
     ArithmeticWithUnequalTypes,
     NegateWithNonNumeric,
     NotACallable,
+    UnexpectedType,
+};
+const VariableError = error{
+    UnresolvableType,
 };
 
-// TODO: Add warnings?
+const Variable = struct {
+    name: Token,
+    constant: bool,
+    type: FlowType,
+    order: u8,
+};
 
 const Sema = @This();
 

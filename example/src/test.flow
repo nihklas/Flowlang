@@ -9,3 +9,9 @@
 !1;
 !false;
 !"Test";
+
+var hallo = 1;
+const foo = "Hallo";
+var sup: int;
+var wassup: int = 2.0;
+var p;

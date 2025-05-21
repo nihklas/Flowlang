@@ -13,7 +13,7 @@ fn reportErrorFailing(token: Token, comptime fmt: []const u8, args: anytype) !vo
     for (0..token.column - 1) |_| {
         try stderr.writeByte(' ');
     }
-    try stderr.writeAll("\x1b[36m^~~~~\x1b[0m Here\n");
+    try stderr.writeAll("\x1b[36m^~~~~\x1b[0m Here\n\n");
 }
 
 fn getLineAt(line_num: usize) ?[]const u8 {
