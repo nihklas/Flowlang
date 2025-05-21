@@ -16,9 +16,11 @@ var sup: int;
 var wassup: int = 2.0;
 var bar = 1.5;
 {
+    var bar = 2;
     var p;
     var notfound = "i am here!";
 }
+var sup = "hello";
 
 1 + hallo;
 1 + foo;

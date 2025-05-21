@@ -83,8 +83,6 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 .type = self.typeFromVariable(stmt),
                 .scope = self.current_scope,
             };
-            // TODO: Check for duplicate variable name
-            self.putVariable(variable);
 
             if (var_stmt.value) |value| {
                 if (self.getType(value).? != variable.type) {
@@ -96,6 +94,20 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                     });
                 }
             }
+
+            if (self.findVariable(variable.name)) |existing_variable| {
+                if (existing_variable.scope == variable.scope) {
+                    self.pushError(.{
+                        .token = variable.name,
+                        .err = VariableError.VariableAlreadyExists,
+                        .extra_info1 = variable.name.lexeme,
+                    });
+                    return;
+                }
+            }
+
+            // TODO: Check for duplicate variable name
+            self.putVariable(variable);
         },
         .function => |function| {
             // TODO: assign callable to variable handling
@@ -291,6 +303,7 @@ fn printError(self: *Sema) void {
 
             VariableError.UnresolvableType => error_reporter.reportError(e.token, "Type of Variable could not be resolved. Consider adding an explicit Typehint", .{}),
             VariableError.UnknownVariable => error_reporter.reportError(e.token, "Variable '{s}' is not defined", .{e.extra_info1}),
+            VariableError.VariableAlreadyExists => error_reporter.reportError(e.token, "Variable '{s}' already exists", .{e.extra_info1}),
         }
     }
 }
@@ -320,6 +333,7 @@ const TypeError = error{
 const VariableError = error{
     UnresolvableType,
     UnknownVariable,
+    VariableAlreadyExists,
 };
 
 const Variable = struct {
