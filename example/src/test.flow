@@ -14,4 +14,12 @@ var hallo = 1;
 const foo = "Hallo";
 var sup: int;
 var wassup: int = 2.0;
+var bar = 1.5;
 var p;
+
+1 + hallo;
+1 + foo;
+1.0 + bar;
+1 + bar;
+
+notfound;

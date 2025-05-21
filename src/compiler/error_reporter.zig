@@ -8,12 +8,13 @@ fn reportErrorFailing(token: Token, comptime fmt: []const u8, args: anytype) !vo
     try stderr.writeAll("\x1b[1;31merror:\x1b[0m ");
     try stderr.print(fmt, args);
     try stderr.print(" at {d}:{d}\n", .{ token.line, token.column });
-    try stderr.print("\x1b[34m{d: >4} |\x1b[0m {s}\n", .{ token.line, getLineAt(token.line) orelse "" });
+    try stderr.print("\x1b[34m{d: >4} |\x1b[0m {s}\n", .{ token.line, getLineAt(token.line).? });
     try stderr.writeAll("       ");
     for (0..token.column - 1) |_| {
         try stderr.writeByte(' ');
     }
-    try stderr.writeAll("\x1b[36m^~~~~\x1b[0m Here\n\n");
+    try stderr.writeAll("\x1b[36m^~~~~\x1b[0m Here\n");
+    try stderr.writeByte('\n');
 }
 
 fn getLineAt(line_num: usize) ?[]const u8 {

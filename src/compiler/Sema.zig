@@ -78,7 +78,6 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 .name = var_stmt.name,
                 .constant = var_stmt.constant,
                 .type = self.typeFromVariable(stmt),
-                .order = 0,
             };
             // TODO: Check for duplicate variable name
             self.putVariable(variable);
@@ -189,7 +188,13 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             // TODO: Check for existing variable and check if expected type is correct
             self.putType(expr, self.getType(assignment.value).?);
         },
-        .variable => std.debug.panic("Variable Expressions are not yet supported bei Sema\n", .{}),
+        .variable => |variable| {
+            if (self.findVariable(variable.name)) |found_var| {
+                self.putType(expr, found_var.type);
+            } else {
+                self.pushError(.{ .token = variable.name, .err = VariableError.UnknownVariable, .extra_info1 = variable.name.lexeme });
+            }
+        },
         .call => |call| {
             self.analyseExpr(call.expr);
             for (call.args) |arg_expr| {
@@ -213,12 +218,22 @@ fn getType(self: *Sema, expr: *const Expr) ?FlowType {
     return self.types.get(expr);
 }
 
+fn pushError(self: *Sema, err: ErrorInfo) void {
+    self.errors.append(self.alloc, err) catch oom();
+}
+
 fn putVariable(self: *Sema, variable: Variable) void {
     self.variables.append(self.alloc, variable) catch oom();
 }
 
-fn pushError(self: *Sema, err: ErrorInfo) void {
-    self.errors.append(self.alloc, err) catch oom();
+fn findVariable(self: *Sema, name: Token) ?Variable {
+    var rev_iter = std.mem.reverseIterator(self.variables.items);
+    while (rev_iter.next()) |variable| {
+        if (std.mem.eql(u8, variable.name.lexeme, name.lexeme)) {
+            return variable;
+        }
+    }
+    return null;
 }
 
 fn isCallable(t: FlowType) bool {
@@ -252,6 +267,7 @@ fn printError(self: *Sema) void {
             TypeError.UnexpectedType => error_reporter.reportError(e.token, "Unexpected type, expected '{s}', got '{s}'", .{ e.extra_info1, e.extra_info2 }),
 
             VariableError.UnresolvableType => error_reporter.reportError(e.token, "Type of Variable could not be resolved. Consider adding an explicit Typehint", .{}),
+            VariableError.UnknownVariable => error_reporter.reportError(e.token, "Variable '{s}' is not defined", .{e.extra_info1}),
         }
     }
 }
@@ -280,13 +296,13 @@ const TypeError = error{
 };
 const VariableError = error{
     UnresolvableType,
+    UnknownVariable,
 };
 
 const Variable = struct {
     name: Token,
     constant: bool,
     type: FlowType,
-    order: u8,
 };
 
 const Sema = @This();
