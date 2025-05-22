@@ -1049,9 +1049,9 @@ const ParserError = error{
 const Parser = @This();
 
 const std = @import("std");
-const Token = @import("Token.zig");
-const ast = @import("ast.zig");
-const error_reporter = @import("error_reporter.zig");
+const Token = @import("ir/Token.zig");
+const ast = @import("ir/ast.zig");
+const error_reporter = @import("util/error_reporter.zig");
 const definitions = @import("shared").definitions;
 const oom = @import("shared").oom;
 const Integer = definitions.Integer;

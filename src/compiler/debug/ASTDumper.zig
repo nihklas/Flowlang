@@ -165,4 +165,4 @@ fn writeIndent(writer: anytype, depth: usize) !void {
 
 const DEPTH_DISTANCE = 2;
 const std = @import("std");
-const ast = @import("../ast.zig");
+const ast = @import("../ir/ast.zig");

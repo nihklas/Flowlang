@@ -341,8 +341,8 @@ fn expectTokensEqual(actual: []const Token, expected: []const Token) !void {
 const Scanner = @This();
 
 const std = @import("std");
-const Token = @import("Token.zig");
-const error_reporter = @import("error_reporter.zig");
+const Token = @import("ir/Token.zig");
+const error_reporter = @import("util/error_reporter.zig");
 const Allocator = std.mem.Allocator;
 
 const oom = @import("shared").oom;

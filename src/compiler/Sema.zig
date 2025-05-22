@@ -390,12 +390,12 @@ const Sema = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const ast = @import("ast.zig");
+const ast = @import("ir/ast.zig");
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
 
 const oom = @import("shared").oom;
 const FlowType = @import("shared").definitions.FlowType;
-const error_reporter = @import("error_reporter.zig");
+const error_reporter = @import("util/error_reporter.zig");
 
-const Token = @import("Token.zig");
+const Token = @import("ir/Token.zig");

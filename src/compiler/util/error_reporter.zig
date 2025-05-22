@@ -29,4 +29,4 @@ const std = @import("std");
 const builtin = @import("builtin");
 const testing_options = @import("testing_options");
 const stderr = if (builtin.is_test and !testing_options.use_stderr) std.io.null_writer else std.io.getStdErr().writer();
-const Token = @import("Token.zig");
+const Token = @import("../ir/Token.zig");

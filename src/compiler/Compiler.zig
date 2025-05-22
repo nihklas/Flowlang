@@ -445,12 +445,12 @@ const LoopLevel = struct {
 
 const Compiler = @This();
 
-const Token = @import("Token.zig");
+const Token = @import("ir/Token.zig");
 const OpCode = @import("shared").OpCode;
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Sema = @import("Sema.zig");
-const ast = @import("ast.zig");
+const ast = @import("ir/ast.zig");
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
 const FlowValue = @import("shared").definitions.FlowValue;

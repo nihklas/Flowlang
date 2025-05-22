@@ -89,13 +89,13 @@ fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
 const debug_options = @import("debug_options");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Token = @import("Token.zig");
+const Token = @import("ir/Token.zig");
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
 
-const cli = @import("cli.zig");
+const cli = @import("util/cli.zig");
 
 const vm = @embedFile("runtime");
 
