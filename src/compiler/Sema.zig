@@ -49,6 +49,9 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             }
         },
         .loop => |loop_stmt| {
+            self.scopeIncr();
+            defer self.scopeDecr();
+
             self.analyseExpr(loop_stmt.condition);
             for (loop_stmt.body) |inner_stmt| {
                 self.analyseStmt(inner_stmt);
@@ -106,7 +109,6 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 }
             }
 
-            // TODO: Check for duplicate variable name
             self.putVariable(variable);
         },
         .function => |function| {
