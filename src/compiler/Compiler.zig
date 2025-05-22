@@ -1,49 +1,56 @@
 alloc: Allocator,
-byte_code: std.ArrayList(u8),
-constants: []const FlowValue,
-loop_levels: Stack(LoopLevel, 256),
+program: []const *Stmt,
+byte_code: std.ArrayListUnmanaged(u8) = .empty,
+constants: std.ArrayListUnmanaged(FlowValue) = .empty,
+// initialize with static array
+loop_levels: Stack(LoopLevel),
 
-pub fn compile(alloc: Allocator, program: []const *Stmt, constants: []const FlowValue) []const u8 {
-    var compiler: Compiler = .{
+// TODO: use new IR
+pub fn init(alloc: Allocator, program: []const *Stmt) Compiler {
+    return .{
         .alloc = alloc,
-        .byte_code = .init(alloc),
-        .constants = constants,
-        .loop_levels = .init(alloc),
+        .program = program,
     };
-    defer compiler.loop_levels.deinit(alloc);
+}
 
-    compiler.compileConstants();
-    compiler.compileFunctions(program);
-    compiler.traverse(program);
+pub fn compile(self: *Compiler) []const u8 {
+    // self.compileFunctions();
+    self.traverse(self.program);
+    self.compileConstants();
 
-    return compiler.byte_code.toOwnedSlice() catch oom();
+    return self.byte_code.toOwnedSlice(self.alloc) catch oom();
 }
 
 fn compileConstants(self: *Compiler) void {
-    for (self.constants) |c| switch (c) {
+    var constants_bytecode: std.ArrayListUnmanaged(u8) = .empty;
+    defer constants_bytecode.deinit(self.alloc);
+
+    for (self.constants.items) |c| switch (c) {
         .string => |string| {
             if (string.len > std.math.maxInt(u8)) {
-                self.emitOpcode(.string_long);
-                self.emitMultibyte(@as(u32, @intCast(string.len)));
+                self.emitOpcodeOn(.string_long, &constants_bytecode);
+                self.emitMultibyteOn(@as(u32, @intCast(string.len)), &constants_bytecode);
             } else {
-                self.emitOpcode(.string);
-                self.emitByte(@intCast(string.len));
+                self.emitOpcodeOn(.string, &constants_bytecode);
+                self.emitByteOn(@intCast(string.len), &constants_bytecode);
             }
             for (string) |char| {
-                self.emitByte(char);
+                self.emitByteOn(char, &constants_bytecode);
             }
         },
         .int => {
-            self.emitOpcode(.integer);
-            self.emitMultibyte(c.int);
+            self.emitOpcodeOn(.integer, &constants_bytecode);
+            self.emitMultibyteOn(c.int, &constants_bytecode);
         },
         .float => {
-            self.emitOpcode(.float);
-            self.emitMultibyte(c.float);
+            self.emitOpcodeOn(.float, &constants_bytecode);
+            self.emitMultibyteOn(c.float, &constants_bytecode);
         },
         .bool, .null, .builtin_fn, .function => unreachable,
     };
-    self.emitOpcode(.constants_done);
+    self.emitOpcodeOn(.constants_done, &constants_bytecode);
+
+    self.byte_code.insertSlice(self.alloc, 0, constants_bytecode.items) catch oom();
 }
 
 fn compileFunctions(self: *Compiler, program: []const *ast.Stmt) void {
@@ -226,6 +233,7 @@ fn literalExpression(self: *Compiler, expr: *Expr) void {
         .bool => |boolean| self.emitOpcode(if (boolean) .true else .false),
         .null => self.emitOpcode(.null),
         .string => |string| self.emitConstant(.{ .string = string }),
+        .function, .builtin_fn => unreachable,
     }
 }
 
@@ -357,24 +365,42 @@ fn emitConstant(self: *Compiler, value: FlowValue) void {
 }
 
 fn resolveConstant(self: *Compiler, value: FlowValue) u8 {
-    return for (self.constants, 0..) |c, i| {
+    return for (self.constants.items, 0..) |c, i| {
         if (c.equals(value)) break @intCast(i);
-    } else unreachable;
-}
-
-fn emitOpcode(self: *Compiler, op: OpCode) void {
-    self.byte_code.append(op.raw()) catch oom();
-}
-
-fn emitByte(self: *Compiler, byte: u8) void {
-    self.byte_code.append(byte) catch oom();
+    } else {
+        self.constants.append(self.alloc, value) catch oom();
+        if (self.constants.items.len > std.math.maxInt(u8)) {
+            @panic("Too many constants");
+        }
+        return @intCast(self.constants.items.len - 1);
+    };
 }
 
 fn emitMultibyte(self: *Compiler, value: anytype) void {
+    self.emitMultibyteOn(value, &self.byte_code);
+}
+
+fn emitOpcode(self: *Compiler, op: OpCode) void {
+    self.emitOpcodeOn(op, &self.byte_code);
+}
+
+fn emitByte(self: *Compiler, byte: u8) void {
+    self.emitByteOn(byte, &self.byte_code);
+}
+
+fn emitMultibyteOn(self: *Compiler, value: anytype, byte_code: *std.ArrayListUnmanaged(u8)) void {
     const bytes = std.mem.toBytes(value);
     for (bytes) |byte| {
-        self.byte_code.append(byte) catch oom();
+        self.emitByteOn(byte, byte_code);
     }
+}
+
+fn emitOpcodeOn(self: *Compiler, op: OpCode, byte_code: *std.ArrayListUnmanaged(u8)) void {
+    self.emitByteOn(op.raw(), byte_code);
+}
+
+fn emitByteOn(self: *Compiler, byte: u8, byte_code: *std.ArrayListUnmanaged(u8)) void {
+    byte_code.append(self.alloc, byte) catch oom();
 }
 
 test "Expression Statement" {
@@ -454,7 +480,7 @@ const ast = @import("ir/ast.zig");
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
 const FlowValue = @import("shared").definitions.FlowValue;
-const Stack = @import("shared").Stack;
+const Stack = @import("shared").StaticStack;
 const oom = @import("shared").oom;
 
 const std = @import("std");

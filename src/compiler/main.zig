@@ -41,7 +41,8 @@ pub fn main() !void {
     // - Dead Code Elimination
     // - Constants evaluation
 
-    // const bytecode = Compiler.compile(gpa, ast);
+    // var compiler: Compiler = .init(gpa, ast);
+    // const bytecode = compiler.compile();
     // defer gpa.free(bytecode);
     //
     // if (cli_opts.dump_bc) {

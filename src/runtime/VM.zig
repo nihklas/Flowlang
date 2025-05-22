@@ -4,8 +4,8 @@ gpa: Allocator,
 gc: Allocator,
 code: []const u8,
 ip: usize = 0,
-value_stack: Stack(FlowValue, STACK_SIZE),
-call_stack: Stack(CallFrame, STACK_SIZE),
+value_stack: Stack(FlowValue),
+call_stack: Stack(CallFrame),
 constants: [256]FlowValue = undefined,
 globals: std.StringHashMapUnmanaged(FlowValue),
 
@@ -14,15 +14,15 @@ pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) VM {
         .gpa = gpa,
         .gc = gc,
         .code = code,
-        .value_stack = .init(gpa),
-        .call_stack = .init(gpa),
+        .value_stack = .init(gpa.alloc(FlowValue, STACK_SIZE) catch oom()),
+        .call_stack = .init(gpa.alloc(CallFrame, STACK_SIZE) catch oom()),
         .globals = .empty,
     };
 }
 
 pub fn deinit(self: *VM) void {
-    self.value_stack.deinit(self.gpa);
-    self.call_stack.deinit(self.gpa);
+    self.gpa.free(self.value_stack.stack);
+    self.gpa.free(self.call_stack.stack);
     self.globals.deinit(self.gpa);
     self.* = undefined;
 }
