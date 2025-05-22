@@ -82,6 +82,11 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
         },
         .channel, .channel_read, .channel_write => std.debug.panic("Channels are not yet supported\n", .{}),
         .variable => |var_stmt| {
+            if (var_stmt.constant and var_stmt.value == null) {
+                self.pushError(.{ .token = var_stmt.name, .err = VariableError.ConstantWithoutValue, .extra_info1 = var_stmt.name.lexeme });
+                return;
+            }
+
             if (var_stmt.type_hint == null and var_stmt.value == null) {
                 self.pushError(.{ .token = var_stmt.name, .err = VariableError.UnresolvableType });
                 return;
@@ -214,7 +219,22 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
         },
         .assignment => |assignment| {
             self.analyseExpr(assignment.value);
-            // TODO: Check for existing variable and check if expected type is correct
+
+            if (self.findVariable(assignment.name)) |existing_variable| {
+                if (existing_variable.type != self.getType(assignment.value)) {
+                    self.pushError(.{
+                        .token = assignment.value.getToken(),
+                        .err = TypeError.UnexpectedType,
+                        .extra_info1 = @tagName(existing_variable.type),
+                        .extra_info2 = @tagName(self.getType(assignment.value).?),
+                    });
+                } else if (existing_variable.constant) {
+                    self.pushError(.{ .token = assignment.name, .err = VariableError.ConstantMutation, .extra_info1 = assignment.name.lexeme });
+                }
+            } else {
+                self.pushError(.{ .token = assignment.name, .err = VariableError.UnknownVariable, .extra_info1 = assignment.name.lexeme });
+            }
+
             self.putType(expr, self.getType(assignment.value).?);
         },
         .variable => |variable| {
@@ -317,6 +337,8 @@ fn printError(self: *Sema) void {
             VariableError.UnresolvableType => error_reporter.reportError(e.token, "Type of Variable could not be resolved. Consider adding an explicit Typehint", .{}),
             VariableError.UnknownVariable => error_reporter.reportError(e.token, "Variable '{s}' is not defined", .{e.extra_info1}),
             VariableError.VariableAlreadyExists => error_reporter.reportError(e.token, "Variable '{s}' already exists", .{e.extra_info1}),
+            VariableError.ConstantMutation => error_reporter.reportError(e.token, "Constant '{s}' cannot be re-assigned", .{e.extra_info1}),
+            VariableError.ConstantWithoutValue => error_reporter.reportError(e.token, "Constant '{s}' must have an initial value", .{e.extra_info1}),
 
             ContextError.NotInALoop => error_reporter.reportError(e.token, "'{s}' is only allowed inside a loop", .{e.extra_info1}),
         }
@@ -349,6 +371,8 @@ const VariableError = error{
     UnresolvableType,
     UnknownVariable,
     VariableAlreadyExists,
+    ConstantMutation,
+    ConstantWithoutValue,
 };
 const ContextError = error{
     NotInALoop,
