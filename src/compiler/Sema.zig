@@ -64,7 +64,6 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.analyseStmt(inc);
             }
         },
-        // TODO: Check for loop context
         inline .@"break", .@"continue" => |keyword| {
             if (self.loop_level == 0) {
                 self.pushError(.{
