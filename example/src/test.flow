@@ -28,3 +28,10 @@ var sup = "hello";
 1 + bar;
 
 notfound;
+
+for ;; {
+    break;
+}
+
+break;
+continue;

@@ -41,7 +41,7 @@ pub fn main() !void {
     // - Dead Code Elimination
     // - Constants evaluation
 
-    // const bytecode = Compiler.compile(gpa, ast, &sema);
+    // const bytecode = Compiler.compile(gpa, ast);
     // defer gpa.free(bytecode);
     //
     // if (cli_opts.dump_bc) {
@@ -65,8 +65,6 @@ pub fn main() !void {
     //
     // const bytecode_len: [8]u8 = @bitCast(bytecode.len);
     // try file.writeAll(&bytecode_len);
-    //
-    // try file.writeAll(bytecode);
 }
 
 fn writeOutput(output: []const u8, cli_opts: cli.Options) !void {

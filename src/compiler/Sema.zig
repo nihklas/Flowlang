@@ -4,6 +4,7 @@ errors: ErrorList = .empty,
 types: TypeTable = .empty,
 variables: VariableList = .empty,
 current_scope: u8 = 0,
+loop_level: u8 = 0,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
@@ -52,6 +53,9 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             self.scopeIncr();
             defer self.scopeDecr();
 
+            self.loop_level += 1;
+            defer self.loop_level -= 1;
+
             self.analyseExpr(loop_stmt.condition);
             for (loop_stmt.body) |inner_stmt| {
                 self.analyseStmt(inner_stmt);
@@ -61,7 +65,15 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             }
         },
         // TODO: Check for loop context
-        .@"break", .@"continue" => {},
+        inline .@"break", .@"continue" => |keyword| {
+            if (self.loop_level == 0) {
+                self.pushError(.{
+                    .token = keyword.token,
+                    .err = ContextError.NotInALoop,
+                    .extra_info1 = @tagName(stmt.*),
+                });
+            }
+        },
         .@"if" => |if_stmt| {
             self.analyseExpr(if_stmt.condition);
             self.analyseStmt(if_stmt.true_branch);
@@ -306,6 +318,8 @@ fn printError(self: *Sema) void {
             VariableError.UnresolvableType => error_reporter.reportError(e.token, "Type of Variable could not be resolved. Consider adding an explicit Typehint", .{}),
             VariableError.UnknownVariable => error_reporter.reportError(e.token, "Variable '{s}' is not defined", .{e.extra_info1}),
             VariableError.VariableAlreadyExists => error_reporter.reportError(e.token, "Variable '{s}' already exists", .{e.extra_info1}),
+
+            ContextError.NotInALoop => error_reporter.reportError(e.token, "'{s}' is only allowed inside a loop", .{e.extra_info1}),
         }
     }
 }
@@ -322,7 +336,7 @@ const ErrorInfo = struct {
 };
 
 // combine all possible errors here
-const SemaError = TypeError || VariableError;
+const SemaError = TypeError || VariableError || ContextError;
 
 const TypeError = error{
     EqualityCheckOfUnequalTypes,
@@ -336,6 +350,9 @@ const VariableError = error{
     UnresolvableType,
     UnknownVariable,
     VariableAlreadyExists,
+};
+const ContextError = error{
+    NotInALoop,
 };
 
 const Variable = struct {
