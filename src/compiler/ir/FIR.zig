@@ -60,6 +60,13 @@ pub fn deinit(self: *FIR) void {
     self.conds.deinit(self.alloc);
 }
 
+pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
+    const fir: FIR = .init(alloc);
+    _ = program;
+
+    return fir;
+}
+
 const FIR = @This();
 
 const std = @import("std");

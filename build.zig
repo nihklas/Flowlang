@@ -13,6 +13,7 @@ pub fn build(b: *Build) !void {
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const dump_bytecode = b.option(bool, "dump-bc", "Dump the Bytecode instead of running the VM") orelse false;
     const dump_ast = b.option(bool, "dump-ast", "Dump the AST and exit") orelse false;
+    const dump_fir = b.option(bool, "dump-fir", "Dump the FIR and exit") orelse false;
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
     const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
@@ -21,6 +22,7 @@ pub fn build(b: *Build) !void {
     const debug_options = b.addOptions();
     debug_options.addOption(bool, "dump_bc", dump_bytecode);
     debug_options.addOption(bool, "dump_ast", dump_ast);
+    debug_options.addOption(bool, "dump_fir", dump_fir);
     debug_options.addOption(bool, "stack", trace_stack);
     debug_options.addOption(bool, "bytecode", trace_bytecode);
     debug_options.addOption(bool, "memory", trace_memory);

@@ -3,6 +3,7 @@ pub const Options = struct {
     output: []const u8,
     dump_bc: bool = debug_options.dump_bc,
     dump_ast: bool = debug_options.dump_ast,
+    dump_fir: bool = debug_options.dump_fir,
     dump_stdout: bool = false,
 };
 
@@ -35,13 +36,14 @@ pub fn parse() Options {
             options.dump_bc = true;
         } else if (std.mem.eql(u8, argument, "--dump-ast")) {
             options.dump_ast = true;
+        } else if (std.mem.eql(u8, argument, "--dump-fir")) {
+            options.dump_fir = true;
         } else if (std.mem.eql(u8, argument, "--help")) {
             printHelpAndQuit(0);
         } else if (std.mem.eql(u8, argument, "--stdout")) {
             options.dump_stdout = true;
         }
     }
-    options.dump_stdout = options.dump_stdout and (options.dump_bc or options.dump_ast);
 
     options.source = input_arg orelse printHelpAndQuit(1);
     options.output = output_arg orelse out: {
@@ -62,6 +64,8 @@ pub fn printHelpAndQuit(exit_code: u8) noreturn {
         \\                            instead of building an executable
         \\        --dump-ast          Dump the resulting Abstract Syntax Tree to the output File
         \\                            instead of building an executable
+        \\        --dump-fir          Dump the resulting FIR (Flowlang Intermediate Representation)
+        \\                            to the output File instead of building an executable
         \\        --stdout            Dump output of the other dump options are printed to stdout 
         \\                            instead of the output file
         \\        --help              Print this message

@@ -41,6 +41,21 @@ pub fn main() !void {
     // - Dead Code Elimination
     // - Constants evaluation
 
+    var fir: FIR = .fromAST(gpa, ast);
+    defer fir.deinit();
+
+    if (cli_opts.dump_fir) {
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        defer buf.deinit(gpa);
+
+        const writer = buf.writer(gpa);
+        try FIRDumper.dump(writer, &fir);
+        try writer.writeByte('\n');
+
+        try writeOutput(buf.items, cli_opts);
+        return;
+    }
+
     // var compiler: Compiler = .init(gpa, ast);
     // const bytecode = compiler.compile();
     // defer gpa.free(bytecode);
@@ -95,10 +110,12 @@ const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
+const FIR = @import("ir/FIR.zig");
 
 const cli = @import("util/cli.zig");
 
 const vm = @embedFile("runtime");
 
 const ASTDumper = @import("debug/ASTDumper.zig");
+const FIRDumper = @import("debug/FIRDumper.zig");
 const BytecodeDumper = @import("shared").debug.BytecodeDumper;
