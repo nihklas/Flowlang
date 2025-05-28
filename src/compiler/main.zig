@@ -56,31 +56,31 @@ pub fn main() !void {
         return;
     }
 
-    // var compiler: Compiler = .init(gpa, ast);
-    // const bytecode = compiler.compile();
-    // defer gpa.free(bytecode);
-    //
-    // if (cli_opts.dump_bc) {
-    //     var buf: std.ArrayListUnmanaged(u8) = .empty;
-    //     defer buf.deinit(gpa);
-    //
-    //     const writer = buf.writer(gpa);
-    //     BytecodeDumper.dump(writer.any(), bytecode);
-    //
-    //     try writeOutput(buf.items, cli_opts);
-    //     return;
-    // }
-    //
-    // const file = try std.fs.cwd().createFile(cli_opts.output, .{});
-    // defer file.close();
-    //
-    // try file.chmod(0o755);
-    //
-    // try file.writeAll(vm);
-    // try file.writeAll(bytecode);
-    //
-    // const bytecode_len: [8]u8 = @bitCast(bytecode.len);
-    // try file.writeAll(&bytecode_len);
+    var compiler: Compiler = .init(gpa, &fir);
+    const bytecode = compiler.compile();
+    defer gpa.free(bytecode);
+
+    if (cli_opts.dump_bc) {
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        defer buf.deinit(gpa);
+
+        const writer = buf.writer(gpa);
+        BytecodeDumper.dump(writer.any(), bytecode);
+
+        try writeOutput(buf.items, cli_opts);
+        return;
+    }
+
+    const file = try std.fs.cwd().createFile(cli_opts.output, .{});
+    defer file.close();
+
+    try file.chmod(0o755);
+
+    try file.writeAll(vm);
+    try file.writeAll(bytecode);
+
+    const bytecode_len: [8]u8 = @bitCast(bytecode.len);
+    try file.writeAll(&bytecode_len);
 }
 
 fn writeOutput(output: []const u8, cli_opts: cli.Options) !void {
