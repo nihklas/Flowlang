@@ -12,7 +12,7 @@ pub fn init(alloc: Allocator, fir: *const FIR) Compiler {
 pub fn compile(self: *Compiler) []const u8 {
     self.compileConstants();
     self.compileFunctions();
-    self.traverse();
+    self.compileBlock(self.fir.entry);
 
     return self.byte_code.toOwnedSlice(self.alloc) catch oom();
 }
@@ -53,20 +53,42 @@ fn compileConstants(self: *Compiler) void {
     self.emitOpcode(.constants_done);
 }
 
-fn traverse(self: *Compiler) void {
-    var maybe_node_idx: ?usize = 0;
+fn compileBlock(self: *Compiler, starting_idx: usize) void {
+    var maybe_node_idx: ?usize = starting_idx;
     while (maybe_node_idx) |node_idx| {
-        const node = self.fir.nodes.items[node_idx];
-        defer maybe_node_idx = node.after;
-
-        switch (node.kind) {
-            .expr => {
-                self.compileExpression(node.index);
-                self.emitOpcode(.pop);
-            },
-            // .cond => @panic("'cond' is not yet supported in Compiler"),
-        }
+        defer maybe_node_idx = self.fir.nodes.items[node_idx].after;
+        self.compileStmt(node_idx);
     }
+}
+
+fn compileStmt(self: *Compiler, node_idx: usize) void {
+    const node = self.fir.nodes.items[node_idx];
+
+    switch (node.kind) {
+        .expr => {
+            self.compileExpression(node.index);
+            self.emitOpcode(.pop);
+        },
+        .cond => self.compileCond(node.index),
+    }
+}
+
+fn compileCond(self: *Compiler, cond_idx: usize) void {
+    const cond = self.fir.conds.items[cond_idx];
+    self.compileExpression(cond.condition);
+    const jump_idx = self.emitJump(.jump_if_false);
+    self.emitOpcode(.pop);
+    self.compileBlock(cond.true);
+
+    const else_jump = self.emitJump(.jump);
+    self.patchJump(jump_idx);
+    self.emitOpcode(.pop);
+
+    if (cond.false) |false_branch| {
+        self.compileBlock(false_branch);
+    }
+
+    self.patchJump(else_jump);
 }
 
 fn compileExpression(self: *Compiler, expr_idx: usize) void {
