@@ -29,7 +29,7 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) !void {
         },
         // else => std.debug.panic("'{s}' is not yet supported in FIRDumper", .{@tagName(expr.op)}),
     }
-    try writer.print(" | {s})", .{@tagName(expr.type)});
+    try writer.print("|{s})", .{@tagName(expr.type)});
 }
 
 const FIR = @import("../ir/FIR.zig");
