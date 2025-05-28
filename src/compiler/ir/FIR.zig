@@ -39,6 +39,7 @@ const Node = struct {
     const Expr = struct {
         op: Operator,
         operands: []const usize,
+        type: FlowType,
 
         const Operator = enum {
             literal,
@@ -110,7 +111,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
         .literal => {
             const operands = self.arena.alloc(usize, 1) catch oom();
             operands[0] = self.resolveConstant(resolveFlowValue(expr));
-            self.exprs.append(self.alloc, .{ .op = .literal, .operands = operands }) catch oom();
+            self.exprs.append(self.alloc, .{ .op = .literal, .type = self.constants.items[operands[0]], .operands = operands }) catch oom();
             return self.exprs.items.len - 1;
         },
         .binary => |binary| {
@@ -119,23 +120,23 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[0] = self.traverseExpr(binary.lhs);
             operands[1] = self.traverseExpr(binary.rhs);
 
-            const op: Node.Expr.Operator = switch (binary.op.type) {
-                .@"==" => .equal,
-                .@"!=" => .unequal,
-                .@"<" => .less,
-                .@"<=" => .less_equal,
-                .@">=" => .greater_equal,
-                .@">" => .greater,
-                .@".", .@".=" => .concat,
-                .@"+", .@"+=" => .add,
-                .@"-", .@"-=" => .sub,
-                .@"*", .@"*=" => .mul,
-                .@"/", .@"/=" => .div,
-                .@"%", .@"%=" => .mod,
+            const op: Node.Expr.Operator, const flow_type: FlowType = switch (binary.op.type) {
+                .@"==" => .{ .equal, .bool },
+                .@"!=" => .{ .unequal, .bool },
+                .@"<" => .{ .less, .bool },
+                .@"<=" => .{ .less_equal, .bool },
+                .@">=" => .{ .greater_equal, .bool },
+                .@">" => .{ .greater, .bool },
+                .@".", .@".=" => .{ .concat, .string },
+                .@"+", .@"+=" => .{ .add, self.exprs.items[operands[0]].type },
+                .@"-", .@"-=" => .{ .sub, self.exprs.items[operands[0]].type },
+                .@"*", .@"*=" => .{ .mul, self.exprs.items[operands[0]].type },
+                .@"/", .@"/=" => .{ .div, self.exprs.items[operands[0]].type },
+                .@"%", .@"%=" => .{ .mod, self.exprs.items[operands[0]].type },
                 else => unreachable,
             };
 
-            self.exprs.append(self.alloc, .{ .op = op, .operands = operands }) catch oom();
+            self.exprs.append(self.alloc, .{ .op = op, .type = flow_type, .operands = operands }) catch oom();
             return self.exprs.items.len - 1;
         },
         else => std.debug.panic("Expression '{s}' is not yet supported", .{@tagName(expr.*)}),
@@ -173,3 +174,4 @@ const ast = @import("ast.zig");
 const shared = @import("shared");
 const oom = shared.oom;
 const FlowValue = shared.definitions.FlowValue;
+const FlowType = shared.definitions.FlowType;
