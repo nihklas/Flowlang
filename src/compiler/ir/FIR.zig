@@ -109,6 +109,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) usize {
             const expr_idx = self.traverseExpr(stmt.expr.expr);
             self.nodes.append(self.alloc, .{ .kind = .expr, .index = expr_idx }) catch oom();
         },
+        .block => |block| self.traverseStmts(block.stmts),
         else => std.debug.panic("Statement '{s}' is not yet supported", .{@tagName(stmt.*)}),
     }
 
@@ -166,8 +167,8 @@ fn resolveFlowValue(expr: *const ast.Expr) FlowValue {
         .int => |int| .{ .int = int },
         .float => |float| .{ .float = float },
         .bool => |boolean| .{ .bool = boolean },
-        .null => .null,
         .string => |string| .{ .string = string },
+        .null => .null,
         .function, .builtin_fn => unreachable,
     };
 }
