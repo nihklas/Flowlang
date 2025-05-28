@@ -37,8 +37,24 @@ const Node = struct {
     after: ?usize = null,
 
     const Expr = struct {
-        op: enum { literal, add, sub, div, mod },
+        op: Operator,
         operands: []const usize,
+
+        const Operator = enum {
+            literal,
+            equal,
+            unequal,
+            less,
+            less_equal,
+            greater,
+            greater_equal,
+            add,
+            sub,
+            div,
+            mul,
+            mod,
+            concat,
+        };
     };
 
     const Cond = struct {
@@ -95,6 +111,31 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             const operands = self.arena.alloc(usize, 1) catch oom();
             operands[0] = self.resolveConstant(resolveFlowValue(expr));
             self.exprs.append(self.alloc, .{ .op = .literal, .operands = operands }) catch oom();
+            return self.exprs.items.len - 1;
+        },
+        .binary => |binary| {
+            const operands = self.arena.alloc(usize, 2) catch oom();
+
+            operands[0] = self.traverseExpr(binary.lhs);
+            operands[1] = self.traverseExpr(binary.rhs);
+
+            const op: Node.Expr.Operator = switch (binary.op.type) {
+                .@"==" => .equal,
+                .@"!=" => .unequal,
+                .@"<" => .less,
+                .@"<=" => .less_equal,
+                .@">=" => .greater_equal,
+                .@">" => .greater,
+                .@".", .@".=" => .concat,
+                .@"+", .@"+=" => .add,
+                .@"-", .@"-=" => .sub,
+                .@"*", .@"*=" => .mul,
+                .@"/", .@"/=" => .div,
+                .@"%", .@"%=" => .mod,
+                else => unreachable,
+            };
+
+            self.exprs.append(self.alloc, .{ .op = op, .operands = operands }) catch oom();
             return self.exprs.items.len - 1;
         },
         else => std.debug.panic("Expression '{s}' is not yet supported", .{@tagName(expr.*)}),
