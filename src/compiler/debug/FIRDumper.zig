@@ -6,12 +6,15 @@ pub fn dump(writer: anytype, fir: *const FIR) !void {
     }
     try writer.writeAll("\n");
 
-    for (fir.nodes.items) |node| {
+    var maybe_node_idx: ?usize = 0;
+    while (maybe_node_idx) |node_idx| {
+        const node = fir.nodes.items[node_idx];
+        defer maybe_node_idx = node.after;
+
         switch (node.kind) {
             .expr => {
                 try dumpExpr(writer, fir, node.index);
             },
-            .cond => @panic("'cond' is not yet supported in FIRDumper"),
         }
         try writer.writeAll(";\n");
     }
@@ -22,6 +25,9 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) !void {
     try writer.writeAll("(");
     switch (expr.op) {
         .literal => try writer.print("<{d}>", .{expr.operands[0]}),
+        .true => try writer.writeAll("true"),
+        .false => try writer.writeAll("false"),
+        .null => try writer.writeAll("null"),
         .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat => {
             try dumpExpr(writer, fir, expr.operands[0]);
             try writer.print(" {s} ", .{@tagName(expr.op)});

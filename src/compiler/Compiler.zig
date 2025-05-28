@@ -11,9 +11,15 @@ pub fn init(alloc: Allocator, fir: *const FIR) Compiler {
 
 pub fn compile(self: *Compiler) []const u8 {
     self.compileConstants();
-    // self.traverse(self.program);
+    self.compileFunctions();
+    self.traverse();
 
     return self.byte_code.toOwnedSlice(self.alloc) catch oom();
+}
+
+fn compileFunctions(self: *Compiler) void {
+    // TODO:
+    self.emitOpcode(.functions_done);
 }
 
 fn compileConstants(self: *Compiler) void {
@@ -47,11 +53,62 @@ fn compileConstants(self: *Compiler) void {
     self.emitOpcode(.constants_done);
 }
 
-// fn traverse(self: *Compiler, program: []const *ast.Stmt) void {
-//     for (program) |stmt| {
-//         self.statement(stmt);
-//     }
-// }
+fn traverse(self: *Compiler) void {
+    var maybe_node_idx: ?usize = 0;
+    while (maybe_node_idx) |node_idx| {
+        const node = self.fir.nodes.items[node_idx];
+        defer maybe_node_idx = node.after;
+
+        switch (node.kind) {
+            .expr => {
+                self.compileExpression(node.index);
+                self.emitOpcode(.pop);
+            },
+            // .cond => @panic("'cond' is not yet supported in Compiler"),
+        }
+    }
+}
+
+fn compileExpression(self: *Compiler, expr_idx: usize) void {
+    const expr = self.fir.exprs.items[expr_idx];
+    switch (expr.op) {
+        .literal => {
+            const literal = self.fir.constants.items[expr.operands[0]];
+            switch (literal) {
+                .int, .float, .string => self.emitConstant(expr.operands[0]),
+                .bool, .null, .function, .builtin_fn => unreachable,
+            }
+        },
+        .true => self.emitOpcode(.true),
+        .false => self.emitOpcode(.false),
+        .null => self.emitOpcode(.null),
+        .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat => self.compileBinary(expr),
+    }
+}
+
+fn compileBinary(self: *Compiler, expr: FIR.Node.Expr) void {
+    std.debug.assert(expr.operands.len == 2);
+
+    self.compileExpression(expr.operands[0]);
+    self.compileExpression(expr.operands[1]);
+
+    switch (expr.op) {
+        .equal => self.emitOpcode(.equal),
+        .unequal => self.emitOpcode(.unequal),
+        .less => self.emitOpcode(.lower),
+        .less_equal => self.emitOpcode(.lower_equal),
+        .greater => self.emitOpcode(.greater),
+        .greater_equal => self.emitOpcode(.greater_equal),
+        .concat => self.emitOpcode(.concat),
+        .add => self.emitOpcode(if (expr.type == .int) .add_i else .add_f),
+        .sub => self.emitOpcode(if (expr.type == .int) .sub_i else .sub_f),
+        .div => self.emitOpcode(if (expr.type == .int) .div_i else .div_f),
+        .mul => self.emitOpcode(if (expr.type == .int) .mul_i else .mul_f),
+        .mod => self.emitOpcode(if (expr.type == .int) .mod_i else .mod_f),
+        else => unreachable,
+    }
+}
+
 //
 // fn statement(self: *Compiler, stmt: *Stmt) void {
 //     switch (stmt.*) {
@@ -319,8 +376,7 @@ fn patchJump(self: *Compiler, jump_idx: usize) void {
     self.byte_code.items[jump_idx + 2] = bytes[1];
 }
 
-fn emitConstant(self: *Compiler, value: FlowValue) void {
-    const idx = self.resolveConstant(value);
+fn emitConstant(self: *Compiler, idx: usize) void {
     self.emitOpcode(.constant);
     self.emitByte(@intCast(idx));
 }
