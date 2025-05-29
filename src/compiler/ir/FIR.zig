@@ -6,14 +6,6 @@
 //! - allows passes for constant folding and dead code elimination
 //!
 
-// NOTE:
-// - tree-like structure
-// - struct of arrays
-// - Node has a kind and an index
-// - arrays for each kind
-// - childnode is an index into the node list
-// - list of constants
-// - entrypoint
 alloc: Allocator,
 arena_state: std.heap.ArenaAllocator,
 constants: std.ArrayListUnmanaged(FlowValue) = .empty,
