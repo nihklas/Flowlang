@@ -111,7 +111,7 @@ fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
         }
 
         self.nodes.items[current_node].before = prev_node;
-        prev_node = current_node;
+        prev_node = self.nodes.items.len - 1;
 
         if (self.entry == std.math.maxInt(usize)) {
             self.entry = current_node;
@@ -129,7 +129,7 @@ fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) void {
         }
 
         self.nodes.items[current_node].before = prev_node;
-        prev_node = current_node;
+        prev_node = self.nodes.items.len - 1;
     }
 }
 
@@ -139,7 +139,10 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) usize {
             const expr_idx = self.traverseExpr(stmt.expr.expr);
             self.nodes.append(self.alloc, .{ .kind = .expr, .index = expr_idx }) catch oom();
         },
-        .block => |block| self.traverseBlock(block.stmts),
+        .block => |block| {
+            self.traverseBlock(block.stmts);
+            return self.startOfBlock(self.nodes.items.len - 1);
+        },
         .@"if" => |if_stmt| {
             const condition = self.traverseExpr(if_stmt.condition);
             const true_branch = self.startOfBlock(self.traverseStmt(if_stmt.true_branch));

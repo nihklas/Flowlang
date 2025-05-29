@@ -43,13 +43,13 @@ if true {
         4;
         5;
     }
+
     if false {
         "foo";
         "bar";
-    }
-    else {
-        {
-            "some";
-        }
+    } else if true {
+        "some";
+    } else {
+        "else";
     }
 }
