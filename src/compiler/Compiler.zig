@@ -70,6 +70,7 @@ fn compileStmt(self: *Compiler, node_idx: usize) void {
             self.emitOpcode(.pop);
         },
         .cond => self.compileCond(node.index),
+        .loop => self.compileLoop(node.index),
     }
 }
 
@@ -89,6 +90,19 @@ fn compileCond(self: *Compiler, cond_idx: usize) void {
     }
 
     self.patchJump(else_jump);
+}
+
+fn compileLoop(self: *Compiler, loop_idx: usize) void {
+    const loop = self.fir.loops.items[loop_idx];
+
+    const loop_start = self.byte_code.items.len;
+    self.compileExpression(loop.condition);
+    const exit_jump = self.emitJump(.jump_if_false);
+    self.emitOpcode(.pop);
+    self.compileBlock(loop.body);
+    self.emitLoop(loop_start);
+    self.patchJump(exit_jump);
+    self.emitOpcode(.pop);
 }
 
 fn compileExpression(self: *Compiler, expr_idx: usize) void {

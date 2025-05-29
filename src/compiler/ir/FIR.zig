@@ -20,6 +20,7 @@ constants: std.ArrayListUnmanaged(FlowValue) = .empty,
 nodes: std.ArrayListUnmanaged(Node) = .empty,
 exprs: std.ArrayListUnmanaged(Node.Expr) = .empty,
 conds: std.ArrayListUnmanaged(Node.Cond) = .empty,
+loops: std.ArrayListUnmanaged(Node.Loop) = .empty,
 entry: usize = std.math.maxInt(usize),
 
 // TODO: how do they look?
@@ -30,7 +31,7 @@ entry: usize = std.math.maxInt(usize),
 /// `index` field points into a different collection. `before` and `after` contain the index of the
 /// previous and next node in the list of instructions.
 pub const Node = struct {
-    kind: enum { expr, cond },
+    kind: enum { expr, cond, loop },
     index: usize,
     // TODO: should this be a slice?
     before: ?usize = null,
@@ -70,6 +71,11 @@ pub const Node = struct {
         false: ?usize = null,
     };
 
+    pub const Loop = struct {
+        condition: usize,
+        body: usize,
+    };
+
     pub fn format(self: Node, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         try writer.writeAll("Node{ ");
         try writer.print("kind: {s}, ", .{@tagName(self.kind)});
@@ -93,6 +99,7 @@ pub fn deinit(self: *FIR) void {
     self.nodes.deinit(self.alloc);
     self.exprs.deinit(self.alloc);
     self.conds.deinit(self.alloc);
+    self.loops.deinit(self.alloc);
 }
 
 pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
@@ -119,7 +126,9 @@ fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
     }
 }
 
-fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) void {
+fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) usize {
+    std.debug.assert(stmts.len > 0);
+
     var prev_node: ?usize = null;
     for (stmts) |stmt| {
         const current_node = self.traverseStmt(stmt);
@@ -131,6 +140,7 @@ fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) void {
         self.nodes.items[current_node].before = prev_node;
         prev_node = self.nodes.items.len - 1;
     }
+    return prev_node.?;
 }
 
 fn traverseStmt(self: *FIR, stmt: *ast.Stmt) usize {
@@ -140,8 +150,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) usize {
             self.nodes.append(self.alloc, .{ .kind = .expr, .index = expr_idx }) catch oom();
         },
         .block => |block| {
-            self.traverseBlock(block.stmts);
-            return self.startOfBlock(self.nodes.items.len - 1);
+            return self.startOfBlock(self.traverseBlock(block.stmts));
         },
         .@"if" => |if_stmt| {
             const condition = self.traverseExpr(if_stmt.condition);
@@ -155,6 +164,18 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) usize {
 
             self.conds.append(self.alloc, .{ .condition = condition, .true = true_branch, .false = false_branch }) catch oom();
             self.nodes.append(self.alloc, .{ .kind = .cond, .index = self.conds.items.len - 1 }) catch oom();
+        },
+        .loop => |loop| {
+            const condition = self.traverseExpr(loop.condition);
+            const body = self.traverseBlock(loop.body);
+            if (loop.inc) |inc| {
+                const inc_idx = self.traverseStmt(inc);
+                self.nodes.items[body].after = inc_idx;
+                self.nodes.items[inc_idx].before = body;
+            }
+
+            self.loops.append(self.alloc, .{ .condition = condition, .body = self.startOfBlock(body) }) catch oom();
+            self.nodes.append(self.alloc, .{ .kind = .loop, .index = self.loops.items.len - 1 }) catch oom();
         },
         else => std.debug.panic("Statement '{s}' is not yet supported", .{@tagName(stmt.*)}),
     }

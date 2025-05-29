@@ -29,6 +29,7 @@ fn dumpStmt(writer: anytype, fir: *const FIR, node_idx: usize, depth: usize) Wri
             try writer.writeAll(";");
         },
         .cond => try dumpCond(writer, fir, node.index, depth),
+        .loop => try dumpLoop(writer, fir, node.index, depth),
     }
 
     try writer.writeAll("\n");
@@ -68,6 +69,17 @@ fn dumpCond(writer: anytype, fir: *const FIR, cond_idx: usize, depth: usize) Wri
         try printDepth(writer, depth);
         try writer.writeAll("}");
     }
+}
+
+fn dumpLoop(writer: anytype, fir: *const FIR, loop_idx: usize, depth: usize) WriterError!void {
+    const loop = fir.loops.items[loop_idx];
+
+    try writer.writeAll("loop ");
+    try dumpExpr(writer, fir, loop.condition);
+    try writer.writeAll(" {\n");
+    try dumpBlock(writer, fir, loop.body, depth + 1);
+    try printDepth(writer, depth);
+    try writer.writeAll("}");
 }
 
 fn printDepth(writer: anytype, depth: usize) WriterError!void {

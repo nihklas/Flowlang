@@ -75,7 +75,6 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
                 try writeIndent(writer, depth + 1);
                 try writer.writeAll("(Body)\n");
                 for (loop.body) |body_stmt| {
-                    if (body_stmt == loop.inc) continue;
                     try dumpStmt(writer, body_stmt, depth + 2);
                 }
             }

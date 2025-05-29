@@ -266,26 +266,13 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     try self.consume(.@"{", "Expected '{' before loop body");
     const body = try self.block();
 
-    // for-loop gets desugared into this structure:
-    //
-    // block
-    // initializer
-    // loop
-    //     body
-    //     inc
-
     var outer_scope: std.ArrayList(*Stmt) = .init(self.alloc);
 
     if (maybe_initializer) |initializer| {
         outer_scope.append(initializer) catch oom();
     }
 
-    const loop_body = if (maybe_increment) |increment|
-        std.mem.concat(self.alloc, *Stmt, &.{ body, &.{increment} }) catch oom()
-    else
-        body;
-
-    const loop = Stmt.createLoop(self.alloc, condition, loop_body);
+    const loop = Stmt.createLoop(self.alloc, condition, body);
     outer_scope.append(loop) catch oom();
 
     if (maybe_increment) |increment| {
