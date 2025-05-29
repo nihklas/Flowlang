@@ -261,7 +261,7 @@ fn resolveConstant(self: *FIR, value: FlowValue) usize {
     };
 }
 
-inline fn arena(self: *FIR) Allocator {
+fn arena(self: *FIR) Allocator {
     return self.arena_state.allocator();
 }
 
