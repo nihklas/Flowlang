@@ -8,11 +8,11 @@
 
 alloc: Allocator,
 arena_state: std.heap.ArenaAllocator,
-constants: std.ArrayListUnmanaged(FlowValue) = .empty,
-nodes: std.ArrayListUnmanaged(Node) = .empty,
-exprs: std.ArrayListUnmanaged(Node.Expr) = .empty,
-conds: std.ArrayListUnmanaged(Node.Cond) = .empty,
-loops: std.ArrayListUnmanaged(Node.Loop) = .empty,
+constants: std.ArrayListUnmanaged(FlowValue),
+nodes: std.ArrayListUnmanaged(Node),
+exprs: std.ArrayListUnmanaged(Node.Expr),
+conds: std.ArrayListUnmanaged(Node.Cond),
+loops: std.ArrayListUnmanaged(Node.Loop),
 entry: usize = std.math.maxInt(usize),
 
 // TODO: how do they look?
@@ -82,6 +82,11 @@ pub fn init(alloc: Allocator) FIR {
     return .{
         .alloc = alloc,
         .arena_state = .init(alloc),
+        .constants = .empty,
+        .nodes = .empty,
+        .exprs = .empty,
+        .conds = .empty,
+        .loops = .empty,
     };
 }
 
