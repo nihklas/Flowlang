@@ -6,50 +6,77 @@
 //! - allows passes for constant folding and dead code elimination
 //!
 
+/// general allocator that is passed into from init
 alloc: Allocator,
+/// Arena state for all intermediate/small slices like the operands in an expression
+/// backed by the general allocator
 arena_state: std.heap.ArenaAllocator,
+/// Collection of constant values found in the source code
 constants: std.ArrayListUnmanaged(FlowValue),
 nodes: std.ArrayListUnmanaged(Node),
 exprs: std.ArrayListUnmanaged(Node.Expr),
 conds: std.ArrayListUnmanaged(Node.Cond),
 loops: std.ArrayListUnmanaged(Node.Loop),
+/// The entrypoint of the FIR graph, gets initialized to `uninitialized_entry`.
 entry: usize,
-
-// TODO: how do they look?
-// functions: std.ArrayListUnmanaged(),
 
 /// Generally, all Nodes are Statements. That means, no Node produces a value.
 /// The actual type of Statement is encoded in the `kind` field. Depending on the value there, the
 /// `index` field points into a different collection. `before` and `after` contain the index of the
 /// previous and next node in the list of instructions.
 pub const Node = struct {
+    /// The actual node kind
     kind: enum { expr, cond, loop },
+    /// The index into the concrete node kind collection
     index: usize,
-    // TODO: should this be a slice?
+    /// index into the node collection to the node directly in front of the current one. If this
+    /// field is null, it means the current node is at the start of a block
     before: ?usize = null,
+    /// index into the node collection to the node directly after the current one. If this field is
+    /// null, it means the current node is at the end of a block
     after: ?usize = null,
 
     pub const Expr = struct {
+        /// the type of expression
         op: Operator,
+        /// The resulting type of the expression
         type: FlowType,
+        /// The used operands. Depending on the `op`, this can have a different size and the
+        /// elements point into a different collection
         operands: []const usize = &.{},
 
         const Operator = enum {
+            /// Operands: none
             true,
+            /// Operands: none
             false,
+            /// Operands: none
             null,
+            /// Operands: 1 -> constants
             literal,
+            /// Operands: 2 -> expressions
             equal,
+            /// Operands: 2 -> expressions
             unequal,
+            /// Operands: 2 -> expressions
             less,
+            /// Operands: 2 -> expressions
             less_equal,
+            /// Operands: 2 -> expressions
             greater,
+            /// Operands: 2 -> expressions
             greater_equal,
+            /// Operands: 2 -> expressions
             add,
+            /// Operands: 2 -> expressions
             sub,
+            /// Operands: 2 -> expressions
             div,
+            /// Operands: 2 -> expressions
             mul,
+            /// Operands: 2 -> expressions
             mod,
+            /// Operands: 2 -> expressions
             concat,
         };
     };
@@ -64,7 +91,9 @@ pub const Node = struct {
     };
 
     pub const Loop = struct {
+        /// points to an expr
         condition: usize,
+        /// points to the starting node of the block
         body: usize,
     };
 
@@ -172,8 +201,8 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             const condition = self.traverseExpr(loop.condition);
             const body = self.traverseBlock(loop.body) orelse return null;
             if (loop.inc) |inc| {
-                // there should be no way, that the inc_stmt in a loop is an empty block or produces
-                // an otherwise "empty" Statement
+                // NOTE: there should be no way, that the inc_stmt in a loop is an empty block or
+                // produces an otherwise "empty" Statement
                 const inc_idx = self.traverseStmt(inc).?;
                 self.nodes.items[body].after = inc_idx;
                 self.nodes.items[inc_idx].before = body;
