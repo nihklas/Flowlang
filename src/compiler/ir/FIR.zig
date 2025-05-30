@@ -13,7 +13,7 @@ nodes: std.ArrayListUnmanaged(Node),
 exprs: std.ArrayListUnmanaged(Node.Expr),
 conds: std.ArrayListUnmanaged(Node.Cond),
 loops: std.ArrayListUnmanaged(Node.Loop),
-entry: usize = std.math.maxInt(usize),
+entry: usize,
 
 // TODO: how do they look?
 // functions: std.ArrayListUnmanaged(),
@@ -87,6 +87,7 @@ pub fn init(alloc: Allocator) FIR {
         .exprs = .empty,
         .conds = .empty,
         .loops = .empty,
+        .entry = uninitialized_entry,
     };
 }
 
@@ -108,53 +109,58 @@ pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
 fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
     var prev_node: ?usize = null;
     for (stmts) |stmt| {
-        const current_node = self.traverseStmt(stmt);
+        if (self.traverseStmt(stmt)) |current_node| {
+            if (prev_node) |prev| {
+                self.nodes.items[prev].after = current_node;
+            }
 
-        if (prev_node) |prev| {
-            self.nodes.items[prev].after = current_node;
-        }
+            self.nodes.items[current_node].before = prev_node;
+            prev_node = self.nodes.items.len - 1;
 
-        self.nodes.items[current_node].before = prev_node;
-        prev_node = self.nodes.items.len - 1;
-
-        if (self.entry == std.math.maxInt(usize)) {
-            self.entry = current_node;
+            if (self.entry == uninitialized_entry) {
+                self.entry = current_node;
+            }
         }
     }
 }
 
-fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) usize {
-    std.debug.assert(stmts.len > 0);
-
+fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) ?usize {
     var prev_node: ?usize = null;
     for (stmts) |stmt| {
-        const current_node = self.traverseStmt(stmt);
+        if (self.traverseStmt(stmt)) |current_node| {
+            if (prev_node) |prev| {
+                self.nodes.items[prev].after = current_node;
+            }
 
-        if (prev_node) |prev| {
-            self.nodes.items[prev].after = current_node;
+            self.nodes.items[current_node].before = prev_node;
+            prev_node = self.nodes.items.len - 1;
         }
-
-        self.nodes.items[current_node].before = prev_node;
-        prev_node = self.nodes.items.len - 1;
     }
-    return prev_node.?;
+    return prev_node;
 }
 
-fn traverseStmt(self: *FIR, stmt: *ast.Stmt) usize {
+fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
     switch (stmt.*) {
         .expr => {
             const expr_idx = self.traverseExpr(stmt.expr.expr);
             self.nodes.append(self.alloc, .{ .kind = .expr, .index = expr_idx }) catch oom();
         },
         .block => |block| {
-            return self.startOfBlock(self.traverseBlock(block.stmts));
+            return self.startOfBlock(self.traverseBlock(block.stmts) orelse return null);
         },
         .@"if" => |if_stmt| {
             const condition = self.traverseExpr(if_stmt.condition);
-            const true_branch = self.startOfBlock(self.traverseStmt(if_stmt.true_branch));
+            const true_branch = blk: {
+                if (self.traverseStmt(if_stmt.true_branch)) |true_branch| {
+                    break :blk self.startOfBlock(true_branch);
+                }
+                return null;
+            };
             const false_branch = blk: {
                 if (if_stmt.false_branch) |false_branch_stmt| {
-                    break :blk self.startOfBlock(self.traverseStmt(false_branch_stmt));
+                    if (self.traverseStmt(false_branch_stmt)) |false_branch| {
+                        break :blk self.startOfBlock(false_branch);
+                    }
                 }
                 break :blk null;
             };
@@ -164,9 +170,11 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) usize {
         },
         .loop => |loop| {
             const condition = self.traverseExpr(loop.condition);
-            const body = self.traverseBlock(loop.body);
+            const body = self.traverseBlock(loop.body) orelse return null;
             if (loop.inc) |inc| {
-                const inc_idx = self.traverseStmt(inc);
+                // there should be no way, that the inc_stmt in a loop is an empty block or produces
+                // an otherwise "empty" Statement
+                const inc_idx = self.traverseStmt(inc).?;
                 self.nodes.items[body].after = inc_idx;
                 self.nodes.items[inc_idx].before = body;
             }
@@ -264,6 +272,8 @@ fn resolveConstant(self: *FIR, value: FlowValue) usize {
 fn arena(self: *FIR) Allocator {
     return self.arena_state.allocator();
 }
+
+pub const uninitialized_entry = std.math.maxInt(usize);
 
 const FIR = @This();
 

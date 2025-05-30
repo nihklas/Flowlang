@@ -10,6 +10,9 @@ pub fn init(alloc: Allocator, fir: *const FIR) Compiler {
 }
 
 pub fn compile(self: *Compiler) []const u8 {
+    if (self.fir.entry == FIR.uninitialized_entry) {
+        return &.{};
+    }
     self.compileConstants();
     self.compileFunctions();
     self.compileBlock(self.fir.entry);

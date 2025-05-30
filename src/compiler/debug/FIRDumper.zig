@@ -37,7 +37,6 @@ fn dumpStmt(writer: anytype, fir: *const FIR, node_idx: usize, depth: usize) Wri
 
 fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void {
     const expr = fir.exprs.items[expr_idx];
-    try writer.writeAll("(");
     switch (expr.op) {
         .literal => try writer.print("<{d}>", .{expr.operands[0]}),
         .true => try writer.writeAll("true"),
@@ -45,12 +44,11 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
         .null => try writer.writeAll("null"),
         .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat => {
             try dumpExpr(writer, fir, expr.operands[0]);
-            try writer.print(" {s} ", .{@tagName(expr.op)});
+            try writer.writeAll(" ");
             try dumpExpr(writer, fir, expr.operands[1]);
+            try writer.print(" {s}", .{@tagName(expr.op)});
         },
-        // else => std.debug.panic("'{s}' is not yet supported in FIRDumper", .{@tagName(expr.op)}),
     }
-    try writer.print("|{s})", .{@tagName(expr.type)});
 }
 
 fn dumpCond(writer: anytype, fir: *const FIR, cond_idx: usize, depth: usize) WriterError!void {
