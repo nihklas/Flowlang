@@ -141,10 +141,6 @@ pub const Stmt = union(enum) {
 
     @"if": struct { condition: *Expr, true_branch: *Stmt, false_branch: ?*Stmt },
 
-    channel_read: struct { channel: Token, result: Token },
-    channel_write: struct { channel: Token, value: *Expr },
-    channel: struct { name: Token, type: FlowType },
-
     variable: struct {
         name: Token,
         constant: bool,
@@ -203,30 +199,6 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createChannelRead(alloc: Allocator, channel: Token, result: Token) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .channel_read = .{ .channel = channel, .result = result },
-        };
-        return stmt;
-    }
-
-    pub fn createChannelWrite(alloc: Allocator, channel: Token, value: *Expr) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .channel_write = .{ .channel = channel, .value = value },
-        };
-        return stmt;
-    }
-
-    pub fn createChannel(alloc: Allocator, name: Token, type_hint: FlowType) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .channel = .{ .name = name, .type = type_hint },
-        };
-        return stmt;
-    }
-
     pub fn createVariable(alloc: Allocator, name: Token, type_hint: ?TypeHint, constant: bool, value: ?*Expr) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
@@ -259,7 +231,7 @@ pub const Stmt = union(enum) {
     pub fn destroy(self: *Stmt, alloc: Allocator) void {
         defer alloc.destroy(self);
         switch (self.*) {
-            .channel_read, .channel, .@"break", .@"continue" => {},
+            .@"break", .@"continue" => {},
             .expr => |expr| expr.expr.destroy(alloc),
             .block => |block| {
                 for (block.stmts) |stmt| {
@@ -286,7 +258,6 @@ pub const Stmt = union(enum) {
                 }
             },
             .@"return" => |return_stmt| if (return_stmt.value) |value| value.destroy(alloc),
-            .channel_write => |channel_write| channel_write.value.destroy(alloc),
             .variable => |variable| if (variable.value) |value| value.destroy(alloc),
             .function => |function| {
                 for (function.params) |param| {
@@ -370,26 +341,6 @@ test "Stmt.createReturn" {
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const return_stmt = Stmt.createReturn(testing_alloc, .{ .type = .@"return", .lexeme = "return", .line = 1, .column = 1 }, expr);
     defer return_stmt.destroy(testing_alloc);
-}
-
-test "Stmt.createChannel" {
-    const channel = Stmt.createChannel(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 }, .int);
-    defer channel.destroy(testing_alloc);
-}
-
-test "Stmt.createChannelWrite" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const channel_write = Stmt.createChannelWrite(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 }, expr);
-    defer channel_write.destroy(testing_alloc);
-}
-
-test "Stmt.createChannelRead" {
-    const channel_read = Stmt.createChannelRead(
-        testing_alloc,
-        .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 },
-        .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-    );
-    defer channel_read.destroy(testing_alloc);
 }
 
 test "Stmt.createLoop" {

@@ -104,7 +104,6 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
                 try dumpExpr(writer, value, depth + 1);
             }
         },
-        .channel, .channel_read, .channel_write => @panic("Channels are not yet support"),
     }
 }
 

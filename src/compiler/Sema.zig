@@ -80,7 +80,6 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.analyseStmt(false_branch);
             }
         },
-        .channel, .channel_read, .channel_write => std.debug.panic("Channels are not yet supported\n", .{}),
         .variable => |var_stmt| {
             if (var_stmt.constant and var_stmt.value == null) {
                 self.pushError(.{ .token = var_stmt.name, .err = VariableError.ConstantWithoutValue, .extra_info1 = var_stmt.name.lexeme });
