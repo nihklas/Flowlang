@@ -284,8 +284,8 @@ test "Expr.createLiteral" {
 }
 
 test "Expr.createGrouping" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const grouping = Expr.createGrouping(testing_alloc, literal);
+    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 2 }, .{ .float = 12.34 });
+    const grouping = Expr.createGrouping(testing_alloc, .{ .type = .@"(", .lexeme = "(", .line = 1, .column = 1 }, literal);
     defer grouping.destroy(testing_alloc);
 }
 
@@ -366,7 +366,7 @@ test "Stmt.createVariable" {
     const loop = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        .{ .type = .string, .lexeme = "string", .line = 1, .column = 1 },
+        .{ .type = .{ .type = .string, .lexeme = "string", .line = 1, .column = 1 } },
         false,
         expr,
     );
@@ -379,7 +379,7 @@ test "Stmt.createFunction" {
     const variable = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 },
-        .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 },
+        .{ .type = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
         true,
         null,
     );
@@ -392,7 +392,7 @@ test "Stmt.createFunction" {
     const function = Stmt.createFunction(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 },
+        .{ .type = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
         params,
         body,
     );
