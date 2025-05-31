@@ -40,7 +40,6 @@ pub const OpCode = enum(u8) {
     lower_equal,
 
     // variables
-    create_global,
     get_global,
     set_global,
 

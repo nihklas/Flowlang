@@ -36,16 +36,15 @@ fn runDump(self: *Dumper) void {
             .float => self.constantInstruction("OP_FLOAT", .float),
             .string => self.constantInstruction("OP_STRING", .string),
             .string_long => self.constantInstruction("OP_STRING_LONG", .string_long),
-            .get_local => self.localInstruction("OP_GET_LOCAL"),
-            .set_local => self.localInstruction("OP_SET_LOCAL"),
+            .get_local => self.variableInstruction("OP_GET_LOCAL"),
+            .set_local => self.variableInstruction("OP_SET_LOCAL"),
             .jump_if_false => self.jumpInstruction("OP_JUMP_IF_FALSE", true),
             .jump_if_true => self.jumpInstruction("OP_JUMP_IF_TRUE", true),
             .jump_back => self.jumpInstruction("OP_JUMP_BACK", false),
             .jump => self.jumpInstruction("OP_JUMP", true),
             .call => self.printInstruction("OP_CALL", "", .{}),
-            .create_global => self.printInstruction("OP_CREATE_GLOBAL", "", .{}),
-            .get_global => self.printInstruction("OP_GET_GLOBAL", "", .{}),
-            .set_global => self.printInstruction("OP_SET_GLOBAL", "", .{}),
+            .get_global => self.variableInstruction("OP_GET_GLOBAL"),
+            .set_global => self.variableInstruction("OP_SET_GLOBAL"),
             .true => self.printInstruction("OP_TRUE", "", .{}),
             .false => self.printInstruction("OP_FALSE", "", .{}),
             .null => self.printInstruction("OP_NULL", "", .{}),
@@ -89,7 +88,7 @@ fn jumpInstruction(self: *Dumper, op: []const u8, forward: bool) void {
     self.printInstruction(op, "-> {x:0>4}", .{target});
 }
 
-fn localInstruction(self: *Dumper, op: []const u8) void {
+fn variableInstruction(self: *Dumper, op: []const u8) void {
     const operand = self.byte();
     self.printInstruction(op, "{d}", .{operand});
 }

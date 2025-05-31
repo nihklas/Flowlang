@@ -74,6 +74,7 @@ fn compileStmt(self: *Compiler, node_idx: usize) void {
         },
         .cond => self.compileCond(node.index),
         .loop => self.compileLoop(node.index),
+        .global => self.compileGlobal(node.index),
     }
 }
 
@@ -108,6 +109,21 @@ fn compileLoop(self: *Compiler, loop_idx: usize) void {
     self.emitOpcode(.pop);
 }
 
+fn compileGlobal(self: *Compiler, var_idx: usize) void {
+    const global = self.fir.globals.items[var_idx];
+
+    if (global.expr) |expr| {
+        self.compileExpression(expr);
+    } else {
+        self.emitOpcode(.null);
+    }
+
+    self.emitOpcode(.set_global);
+    self.emitByte(@intCast(var_idx));
+
+    self.emitOpcode(.pop);
+}
+
 fn compileExpression(self: *Compiler, expr_idx: usize) void {
     const expr = self.fir.exprs.items[expr_idx];
     switch (expr.op) {
@@ -122,6 +138,10 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
         .false => self.emitOpcode(.false),
         .null => self.emitOpcode(.null),
         .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat => self.compileBinary(expr),
+        .global => {
+            self.emitOpcode(.get_global);
+            self.emitByte(@intCast(expr.operands[0]));
+        },
     }
 }
 

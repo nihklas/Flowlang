@@ -17,6 +17,8 @@ nodes: std.ArrayListUnmanaged(Node),
 exprs: std.ArrayListUnmanaged(Node.Expr),
 conds: std.ArrayListUnmanaged(Node.Cond),
 loops: std.ArrayListUnmanaged(Node.Loop),
+globals: std.ArrayListUnmanaged(Node.Variable),
+scope: usize,
 /// The entrypoint of the FIR graph, gets initialized to `uninitialized_entry`.
 entry: usize,
 
@@ -26,7 +28,7 @@ entry: usize,
 /// previous and next node in the list of instructions.
 pub const Node = struct {
     /// The actual node kind
-    kind: enum { expr, cond, loop },
+    kind: enum { expr, cond, loop, global },
     /// The index into the concrete node kind collection
     index: usize,
     /// index into the node collection to the node directly in front of the current one. If this
@@ -78,6 +80,8 @@ pub const Node = struct {
             mod,
             /// Operands: 2 -> expressions
             concat,
+            /// Operands: 1 -> index
+            global,
         };
     };
 
@@ -87,7 +91,7 @@ pub const Node = struct {
         /// node to be executed on true
         true: usize,
         /// node to be executed on false
-        false: ?usize = null,
+        false: ?usize,
     };
 
     pub const Loop = struct {
@@ -95,6 +99,12 @@ pub const Node = struct {
         condition: usize,
         /// points to the starting node of the block
         body: usize,
+    };
+
+    pub const Variable = struct {
+        name: []const u8,
+        type: FlowType,
+        expr: ?usize,
     };
 
     pub fn format(self: Node, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
@@ -116,7 +126,9 @@ pub fn init(alloc: Allocator) FIR {
         .exprs = .empty,
         .conds = .empty,
         .loops = .empty,
+        .globals = .empty,
         .entry = uninitialized_entry,
+        .scope = 0,
     };
 }
 
@@ -127,6 +139,7 @@ pub fn deinit(self: *FIR) void {
     self.exprs.deinit(self.alloc);
     self.conds.deinit(self.alloc);
     self.loops.deinit(self.alloc);
+    self.globals.deinit(self.alloc);
 }
 
 pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
@@ -211,6 +224,27 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             self.loops.append(self.alloc, .{ .condition = condition, .body = self.startOfBlock(body) }) catch oom();
             self.nodes.append(self.alloc, .{ .kind = .loop, .index = self.loops.items.len - 1 }) catch oom();
         },
+        .variable => |variable| {
+            const initializer = if (variable.value) |value| self.traverseExpr(value) else null;
+            const typehint: FlowType = blk: {
+                if (variable.type_hint) |typehint| {
+                    break :blk switch (typehint.type.type) {
+                        .bool => .bool,
+                        .string => .string,
+                        .int => .int,
+                        .float => .float,
+                        else => unreachable,
+                    };
+                }
+                break :blk self.exprs.getLast().type;
+            };
+            if (self.scope == 0) {
+                self.globals.append(self.alloc, .{ .name = variable.name.lexeme, .expr = initializer, .type = typehint }) catch oom();
+                self.nodes.append(self.alloc, .{ .kind = .global, .index = self.globals.items.len - 1 }) catch oom();
+            } else {
+                @panic("Locals are not yet supported");
+            }
+        },
         else => std.debug.panic("Statement '{s}' is not yet supported", .{@tagName(stmt.*)}),
     }
 
@@ -257,6 +291,21 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             };
 
             self.exprs.append(self.alloc, .{ .op = op, .type = flow_type, .operands = operands }) catch oom();
+        },
+        .variable => |variable| {
+            if (self.scope == 0) {
+                const idx, const global = for (self.globals.items, 0..) |global, i| {
+                    if (std.mem.eql(u8, global.name, variable.name.lexeme)) {
+                        break .{ i, global };
+                    }
+                } else @panic("Trying to access non-existent global");
+
+                const operands = self.arena().alloc(usize, 1) catch oom();
+                operands[0] = idx;
+                self.exprs.append(self.alloc, .{ .op = .global, .type = global.type, .operands = operands }) catch oom();
+            } else {
+                @panic("Locals not yet supported");
+            }
         },
         else => std.debug.panic("Expression '{s}' is not yet supported", .{@tagName(expr.*)}),
     }
