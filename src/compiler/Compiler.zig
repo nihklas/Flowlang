@@ -166,6 +166,17 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitOpcode(.get_local);
             self.emitByte(@intCast(local.stack_idx));
         },
+        .assign_global => {
+            self.compileExpression(expr.operands[0]);
+            self.emitOpcode(.set_global);
+            self.emitByte(@intCast(expr.operands[1]));
+        },
+        .assign_local => {
+            const local = self.fir.locals.items[expr.operands[1]];
+            self.compileExpression(expr.operands[0]);
+            self.emitOpcode(.set_local);
+            self.emitByte(@intCast(local.stack_idx));
+        },
     }
 }
 

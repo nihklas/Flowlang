@@ -64,6 +64,10 @@ pub const Node = struct {
             global,
             /// Operands: 1 -> index
             local,
+            /// Operands: 1 -> index
+            assign_global,
+            /// Operands: 1 -> index
+            assign_local,
             /// Operands: 1 -> constants
             literal,
             /// Operands: 1 -> expression
@@ -361,7 +365,14 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[0] = var_idx;
             self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .global else .local, .type = variable_node.type, .operands = operands }) catch oom();
         },
-        else => std.debug.panic("Expression '{s}' is not yet supported", .{@tagName(expr.*)}),
+        .assignment => |assignment| {
+            const var_idx, const variable_node = self.resolveVariable(assignment.name.lexeme);
+            const operands = self.arena().alloc(usize, 2) catch oom();
+            operands[0] = self.traverseExpr(assignment.value);
+            operands[1] = var_idx;
+            self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .assign_global else .assign_local, .type = variable_node.type, .operands = operands }) catch oom();
+        },
+        .call => @panic("call-expression not yet supported"),
     }
     return self.exprs.items.len - 1;
 }

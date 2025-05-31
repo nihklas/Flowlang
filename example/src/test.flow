@@ -1,4 +1,8 @@
-true and false;
-true or false;
-false and true;
-false or true;
+var x = 1;
+x = 2;
+
+{
+    var y = 3;
+    y = 4;
+    x = y;
+}
