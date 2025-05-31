@@ -51,6 +51,10 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
             try dumpExpr(writer, fir, expr.operands[1]);
             try writer.print(" {s}", .{@tagName(expr.op)});
         },
+        .not, .negate => {
+            try dumpExpr(writer, fir, expr.operands[0]);
+            try writer.print(" {s}", .{@tagName(expr.op)});
+        },
         .global => try writer.print("${d}", .{expr.operands[0]}),
         .local => try writer.print("%{d}", .{expr.operands[0]}),
     }

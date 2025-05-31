@@ -155,6 +155,7 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
         .false => self.emitOpcode(.false),
         .null => self.emitOpcode(.null),
         .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat => self.compileBinary(expr),
+        .not, .negate => self.compileUnary(expr),
         .global => {
             self.emitOpcode(.get_global);
             self.emitByte(@intCast(expr.operands[0]));
@@ -164,6 +165,18 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitOpcode(.get_local);
             self.emitByte(@intCast(local.stack_idx));
         },
+    }
+}
+
+fn compileUnary(self: *Compiler, expr: FIR.Node.Expr) void {
+    std.debug.assert(expr.operands.len == 1);
+
+    self.compileExpression(expr.operands[0]);
+
+    switch (expr.op) {
+        .not => self.emitOpcode(.not),
+        .negate => self.emitOpcode(if (expr.type == .int) .negate_i else .negate_f),
+        else => unreachable,
     }
 }
 

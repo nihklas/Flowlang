@@ -62,6 +62,10 @@ pub const Node = struct {
             null,
             /// Operands: 1 -> constants
             literal,
+            /// Operands: 1 -> expression
+            not,
+            /// Operands: 1 -> expression
+            negate,
             /// Operands: 2 -> expressions
             equal,
             /// Operands: 2 -> expressions
@@ -279,7 +283,8 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 self.nodes.append(self.alloc, .{ .kind = .local, .index = self.locals.items.len - 1 }) catch oom();
             }
         },
-        else => std.debug.panic("Statement '{s}' is not yet supported", .{@tagName(stmt.*)}),
+        .function, .@"return" => @panic("Not yet supported"),
+        else => std.debug.panic("Stmt '{s}' is not yet supported", .{@tagName(stmt.*)}),
     }
 
     return self.nodes.items.len - 1;
@@ -321,6 +326,18 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 .@"*", .@"*=" => .{ .mul, self.exprs.items[operands[0]].type },
                 .@"/", .@"/=" => .{ .div, self.exprs.items[operands[0]].type },
                 .@"%", .@"%=" => .{ .mod, self.exprs.items[operands[0]].type },
+                else => unreachable,
+            };
+
+            self.exprs.append(self.alloc, .{ .op = op, .type = flow_type, .operands = operands }) catch oom();
+        },
+        .unary => |unary| {
+            const operands = self.arena().alloc(usize, 1) catch oom();
+            operands[0] = self.traverseExpr(unary.expr);
+
+            const op: Node.Expr.Operator, const flow_type: FlowType = switch (unary.op.type) {
+                .@"!" => .{ .not, .bool },
+                .@"-" => .{ .negate, self.exprs.items[operands[0]].type },
                 else => unreachable,
             };
 
