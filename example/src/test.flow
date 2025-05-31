@@ -1,10 +1,22 @@
-const some_global = 1 + 1;
-const some_global_1 = 2 + 1;
-const some_global_2 = 3 + 1;
-const some_global_3 = 4 + 1;
-some_global;
-some_global;
-some_global;
-some_global_1;
-some_global_2;
-some_global_3;
+const global = 1 + 1;
+global;
+
+{
+    const local = 1;
+    local;
+    const local2 = 2;
+    local;
+    local2;
+    global;
+    {
+        const local = 3;
+        local;
+        const local2 = 4;
+        local;
+        local2;
+        global;
+    }
+    local;
+    local2;
+    global;
+}

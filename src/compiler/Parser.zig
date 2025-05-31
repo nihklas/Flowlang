@@ -216,9 +216,25 @@ fn block(self: *Parser) ParserError![]*Stmt {
 
 fn ifStatement(self: *Parser) ParserError!*Stmt {
     const condition = try self.expression();
-    const then = try self.statement();
+    const then = blk: {
+        const stmt = try self.statement();
+        if (stmt.* == .block) break :blk stmt;
 
-    const else_branch = if (self.match(.@"else")) |_| try self.statement() else null;
+        const stmts = self.alloc.alloc(*Stmt, 1) catch oom();
+        stmts[0] = stmt;
+        break :blk Stmt.createBlock(self.alloc, stmts);
+    };
+
+    const else_branch = blk: {
+        if (self.match(.@"else") == null) break :blk null;
+
+        const stmt = try self.statement();
+        if (stmt.* == .block) break :blk stmt;
+
+        const stmts = self.alloc.alloc(*Stmt, 1) catch oom();
+        stmts[0] = stmt;
+        break :blk Stmt.createBlock(self.alloc, stmts);
+    };
 
     return Stmt.createIf(self.alloc, condition, then, else_branch);
 }

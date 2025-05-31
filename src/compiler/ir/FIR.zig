@@ -18,6 +18,8 @@ exprs: std.ArrayListUnmanaged(Node.Expr),
 conds: std.ArrayListUnmanaged(Node.Cond),
 loops: std.ArrayListUnmanaged(Node.Loop),
 globals: std.ArrayListUnmanaged(Node.Variable),
+locals: std.ArrayListUnmanaged(Node.Variable),
+locals_stack: std.ArrayListUnmanaged(usize),
 scope: usize,
 /// The entrypoint of the FIR graph, gets initialized to `uninitialized_entry`.
 entry: usize,
@@ -28,7 +30,11 @@ entry: usize,
 /// previous and next node in the list of instructions.
 pub const Node = struct {
     /// The actual node kind
-    kind: enum { expr, cond, loop, global },
+    /// Every Kind has its own collection in which `index` points to the actual information.
+    ///
+    /// `pop` is a special case, it that it's index is always 0 and is not used. it is a literal
+    /// pop-instruction for the compiler
+    kind: enum { expr, cond, loop, global, local, pop },
     /// The index into the concrete node kind collection
     index: usize,
     /// index into the node collection to the node directly in front of the current one. If this
@@ -82,6 +88,8 @@ pub const Node = struct {
             concat,
             /// Operands: 1 -> index
             global,
+            /// Operands: 1 -> index
+            local,
         };
     };
 
@@ -102,9 +110,17 @@ pub const Node = struct {
     };
 
     pub const Variable = struct {
+        /// name of the variable used to resolve its position
         name: []const u8,
+        /// type of the variable (not sure if we need it yet)
         type: FlowType,
+        /// optional expression to initialize the variable
         expr: ?usize,
+        /// scope level in which it got declared in
+        scope: usize,
+        /// stack index, with which it will get fetched in VM. Set for both local and global but
+        /// only used for local
+        stack_idx: usize,
     };
 
     pub fn format(self: Node, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
@@ -127,6 +143,8 @@ pub fn init(alloc: Allocator) FIR {
         .conds = .empty,
         .loops = .empty,
         .globals = .empty,
+        .locals = .empty,
+        .locals_stack = .empty,
         .entry = uninitialized_entry,
         .scope = 0,
     };
@@ -140,6 +158,8 @@ pub fn deinit(self: *FIR) void {
     self.conds.deinit(self.alloc);
     self.loops.deinit(self.alloc);
     self.globals.deinit(self.alloc);
+    self.locals.deinit(self.alloc);
+    self.locals_stack.deinit(self.alloc);
 }
 
 pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
@@ -167,6 +187,9 @@ fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
 }
 
 fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) ?usize {
+    self.scopeIncr();
+    defer self.scopeDecr();
+
     var prev_node: ?usize = null;
     for (stmts) |stmt| {
         if (self.traverseStmt(stmt)) |current_node| {
@@ -238,11 +261,22 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 }
                 break :blk self.exprs.getLast().type;
             };
+
+            const var_node: Node.Variable = .{
+                .name = variable.name.lexeme,
+                .expr = initializer,
+                .type = typehint,
+                .scope = self.scope,
+                .stack_idx = self.locals.items.len,
+            };
+
             if (self.scope == 0) {
-                self.globals.append(self.alloc, .{ .name = variable.name.lexeme, .expr = initializer, .type = typehint }) catch oom();
+                self.globals.append(self.alloc, var_node) catch oom();
                 self.nodes.append(self.alloc, .{ .kind = .global, .index = self.globals.items.len - 1 }) catch oom();
             } else {
-                @panic("Locals are not yet supported");
+                self.locals.append(self.alloc, var_node) catch oom();
+                self.locals_stack.append(self.alloc, self.locals.items.len - 1) catch oom();
+                self.nodes.append(self.alloc, .{ .kind = .local, .index = self.locals.items.len - 1 }) catch oom();
             }
         },
         else => std.debug.panic("Statement '{s}' is not yet supported", .{@tagName(stmt.*)}),
@@ -293,19 +327,10 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             self.exprs.append(self.alloc, .{ .op = op, .type = flow_type, .operands = operands }) catch oom();
         },
         .variable => |variable| {
-            if (self.scope == 0) {
-                const idx, const global = for (self.globals.items, 0..) |global, i| {
-                    if (std.mem.eql(u8, global.name, variable.name.lexeme)) {
-                        break .{ i, global };
-                    }
-                } else @panic("Trying to access non-existent global");
-
-                const operands = self.arena().alloc(usize, 1) catch oom();
-                operands[0] = idx;
-                self.exprs.append(self.alloc, .{ .op = .global, .type = global.type, .operands = operands }) catch oom();
-            } else {
-                @panic("Locals not yet supported");
-            }
+            const var_idx, const variable_node = self.resolveVariable(variable.name.lexeme);
+            const operands = self.arena().alloc(usize, 1) catch oom();
+            operands[0] = var_idx;
+            self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .global else .local, .type = variable_node.type, .operands = operands }) catch oom();
         },
         else => std.debug.panic("Expression '{s}' is not yet supported", .{@tagName(expr.*)}),
     }
@@ -345,6 +370,53 @@ fn resolveConstant(self: *FIR, value: FlowValue) usize {
         self.constants.append(self.alloc, value) catch oom();
         return self.constants.items.len - 1;
     };
+}
+
+fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable } {
+    var l_idx = self.locals_stack.items.len;
+    while (l_idx > 0) {
+        l_idx -= 1;
+
+        const local = self.locals.items[self.locals_stack.items[l_idx]];
+        if (std.mem.eql(u8, local.name, name)) {
+            return .{ l_idx, local };
+        }
+    }
+
+    return for (self.globals.items, 0..) |global, g_idx| {
+        if (std.mem.eql(u8, global.name, name)) {
+            return .{ g_idx, global };
+        }
+    } else @panic("No Variable found");
+}
+
+fn scopeIncr(self: *FIR) void {
+    self.scope += 1;
+}
+
+fn scopeDecr(self: *FIR) void {
+    // NOTE: We cannot go lower than global scope
+    std.debug.assert(self.scope > 0);
+
+    self.scope -= 1;
+
+    const prev_len = self.locals_stack.items.len;
+    const new_len = for (self.locals_stack.items, 0..) |local_idx, idx| {
+        const local = self.locals.items[local_idx];
+        if (local.scope > self.scope) break idx;
+    } else self.locals_stack.items.len;
+
+    const pop_count = prev_len - new_len;
+    // NOTE: In order to pop something of the stack, there need to be AT LEAST as many nodes before
+    // that to create the stack in the first place
+    std.debug.assert(self.nodes.items.len >= pop_count);
+    for (0..pop_count) |_| {
+        const before = self.nodes.items.len - 1;
+        self.nodes.append(self.alloc, .{ .kind = .pop, .index = 0, .before = before }) catch oom();
+        self.nodes.items[before].after = self.nodes.items.len - 1;
+    }
+
+    self.locals_stack.shrinkRetainingCapacity(new_len);
 }
 
 fn arena(self: *FIR) Allocator {

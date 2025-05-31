@@ -116,9 +116,9 @@ fn loadFunctions(self: *VM) void {
 fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
-        if (comptime debug_options.stack) {
+        defer if (comptime debug_options.stack) {
             self.value_stack.dump();
-        }
+        };
         if (comptime debug_options.bytecode) {
             std.debug.print("{x:0>4} {}\n", .{ self.ip, op });
         }

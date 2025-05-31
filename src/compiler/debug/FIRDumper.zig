@@ -28,9 +28,11 @@ fn dumpStmt(writer: anytype, fir: *const FIR, node_idx: usize, depth: usize) Wri
             try dumpExpr(writer, fir, node.index);
             try writer.writeAll(";");
         },
+        .pop => try writer.writeAll("();"),
         .cond => try dumpCond(writer, fir, node.index, depth),
         .loop => try dumpLoop(writer, fir, node.index, depth),
         .global => try dumpGlobal(writer, fir, node.index),
+        .local => try dumpLocal(writer, fir, node.index),
     }
 
     try writer.writeAll("\n");
@@ -50,6 +52,7 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
             try writer.print(" {s}", .{@tagName(expr.op)});
         },
         .global => try writer.print("${d}", .{expr.operands[0]}),
+        .local => try writer.print("%{d}", .{expr.operands[0]}),
     }
 }
 
@@ -86,6 +89,16 @@ fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void
     const variable = fir.globals.items[var_idx];
 
     try writer.print("${d} = ", .{var_idx});
+    if (variable.expr) |expr_idx| {
+        try dumpExpr(writer, fir, expr_idx);
+    }
+    try writer.writeAll(";");
+}
+
+fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void {
+    const variable = fir.locals.items[var_idx];
+
+    try writer.print("%{d} = ", .{variable.stack_idx});
     if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx);
     }

@@ -1,11 +1,14 @@
 alloc: Allocator,
 fir: *const FIR,
-byte_code: std.ArrayListUnmanaged(u8) = .empty,
+byte_code: std.ArrayListUnmanaged(u8),
+local_count: usize,
 
 pub fn init(alloc: Allocator, fir: *const FIR) Compiler {
     return .{
         .alloc = alloc,
         .fir = fir,
+        .byte_code = .empty,
+        .local_count = 0,
     };
 }
 
@@ -72,9 +75,11 @@ fn compileStmt(self: *Compiler, node_idx: usize) void {
             self.compileExpression(node.index);
             self.emitOpcode(.pop);
         },
+        .pop => self.emitOpcode(.pop),
         .cond => self.compileCond(node.index),
         .loop => self.compileLoop(node.index),
         .global => self.compileGlobal(node.index),
+        .local => self.compileLocal(node.index),
     }
 }
 
@@ -124,6 +129,18 @@ fn compileGlobal(self: *Compiler, var_idx: usize) void {
     self.emitOpcode(.pop);
 }
 
+fn compileLocal(self: *Compiler, var_idx: usize) void {
+    const local = self.fir.locals.items[var_idx];
+
+    if (local.expr) |expr| {
+        self.compileExpression(expr);
+    } else {
+        self.emitOpcode(.null);
+    }
+
+    self.local_count += 1;
+}
+
 fn compileExpression(self: *Compiler, expr_idx: usize) void {
     const expr = self.fir.exprs.items[expr_idx];
     switch (expr.op) {
@@ -141,6 +158,11 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
         .global => {
             self.emitOpcode(.get_global);
             self.emitByte(@intCast(expr.operands[0]));
+        },
+        .local => {
+            const local = self.fir.locals.items[expr.operands[0]];
+            self.emitOpcode(.get_local);
+            self.emitByte(@intCast(local.stack_idx));
         },
     }
 }
