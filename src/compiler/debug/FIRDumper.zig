@@ -45,7 +45,7 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
         .true => try writer.writeAll("true"),
         .false => try writer.writeAll("false"),
         .null => try writer.writeAll("null"),
-        .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat => {
+        .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat, .@"and", .@"or" => {
             try dumpExpr(writer, fir, expr.operands[0]);
             try writer.writeAll(" ");
             try dumpExpr(writer, fir, expr.operands[1]);

@@ -60,6 +60,10 @@ pub const Node = struct {
             false,
             /// Operands: none
             null,
+            /// Operands: 1 -> index
+            global,
+            /// Operands: 1 -> index
+            local,
             /// Operands: 1 -> constants
             literal,
             /// Operands: 1 -> expression
@@ -90,10 +94,10 @@ pub const Node = struct {
             mod,
             /// Operands: 2 -> expressions
             concat,
-            /// Operands: 1 -> index
-            global,
-            /// Operands: 1 -> index
-            local,
+            /// Operands: 2 -> expressions
+            @"and",
+            /// Operands: 2 -> expressions
+            @"or",
         };
     };
 
@@ -330,6 +334,14 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             };
 
             self.exprs.append(self.alloc, .{ .op = op, .type = flow_type, .operands = operands }) catch oom();
+        },
+        .logical => |logical| {
+            const operands = self.arena().alloc(usize, 2) catch oom();
+
+            operands[0] = self.traverseExpr(logical.lhs);
+            operands[1] = self.traverseExpr(logical.rhs);
+
+            self.exprs.append(self.alloc, .{ .op = if (logical.op.type == .@"and") .@"and" else .@"or", .type = .bool, .operands = operands }) catch oom();
         },
         .unary => |unary| {
             const operands = self.arena().alloc(usize, 1) catch oom();
