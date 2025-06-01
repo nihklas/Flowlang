@@ -1,8 +1,8 @@
-var x = 1;
-x = 2;
-
-{
-    var y = 3;
-    y = 4;
-    x = y;
+const mark = "marker";
+for var i = 0; i < 3; i += 1 {
+    if i < 1 {
+        break;
+    }
+    
+    mark;
 }

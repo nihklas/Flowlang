@@ -68,7 +68,7 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
             if (loop.inc) |inc| {
                 try writeIndent(writer, depth + 1);
                 try writer.writeAll("(Increment)\n");
-                try dumpStmt(writer, inc, depth + 2);
+                try dumpExpr(writer, inc, depth);
             }
 
             if (loop.body.len > 0) {

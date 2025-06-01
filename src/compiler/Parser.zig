@@ -270,13 +270,12 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
         break :blk expr;
     };
 
-    const maybe_increment: ?*Stmt = blk: {
+    const maybe_increment = blk: {
         if (self.check(.@"{")) {
             break :blk null;
         }
 
-        const expr = try self.expression();
-        break :blk Stmt.createExpr(self.alloc, expr);
+        break :blk try self.expression();
     };
 
     try self.consume(.@"{", "Expected '{' before loop body");

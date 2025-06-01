@@ -32,9 +32,9 @@ pub const Node = struct {
     /// The actual node kind
     /// Every Kind has its own collection in which `index` points to the actual information.
     ///
-    /// `pop` is a special case, it that it's index is always 0 and is not used. it is a literal
-    /// pop-instruction for the compiler
-    kind: enum { expr, cond, loop, global, local, pop },
+    /// `pop`, `break` and `continue` are special cases in that the index field is not used. It is a
+    /// literal instruction for the compiler
+    kind: enum { expr, cond, loop, global, local, pop, @"break", @"continue" },
     /// The index into the concrete node kind collection
     index: usize,
     /// index into the node collection to the node directly in front of the current one. If this
@@ -117,6 +117,8 @@ pub const Node = struct {
     pub const Loop = struct {
         /// points to an expr
         condition: usize,
+        /// may point to an expr
+        inc: ?usize,
         /// points to the starting node of the block
         body: usize,
     };
@@ -248,15 +250,9 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         .loop => |loop| {
             const condition = self.traverseExpr(loop.condition);
             const body = self.traverseBlock(loop.body) orelse return null;
-            if (loop.inc) |inc| {
-                // NOTE: there should be no way, that the inc_stmt in a loop is an empty block or
-                // produces an otherwise "empty" Statement
-                const inc_idx = self.traverseStmt(inc).?;
-                self.nodes.items[body].after = inc_idx;
-                self.nodes.items[inc_idx].before = body;
-            }
+            const inc = if (loop.inc) |inc| self.traverseExpr(inc) else null;
 
-            self.loops.append(self.alloc, .{ .condition = condition, .body = self.startOfBlock(body) }) catch oom();
+            self.loops.append(self.alloc, .{ .condition = condition, .body = self.startOfBlock(body), .inc = inc }) catch oom();
             self.nodes.append(self.alloc, .{ .kind = .loop, .index = self.loops.items.len - 1 }) catch oom();
         },
         .variable => |variable| {
@@ -291,8 +287,9 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 self.nodes.append(self.alloc, .{ .kind = .local, .index = self.locals.items.len - 1 }) catch oom();
             }
         },
+        .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
+        .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
         .function, .@"return" => @panic("Not yet supported"),
-        else => std.debug.panic("Stmt '{s}' is not yet supported", .{@tagName(stmt.*)}),
     }
 
     return self.nodes.items.len - 1;

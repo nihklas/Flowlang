@@ -2,6 +2,13 @@ alloc: Allocator,
 fir: *const FIR,
 byte_code: std.ArrayListUnmanaged(u8),
 local_count: usize,
+loop_levels: std.ArrayListUnmanaged(LoopLevel),
+
+const LoopLevel = struct {
+    loop_start: usize,
+    breaks: std.ArrayListUnmanaged(usize),
+    inc: ?usize,
+};
 
 pub fn init(alloc: Allocator, fir: *const FIR) Compiler {
     return .{
@@ -9,6 +16,7 @@ pub fn init(alloc: Allocator, fir: *const FIR) Compiler {
         .fir = fir,
         .byte_code = .empty,
         .local_count = 0,
+        .loop_levels = .empty,
     };
 }
 
@@ -19,6 +27,7 @@ pub fn compile(self: *Compiler) []const u8 {
     self.compileConstants();
     self.compileFunctions();
     self.compileBlock(self.fir.entry);
+    defer self.loop_levels.deinit(self.alloc);
 
     return self.byte_code.toOwnedSlice(self.alloc) catch oom();
 }
@@ -80,6 +89,18 @@ fn compileStmt(self: *Compiler, node_idx: usize) void {
         .loop => self.compileLoop(node.index),
         .global => self.compileGlobal(node.index),
         .local => self.compileLocal(node.index),
+        .@"break" => {
+            var breaks = &self.loop_levels.items[self.loop_levels.items.len - 1].breaks;
+            breaks.append(self.alloc, self.emitJump(.jump)) catch oom();
+        },
+        .@"continue" => {
+            const loop = self.loop_levels.getLast();
+            if (loop.inc) |inc| {
+                self.compileExpression(inc);
+                self.emitOpcode(.pop);
+            }
+            self.emitLoop(loop.loop_start);
+        },
     }
 }
 
@@ -105,10 +126,30 @@ fn compileLoop(self: *Compiler, loop_idx: usize) void {
     const loop = self.fir.loops.items[loop_idx];
 
     const loop_start = self.byte_code.items.len;
+
+    self.loop_levels.append(self.alloc, .{
+        .loop_start = loop_start,
+        .breaks = .empty,
+        .inc = loop.inc,
+    }) catch oom();
+    defer std.debug.assert(self.loop_levels.pop() != null);
+    defer {
+        var breaks = &self.loop_levels.items[self.loop_levels.items.len - 1].breaks;
+        defer breaks.deinit(self.alloc);
+
+        for (breaks.items) |break_jump| {
+            self.patchJump(break_jump);
+        }
+    }
+
     self.compileExpression(loop.condition);
     const exit_jump = self.emitJump(.jump_if_false);
     self.emitOpcode(.pop);
     self.compileBlock(loop.body);
+    if (loop.inc) |inc| {
+        self.compileExpression(inc);
+        self.emitOpcode(.pop);
+    }
     self.emitLoop(loop_start);
     self.patchJump(exit_jump);
     self.emitOpcode(.pop);

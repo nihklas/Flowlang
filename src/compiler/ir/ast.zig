@@ -135,7 +135,7 @@ pub const Stmt = union(enum) {
 
     block: struct { stmts: []*Stmt },
 
-    loop: struct { condition: *Expr, body: []*Stmt, inc: ?*Stmt = null },
+    loop: struct { condition: *Expr, body: []*Stmt, inc: ?*Expr = null },
     @"break": struct { token: Token },
     @"continue": struct { token: Token },
 

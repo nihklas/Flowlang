@@ -61,7 +61,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.analyseStmt(inner_stmt);
             }
             if (loop_stmt.inc) |inc| {
-                self.analyseStmt(inc);
+                self.analyseExpr(inc);
             }
         },
         inline .@"break", .@"continue" => |keyword| {
