@@ -293,7 +293,13 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         },
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
-        .function, .@"return" => @panic("Not yet supported"),
+        .function => |function| {
+            self.scopeIncr();
+            defer self.scopeDecr();
+
+            for (function.params) |value| {}
+        },
+        .@"return" => @panic("Not yet supported"),
     }
 
     return self.nodes.items.len - 1;

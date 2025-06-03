@@ -3,6 +3,7 @@ program: []const *Stmt,
 errors: std.ArrayListUnmanaged(ErrorInfo) = .empty,
 types: std.AutoHashMapUnmanaged(*const Expr, FlowType) = .empty,
 variables: std.ArrayListUnmanaged(Variable) = .empty,
+functions: std.StringHashMapUnmanaged(Function) = .empty,
 current_scope: u8 = 0,
 loop_level: u8 = 0,
 
@@ -17,6 +18,12 @@ pub fn deinit(self: *Sema) void {
     self.errors.deinit(self.alloc);
     self.types.deinit(self.alloc);
     self.variables.deinit(self.alloc);
+
+    var func_iter = self.functions.valueIterator();
+    while (func_iter.next()) |func| {
+        self.alloc.free(func.param_types);
+    }
+    self.functions.deinit(self.alloc);
 }
 
 /// Analyses the ast. Applies the following checks:
@@ -127,8 +134,21 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             self.putVariable(variable);
         },
         .function => |function| {
-            // TODO: assign callable to variable handling
-            // TODO: open scope
+            const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+            for (function.params, 0..) |param, i| {
+                std.debug.assert(param.* == .variable);
+                param_types[i] = self.typeFromVariable(param);
+            }
+
+            self.putFunction(function.name, .{
+                // This should never be null, as only valid return types get parsed
+                .ret_type = typeFromToken(function.ret_type.type).?,
+                .param_types = param_types,
+            });
+
+            self.scopeIncr();
+            defer self.scopeDecr();
+
             for (function.params) |param| {
                 self.analyseStmt(param);
             }
@@ -316,6 +336,16 @@ fn putVariable(self: *Sema, variable: Variable) void {
     self.variables.append(self.alloc, variable) catch oom();
 }
 
+fn putFunction(self: *Sema, name: Token, function: Function) void {
+    self.functions.put(self.alloc, name.lexeme, function) catch oom();
+    self.putVariable(.{
+        .name = name,
+        .constant = true,
+        .type = .function,
+        .scope = self.current_scope,
+    });
+}
+
 fn findVariable(self: *Sema, name: Token) ?Variable {
     var rev_iter = std.mem.reverseIterator(self.variables.items);
     while (rev_iter.next()) |variable| {
@@ -364,12 +394,17 @@ fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
     const variable = stmt.variable;
 
     const t = variable.type_hint orelse return self.getType(variable.value.?).?;
-    return switch (t.type.type) {
+    return typeFromToken(t.type).?;
+}
+
+fn typeFromToken(token: Token) ?FlowType {
+    return switch (token.type) {
         .bool => .bool,
         .string => .string,
         .int => .int,
         .float => .float,
-        else => unreachable,
+        .null => .null,
+        else => null,
     };
 }
 
@@ -440,6 +475,11 @@ const Variable = struct {
     constant: bool,
     type: FlowType,
     scope: u8,
+};
+
+const Function = struct {
+    ret_type: FlowType,
+    param_types: []FlowType,
 };
 
 const Sema = @This();
