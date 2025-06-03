@@ -29,7 +29,7 @@ pub fn main() !void {
         try ASTDumper.dump(writer, ast);
         try writer.writeByte('\n');
 
-        try writeOutput(buf.items, cli_opts);
+        try dump(buf.items);
         return;
     }
 
@@ -52,7 +52,7 @@ pub fn main() !void {
         try FIRDumper.dump(writer, &fir);
         try writer.writeByte('\n');
 
-        try writeOutput(buf.items, cli_opts);
+        try dump(buf.items);
         return;
     }
 
@@ -67,7 +67,7 @@ pub fn main() !void {
         const writer = buf.writer(gpa);
         BytecodeDumper.dump(writer.any(), bytecode);
 
-        try writeOutput(buf.items, cli_opts);
+        try dump(buf.items);
         return;
     }
 
@@ -83,16 +83,8 @@ pub fn main() !void {
     try file.writeAll(&bytecode_len);
 }
 
-fn writeOutput(output: []const u8, cli_opts: cli.Options) !void {
-    if (cli_opts.dump_stdout) {
-        try std.io.getStdOut().writeAll(output);
-        return;
-    }
-
-    const file = try std.fs.cwd().createFile(cli_opts.output, .{});
-    defer file.close();
-
-    try file.writeAll(output);
+fn dump(output: []const u8) !void {
+    try std.io.getStdOut().writeAll(output);
 }
 
 fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {

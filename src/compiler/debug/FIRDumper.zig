@@ -69,15 +69,18 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
             try dumpExpr(writer, fir, expr.operands[0]);
         },
         .call => {
+            try writer.writeAll("call ");
             try dumpExpr(writer, fir, expr.operands[0]);
-            try writer.writeAll(" call with (");
-            for (1..expr.operands.len) |idx| {
-                if (idx > 1) {
-                    try writer.writeAll(", ");
+            if (expr.operands.len > 1) {
+                try writer.writeAll(" with (");
+                for (1..expr.operands.len) |idx| {
+                    if (idx > 1) {
+                        try writer.writeAll(", ");
+                    }
+                    try dumpExpr(writer, fir, expr.operands[idx]);
                 }
-                try dumpExpr(writer, fir, expr.operands[idx]);
+                try writer.writeAll(")");
             }
-            try writer.writeAll(")");
         },
     }
 }

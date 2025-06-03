@@ -1,1 +1,13 @@
-print("Hello World");
+var sum = 0;
+
+const before = time();
+for var i = 0; i < 1000000; i += 1 {
+    sum += i;
+}
+const after = time();
+
+print(sum);
+
+print("Took " . after - before . "ms");
+
+

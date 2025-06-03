@@ -274,7 +274,8 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                         }
 
                         for (call.args, builtin.arg_types) |arg, param| {
-                            std.debug.assert(self.getType(arg) != null);
+                            // NOTE: This happens if an argument is a variable, that does not exist
+                            if (self.getType(arg) == null) continue;
 
                             // NOTE: these get checked at runtime
                             if (param == .null) continue;

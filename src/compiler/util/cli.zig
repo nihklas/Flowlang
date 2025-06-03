@@ -4,7 +4,6 @@ pub const Options = struct {
     dump_bc: bool = debug_options.dump_bc,
     dump_ast: bool = debug_options.dump_ast,
     dump_fir: bool = debug_options.dump_fir,
-    dump_stdout: bool = false,
 };
 
 pub fn parse() Options {
@@ -40,8 +39,6 @@ pub fn parse() Options {
             options.dump_fir = true;
         } else if (std.mem.eql(u8, argument, "--help")) {
             printHelpAndQuit(0);
-        } else if (std.mem.eql(u8, argument, "--stdout")) {
-            options.dump_stdout = true;
         }
     }
 
@@ -66,8 +63,6 @@ pub fn printHelpAndQuit(exit_code: u8) noreturn {
         \\                            instead of building an executable
         \\        --dump-fir          Dump the resulting FIR (Flowlang Intermediate Representation)
         \\                            to the output File instead of building an executable
-        \\        --stdout            Dump output of the other dump options are printed to stdout 
-        \\                            instead of the output file
         \\        --help              Print this message
         \\
         \\    Arguments
