@@ -1,6 +1,7 @@
 # FlowLang
 
 [![Lines of Code](https://sloc.xyz/gitlab/flowlang/flowlang/)](https://gitlab.com/flowlang/flowlang/)
+[![Pipeline Status](https://gitlab.com/flowlang/flowlang/badges/main/pipeline.svg)](https://gitlab.com/flowlang/flowlang/)
 
 A language that is highly inspired by Golang's Goroutines and Channels.
 
