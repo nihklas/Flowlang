@@ -43,6 +43,7 @@ fn dumpStmt(writer: anytype, fir: *const FIR, node_idx: usize, depth: usize) Wri
 fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void {
     const expr = fir.exprs.items[expr_idx];
     switch (expr.op) {
+        .builtin_fn => try writer.print("{}", .{fir.constants.items[expr.operands[0]]}),
         .literal => try writer.print("<{d}>", .{expr.operands[0]}),
         .true => try writer.writeAll("true"),
         .false => try writer.writeAll("false"),
@@ -66,6 +67,17 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
         .assign_local => {
             try writer.print("%{d} = ", .{expr.operands[1]});
             try dumpExpr(writer, fir, expr.operands[0]);
+        },
+        .call => {
+            try dumpExpr(writer, fir, expr.operands[0]);
+            try writer.writeAll(" call with (");
+            for (1..expr.operands.len) |idx| {
+                if (idx > 1) {
+                    try writer.writeAll(", ");
+                }
+                try dumpExpr(writer, fir, expr.operands[idx]);
+            }
+            try writer.writeAll(")");
         },
     }
 }

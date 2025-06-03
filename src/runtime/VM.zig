@@ -159,6 +159,10 @@ fn runWhileSwitch(self: *VM) void {
                     self.push(.{ .bool = !equal });
                 }
             },
+            .get_builtin => {
+                const name = self.pop();
+                self.push(.{ .builtin_fn = builtins.get(name.string).? });
+            },
             .get_global => {
                 const idx = self.byte();
                 const value = self.globals[idx];

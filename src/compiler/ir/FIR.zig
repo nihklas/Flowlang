@@ -102,6 +102,10 @@ pub const Node = struct {
             @"and",
             /// Operands: 2 -> expressions
             @"or",
+            /// Operands: n >= 1 -> 0 = callee, 1..n = arguments
+            call,
+            /// Operands: 1 -> constant string
+            builtin_fn,
         };
     };
 
@@ -359,8 +363,14 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
         .variable => |variable| {
             const var_idx, const variable_node = self.resolveVariable(variable.name.lexeme);
             const operands = self.arena().alloc(usize, 1) catch oom();
-            operands[0] = var_idx;
-            self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .global else .local, .type = variable_node.type, .operands = operands }) catch oom();
+
+            if (variable_node.type == .builtin_fn) {
+                operands[0] = self.resolveConstant(.{ .string = variable_node.name });
+                self.exprs.append(self.alloc, .{ .op = .builtin_fn, .type = .builtin_fn, .operands = operands }) catch oom();
+            } else {
+                operands[0] = var_idx;
+                self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .global else .local, .type = variable_node.type, .operands = operands }) catch oom();
+            }
         },
         .assignment => |assignment| {
             const var_idx, const variable_node = self.resolveVariable(assignment.name.lexeme);
@@ -369,7 +379,15 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[1] = var_idx;
             self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .assign_global else .assign_local, .type = variable_node.type, .operands = operands }) catch oom();
         },
-        .call => @panic("call-expression not yet supported"),
+        .call => |call| {
+            const operands = self.arena().alloc(usize, call.args.len + 1) catch oom();
+            operands[0] = self.traverseExpr(call.expr);
+            for (call.args, 1..) |arg, idx| {
+                operands[idx] = self.traverseExpr(arg);
+            }
+
+            self.exprs.append(self.alloc, .{ .op = .call, .operands = operands, .type = self.resolveFunctionReturnType(operands[0], call.expr) }) catch oom();
+        },
     }
     return self.exprs.items.len - 1;
 }
@@ -410,6 +428,16 @@ fn resolveConstant(self: *FIR, value: FlowValue) usize {
 }
 
 fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable } {
+    if (builtins.get(name)) |_| {
+        return .{ 0, .{
+            .name = name,
+            .type = .builtin_fn,
+            .scope = 0,
+            .stack_idx = 0,
+            .expr = null,
+        } };
+    }
+
     var l_idx = self.locals_stack.items.len;
     while (l_idx > 0) {
         l_idx -= 1;
@@ -425,6 +453,23 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
             return .{ g_idx, global };
         }
     } else @panic("No Variable found");
+}
+
+fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *const ast.Expr) FlowType {
+    const callee_expr = self.exprs.items[callee];
+    std.debug.assert(callee_expr.type == .function or callee_expr.type == .builtin_fn);
+
+    switch (callee_expr.type) {
+        .builtin_fn => {
+            std.debug.assert(original_callee_expr.* == .variable);
+            std.debug.assert(builtins.get(original_callee_expr.variable.name.lexeme) != null);
+
+            const builtin = builtins.get(original_callee_expr.variable.name.lexeme).?;
+            return builtin.ret_type;
+        },
+        .function => @panic("Calling user defined functions is not yet supported"),
+        else => unreachable,
+    }
 }
 
 fn scopeIncr(self: *FIR) void {
@@ -473,3 +518,4 @@ const shared = @import("shared");
 const oom = shared.oom;
 const FlowValue = shared.definitions.FlowValue;
 const FlowType = shared.definitions.FlowType;
+const builtins = shared.builtins;

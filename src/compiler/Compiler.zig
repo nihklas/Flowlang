@@ -185,12 +185,16 @@ fn compileLocal(self: *Compiler, var_idx: usize) void {
 fn compileExpression(self: *Compiler, expr_idx: usize) void {
     const expr = self.fir.exprs.items[expr_idx];
     switch (expr.op) {
+        .builtin_fn => {
+            const literal = self.fir.constants.items[expr.operands[0]];
+            std.debug.assert(literal == .string);
+            self.emitConstant(expr.operands[0]);
+            self.emitOpcode(.get_builtin);
+        },
         .literal => {
             const literal = self.fir.constants.items[expr.operands[0]];
-            switch (literal) {
-                .int, .float, .string => self.emitConstant(expr.operands[0]),
-                .bool, .null, .function, .builtin_fn => unreachable,
-            }
+            std.debug.assert(literal == .int or literal == .float or literal == .string);
+            self.emitConstant(expr.operands[0]);
         },
         .true => self.emitOpcode(.true),
         .false => self.emitOpcode(.false),
@@ -217,6 +221,13 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.compileExpression(expr.operands[0]);
             self.emitOpcode(.set_local);
             self.emitByte(@intCast(local.stack_idx));
+        },
+        .call => {
+            for (1..expr.operands.len) |idx| {
+                self.compileExpression(expr.operands[idx]);
+            }
+            self.compileExpression(expr.operands[0]);
+            self.emitOpcode(.call);
         },
     }
 }
