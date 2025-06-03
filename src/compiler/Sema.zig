@@ -373,8 +373,6 @@ fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
 }
 
 fn printError(self: *Sema) void {
-    // TODO: Do we need to filter out duplicate errors? Are identical errors a bug in sema?
-
     for (self.errors.items) |e| {
         switch (e.err) {
             TypeError.EqualityCheckOfUnequalTypes => error_reporter.reportError(e.token, "Operands of Equality-Check (== and !=) have to be of the same type, got '{s}' and '{s}'", .{ e.extra_info1, e.extra_info2 }),
