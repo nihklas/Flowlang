@@ -1,8 +1,8 @@
 alloc: Allocator,
 program: []const *Stmt,
-errors: ErrorList = .empty,
-types: TypeTable = .empty,
-variables: VariableList = .empty,
+errors: std.ArrayListUnmanaged(ErrorInfo) = .empty,
+types: std.AutoHashMapUnmanaged(*const Expr, FlowType) = .empty,
+variables: std.ArrayListUnmanaged(Variable) = .empty,
 current_scope: u8 = 0,
 loop_level: u8 = 0,
 
@@ -249,11 +249,52 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 self.analyseExpr(arg_expr);
             }
 
-            if (!isCallable(self.getType(call.expr).?)) {
-                self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable, .extra_info1 = call.expr.getToken().lexeme });
+            if (self.getType(call.expr)) |callee_type| {
+                switch (callee_type) {
+                    .builtin_fn => {
+                        // NOTE: builtin functions cannot be aliased
+                        std.debug.assert(call.expr.* == .variable);
+                        std.debug.assert(builtins.get(call.expr.variable.name.lexeme) != null);
+
+                        const builtin = builtins.get(call.expr.variable.name.lexeme).?;
+                        if (call.args.len != builtin.arg_types.len) {
+                            const number_buffer = self.alloc.alloc(u8, 20) catch oom();
+                            defer self.alloc.free(number_buffer);
+
+                            const actual_arg_count = std.fmt.formatIntBuf(number_buffer, call.args.len, 10, .upper, .{});
+                            const expected_arg_count = std.fmt.formatIntBuf(number_buffer[actual_arg_count..], builtin.arg_types.len, 10, .upper, .{});
+
+                            self.pushError(.{
+                                .token = call.expr.getToken(),
+                                .err = FunctionError.ArgumentCountMismatch,
+                                .extra_info1 = self.alloc.dupe(u8, number_buffer[0..actual_arg_count]) catch oom(),
+                                .extra_info2 = self.alloc.dupe(u8, number_buffer[actual_arg_count .. actual_arg_count + expected_arg_count]) catch oom(),
+                            });
+                            return;
+                        }
+
+                        for (call.args, builtin.arg_types) |arg, param| {
+                            std.debug.assert(self.getType(arg) != null);
+
+                            // NOTE: these get checked at runtime
+                            if (param == .null) continue;
+
+                            if (self.getType(arg).? != param) {
+                                self.pushError(.{
+                                    .token = arg.getToken(),
+                                    .err = FunctionError.ArgumentTypeMismatch,
+                                    .extra_info1 = @tagName(param),
+                                    .extra_info2 = @tagName(self.getType(arg).?),
+                                });
+                            }
+                        }
+
+                        self.putType(expr, builtin.ret_type);
+                    },
+                    .function => @panic("Not yet supported"),
+                    else => self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable, .extra_info1 = call.expr.getToken().lexeme }),
+                }
             }
-            // TODO: resolve correct return type
-            self.putType(expr, .null);
         },
     }
 }
@@ -281,6 +322,16 @@ fn findVariable(self: *Sema, name: Token) ?Variable {
             return variable;
         }
     }
+
+    if (builtins.get(name.lexeme)) |_| {
+        return .{
+            .name = name,
+            .constant = true,
+            .type = .builtin_fn,
+            .scope = 0,
+        };
+    }
+
     return null;
 }
 
@@ -340,13 +391,17 @@ fn printError(self: *Sema) void {
             VariableError.ConstantWithoutValue => error_reporter.reportError(e.token, "Constant '{s}' must have an initial value", .{e.extra_info1}),
 
             ContextError.NotInALoop => error_reporter.reportError(e.token, "'{s}' is only allowed inside a loop", .{e.extra_info1}),
+
+            FunctionError.ArgumentTypeMismatch => error_reporter.reportError(e.token, "Unexpected argument type, expected '{s}', got '{s}'", .{ e.extra_info1, e.extra_info2 }),
+            FunctionError.ArgumentCountMismatch => {
+                error_reporter.reportError(e.token, "Argument count mismatch, found {s} but expected {s}", .{ e.extra_info1, e.extra_info2 });
+                // They are allocated because they need a buffer for printing a number into a string
+                self.alloc.free(e.extra_info1);
+                self.alloc.free(e.extra_info2);
+            },
         }
     }
 }
-
-const VariableList = std.ArrayListUnmanaged(Variable);
-const TypeTable = std.AutoHashMapUnmanaged(*const Expr, FlowType);
-const ErrorList = std.ArrayListUnmanaged(ErrorInfo);
 
 const ErrorInfo = struct {
     token: Token,
@@ -356,7 +411,7 @@ const ErrorInfo = struct {
 };
 
 // combine all possible errors here
-const SemaError = TypeError || VariableError || ContextError;
+const SemaError = TypeError || VariableError || ContextError || FunctionError;
 
 const TypeError = error{
     EqualityCheckOfUnequalTypes,
@@ -376,6 +431,10 @@ const VariableError = error{
 const ContextError = error{
     NotInALoop,
 };
+const FunctionError = error{
+    ArgumentCountMismatch,
+    ArgumentTypeMismatch,
+};
 
 const Variable = struct {
     name: Token,
@@ -393,8 +452,10 @@ const ast = @import("ir/ast.zig");
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
 
-const oom = @import("shared").oom;
-const FlowType = @import("shared").definitions.FlowType;
+const shared = @import("shared");
+const oom = shared.oom;
+const FlowType = shared.definitions.FlowType;
+const builtins = shared.builtins;
 const error_reporter = @import("util/error_reporter.zig");
 
 const Token = @import("ir/Token.zig");
