@@ -44,7 +44,12 @@ fn buildTest(
 
     var iterator = std.mem.splitSequence(u8, test_content, split_marker);
     const flow_src = iterator.next().?;
-    const expected = iterator.next() orelse return error.MalformedTestCase;
+    const expected = blk: {
+        if (iterator.next()) |next| {
+            break :blk std.mem.trimLeft(u8, next, " \n\t\r");
+        }
+        return error.MalformedTestCase;
+    };
 
     const write_file = b.addWriteFiles();
     const src_path = write_file.add("code.flow", flow_src);
