@@ -1,5 +1,7 @@
 # FlowLang
 
+![Lines of Code](https://sloc.xyz/gitlab/flowlang/flowlang/?category=code)
+
 A language that is highly inspired by Golang's Goroutines and Channels.
 
 It will be a compiled, garbage collected language implemented in Zig. 
