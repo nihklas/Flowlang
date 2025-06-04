@@ -18,6 +18,7 @@ exprs: std.ArrayListUnmanaged(Node.Expr),
 conds: std.ArrayListUnmanaged(Node.Cond),
 loops: std.ArrayListUnmanaged(Node.Loop),
 globals: std.ArrayListUnmanaged(Node.Variable),
+functions: std.ArrayListUnmanaged(Node.Function),
 locals: std.ArrayListUnmanaged(Node.Variable),
 locals_stack: std.ArrayListUnmanaged(usize),
 scope: usize,
@@ -139,6 +140,16 @@ pub const Node = struct {
         /// stack index, with which it will get fetched in VM. Set for both local and global but
         /// only used for local
         stack_idx: usize,
+        /// index for additional purpose
+        /// - index into the functions collection in case `.type == .function`
+        extra_idx: usize,
+    };
+
+    pub const Function = struct {
+        name: []const u8,
+        ret_type: FlowType,
+        param_count: usize,
+        body: usize,
     };
 
     pub fn format(self: Node, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
@@ -161,6 +172,7 @@ pub fn init(alloc: Allocator) FIR {
         .conds = .empty,
         .loops = .empty,
         .globals = .empty,
+        .functions = .empty,
         .locals = .empty,
         .locals_stack = .empty,
         .entry = uninitialized_entry,
@@ -176,6 +188,7 @@ pub fn deinit(self: *FIR) void {
     self.conds.deinit(self.alloc);
     self.loops.deinit(self.alloc);
     self.globals.deinit(self.alloc);
+    self.functions.deinit(self.alloc);
     self.locals.deinit(self.alloc);
     self.locals_stack.deinit(self.alloc);
 }
@@ -274,30 +287,19 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 break :blk self.exprs.getLast().type;
             };
 
-            const var_node: Node.Variable = .{
-                .name = variable.name.lexeme,
-                .expr = initializer,
-                .type = typehint,
-                .scope = self.scope,
-                .stack_idx = self.locals.items.len,
-            };
-
-            if (self.scope == 0) {
-                self.globals.append(self.alloc, var_node) catch oom();
-                self.nodes.append(self.alloc, .{ .kind = .global, .index = self.globals.items.len - 1 }) catch oom();
-            } else {
-                self.locals.append(self.alloc, var_node) catch oom();
-                self.locals_stack.append(self.alloc, self.locals.items.len - 1) catch oom();
-                self.nodes.append(self.alloc, .{ .kind = .local, .index = self.locals.items.len - 1 }) catch oom();
-            }
+            self.putVariable(variable.name.lexeme, initializer, typehint);
         },
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
         .function => |function| {
-            self.scopeIncr();
-            defer self.scopeDecr();
+            const body = self.startOfBlock(self.traverseBlock(function.body).?);
 
-            for (function.params) |value| {}
+            self.putFunction(.{
+                .name = function.name.lexeme,
+                .body = body,
+                .ret_type = typeFromToken(function.ret_type.type).?,
+                .param_count = function.params.len,
+            });
         },
         .@"return" => @panic("Not yet supported"),
     }
@@ -439,8 +441,9 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
             .name = name,
             .type = .builtin_fn,
             .scope = 0,
-            .stack_idx = 0,
             .expr = null,
+            .stack_idx = 0,
+            .extra_idx = 0,
         } };
     }
 
@@ -507,6 +510,42 @@ fn scopeDecr(self: *FIR) void {
     self.locals_stack.shrinkRetainingCapacity(new_len);
 }
 
+fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
+    const variable: Node.Variable = .{
+        .name = name,
+        .expr = expr,
+        .type = var_type,
+        .scope = self.scope,
+        .stack_idx = self.locals.items.len,
+        .extra_idx = 0,
+    };
+
+    if (self.scope == 0) {
+        self.globals.append(self.alloc, variable) catch oom();
+        self.nodes.append(self.alloc, .{ .kind = .global, .index = self.globals.items.len - 1 }) catch oom();
+    } else {
+        self.locals.append(self.alloc, variable) catch oom();
+        self.locals_stack.append(self.alloc, self.locals.items.len - 1) catch oom();
+        self.nodes.append(self.alloc, .{ .kind = .local, .index = self.locals.items.len - 1 }) catch oom();
+    }
+}
+
+fn putFunction(self: *FIR, function: Node.Function) void {
+    self.functions.append(self.alloc, function) catch oom();
+    self.putVariable(function.name, null, .function);
+}
+
+fn typeFromToken(token: Token) ?FlowType {
+    return switch (token.type) {
+        .bool => .bool,
+        .string => .string,
+        .int => .int,
+        .float => .float,
+        .null => .null,
+        else => null,
+    };
+}
+
 fn arena(self: *FIR) Allocator {
     return self.arena_state.allocator();
 }
@@ -525,3 +564,4 @@ const oom = shared.oom;
 const FlowValue = shared.definitions.FlowValue;
 const FlowType = shared.definitions.FlowType;
 const builtins = shared.builtins;
+const Token = @import("Token.zig");

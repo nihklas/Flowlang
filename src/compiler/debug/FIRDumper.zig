@@ -6,6 +6,8 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
     }
     try writer.writeAll("\n");
 
+    // TODO: print top-level functions first, directly under constants
+
     try dumpBlock(writer, fir, fir.entry, 0);
 }
 
@@ -34,7 +36,7 @@ fn dumpStmt(writer: anytype, fir: *const FIR, node_idx: usize, depth: usize) Wri
         .cond => try dumpCond(writer, fir, node.index, depth),
         .loop => try dumpLoop(writer, fir, node.index, depth),
         .global => try dumpGlobal(writer, fir, node.index),
-        .local => try dumpLocal(writer, fir, node.index),
+        .local => try dumpLocal(writer, fir, node.index, depth),
     }
 
     try writer.writeAll("\n");
@@ -119,8 +121,20 @@ fn dumpLoop(writer: anytype, fir: *const FIR, loop_idx: usize, depth: usize) Wri
     try writer.writeAll("}");
 }
 
+fn dumpFunction(writer: anytype, fir: *const FIR, func_idx: usize, depth: usize) WriterError!void {
+    const function = fir.functions.items[func_idx];
+
+    try writer.writeAll("func ");
+    try writer.print("func {s} params {d} {{\n", .{ function.name, function.param_count });
+    try dumpBlock(writer, fir, function.body, depth + 1);
+    try printDepth(writer, depth);
+    try writer.writeAll("}");
+}
+
 fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void {
     const variable = fir.globals.items[var_idx];
+
+    if (variable.type == .function) return;
 
     try writer.print("${d} = ", .{var_idx});
     if (variable.expr) |expr_idx| {
@@ -129,11 +143,18 @@ fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void
     try writer.writeAll(";");
 }
 
-fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void {
+fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) WriterError!void {
     const variable = fir.locals.items[var_idx];
 
     try writer.print("%{d} = ", .{variable.stack_idx});
-    if (variable.expr) |expr_idx| {
+
+    if (variable.type == .function) {
+        const func = fir.functions.items[variable.extra_idx];
+        try writer.print("func {d} {{\n", .{func.param_count});
+        try dumpBlock(writer, fir, func.body, depth + 1);
+        try printDepth(writer, depth);
+        try writer.writeAll("}");
+    } else if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx);
     }
     try writer.writeAll(";");
