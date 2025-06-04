@@ -195,8 +195,24 @@ pub fn deinit(self: *FIR) void {
 
 pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
     var fir: FIR = .init(alloc);
+    fir.getTopLevelFunctions(program);
     fir.traverseToplevel(program);
     return fir;
+}
+
+fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
+    for (program) |stmt| {
+        if (stmt.* != .function) continue;
+        const function = stmt.function;
+        const body = self.startOfBlock(self.traverseBlock(function.body).?);
+
+        self.putFunction(.{
+            .name = function.name.lexeme,
+            .body = body,
+            .ret_type = typeFromToken(function.ret_type.type).?,
+            .param_count = function.params.len,
+        });
+    }
 }
 
 fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
@@ -292,6 +308,8 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
         .function => |function| {
+            if (self.scope == 0) return null;
+
             const body = self.startOfBlock(self.traverseBlock(function.body).?);
 
             self.putFunction(.{

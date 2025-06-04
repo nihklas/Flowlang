@@ -6,7 +6,18 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
     }
     try writer.writeAll("\n");
 
-    // TODO: print top-level functions first, directly under constants
+    for (fir.globals.items) |global| {
+        if (global.type != .function) continue;
+
+        const func = fir.functions.items[global.extra_idx];
+        try writer.print("func {d} {{\n", .{func.param_count});
+        try dumpBlock(writer, fir, func.body, 1);
+        try writer.writeAll("}");
+    }
+    try writer.writeAll("\n");
+    try writer.writeAll("\n");
+
+    if (fir.entry == FIR.uninitialized_entry) return;
 
     try dumpBlock(writer, fir, fir.entry, 0);
 }
@@ -117,16 +128,6 @@ fn dumpLoop(writer: anytype, fir: *const FIR, loop_idx: usize, depth: usize) Wri
     }
     try writer.writeAll(" {\n");
     try dumpBlock(writer, fir, loop.body, depth + 1);
-    try printDepth(writer, depth);
-    try writer.writeAll("}");
-}
-
-fn dumpFunction(writer: anytype, fir: *const FIR, func_idx: usize, depth: usize) WriterError!void {
-    const function = fir.functions.items[func_idx];
-
-    try writer.writeAll("func ");
-    try writer.print("func {s} params {d} {{\n", .{ function.name, function.param_count });
-    try dumpBlock(writer, fir, function.body, depth + 1);
     try printDepth(writer, depth);
     try writer.writeAll("}");
 }
