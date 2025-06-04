@@ -33,7 +33,28 @@ pub fn compile(self: *Compiler) []const u8 {
 }
 
 fn compileFunctions(self: *Compiler) void {
-    // TODO:
+    for (self.fir.globals.items) |global| {
+        if (global.type != .function) continue;
+        const func = self.fir.functions.items[global.extra_idx];
+
+        self.emitOpcode(.function);
+        self.emitByte(@intCast(func.param_count));
+        self.emitByte(0x00);
+        self.emitByte(0x00);
+        const op_idx = self.byte_code.items.len;
+
+        if (func.ret_type == .null) {
+            self.emitOpcode(.null);
+        }
+        self.compileBlock(func.body);
+
+        const line_count = self.byte_code.items.len - op_idx + 1;
+        const jump_length: u16 = @intCast(line_count);
+
+        const bytes = std.mem.toBytes(jump_length);
+        self.byte_code.items[op_idx - 2] = bytes[0];
+        self.byte_code.items[op_idx - 1] = bytes[1];
+    }
     self.emitOpcode(.functions_done);
 }
 
@@ -158,7 +179,9 @@ fn compileLoop(self: *Compiler, loop_idx: usize) void {
 fn compileGlobal(self: *Compiler, var_idx: usize) void {
     const global = self.fir.globals.items[var_idx];
 
-    if (global.expr) |expr| {
+    if (global.type == .function) {
+        return;
+    } else if (global.expr) |expr| {
         self.compileExpression(expr);
     } else {
         self.emitOpcode(.null);
@@ -173,7 +196,9 @@ fn compileGlobal(self: *Compiler, var_idx: usize) void {
 fn compileLocal(self: *Compiler, var_idx: usize) void {
     const local = self.fir.locals.items[var_idx];
 
-    if (local.expr) |expr| {
+    if (local.type == .function) {
+        @panic("Local functions not yet allowed");
+    } else if (local.expr) |expr| {
         self.compileExpression(expr);
     } else {
         self.emitOpcode(.null);

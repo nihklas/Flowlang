@@ -1,7 +1,8 @@
 ip: usize,
 code: []const u8,
-constants: [256]FlowValue = undefined,
-constant_counter: usize = 0,
+constants: [256]FlowValue,
+constant_counter: usize,
+function_counter: usize,
 writer: std.io.AnyWriter,
 
 pub fn dump(writer: std.io.AnyWriter, code: []const u8) void {
@@ -9,6 +10,9 @@ pub fn dump(writer: std.io.AnyWriter, code: []const u8) void {
         .ip = 0,
         .code = code,
         .writer = writer,
+        .constants = undefined,
+        .constant_counter = 0,
+        .function_counter = 0,
     };
     dumper.runDump();
 }
@@ -26,11 +30,10 @@ fn runDump(self: *Dumper) void {
             },
             .function => {
                 defer self.ip += 2;
-                const name_idx = self.byte();
-                const name = self.constants[name_idx];
+                defer self.function_counter += 1;
                 const arg_count = self.byte();
                 const line_count = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
-                self.printInstruction("OP_FUNCTION", "{d: <10}{{{s}}} [{x:0>4}]", .{ arg_count, name, self.ip + line_count });
+                self.printInstruction("OP_FUNCTION", "{d: <10}{{{d}}} [{x:0>4}]", .{ arg_count, self.function_counter, self.ip + line_count });
             },
             .integer => self.constantInstruction("OP_INTEGER", .int),
             .float => self.constantInstruction("OP_FLOAT", .float),

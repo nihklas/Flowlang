@@ -10,7 +10,7 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
         if (global.type != .function) continue;
 
         const func = fir.functions.items[global.extra_idx];
-        try writer.print("func {d} {{\n", .{func.param_count});
+        try writer.print("func ({d}) {{\n", .{func.param_count});
         try dumpBlock(writer, fir, func.body, 1);
         try writer.writeAll("}");
     }
@@ -151,7 +151,7 @@ fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wri
 
     if (variable.type == .function) {
         const func = fir.functions.items[variable.extra_idx];
-        try writer.print("func {d} {{\n", .{func.param_count});
+        try writer.print("func ({d}) {{\n", .{func.param_count});
         try dumpBlock(writer, fir, func.body, depth + 1);
         try printDepth(writer, depth);
         try writer.writeAll("}");

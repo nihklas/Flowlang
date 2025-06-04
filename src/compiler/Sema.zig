@@ -141,7 +141,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             }
 
             self.putFunction(function.name, .{
-                // This should never be null, as only valid return types get parsed
+                // NOTE: This should never be null, as only valid return types get parsed
                 .ret_type = typeFromToken(function.ret_type.type).?,
                 .param_types = param_types,
             });
@@ -312,7 +312,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
 
                         self.putType(expr, builtin.ret_type);
                     },
-                    .function => @panic("Not yet supported"),
+                    .function => {},
                     else => self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable, .extra_info1 = call.expr.getToken().lexeme }),
                 }
             }
@@ -383,10 +383,6 @@ fn scopeDecr(self: *Sema) void {
         }
     }
     self.variables.shrinkRetainingCapacity(write_idx);
-}
-
-fn isCallable(t: FlowType) bool {
-    return t == .function or t == .builtin_fn;
 }
 
 fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
