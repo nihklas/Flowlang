@@ -204,14 +204,14 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
     for (program) |stmt| {
         if (stmt.* != .function) continue;
         const function = stmt.function;
-        const body = self.startOfBlock(self.traverseBlock(function.body).?);
-
-        self.putFunction(.{
-            .name = function.name.lexeme,
-            .body = body,
-            .ret_type = typeFromToken(function.ret_type.type).?,
-            .param_count = function.params.len,
-        });
+        if (self.traverseBlock(function.body)) |body| {
+            self.putFunction(.{
+                .name = function.name.lexeme,
+                .body = self.startOfBlock(body),
+                .ret_type = typeFromToken(function.ret_type.type).?,
+                .param_count = function.params.len,
+            });
+        }
     }
 }
 
@@ -485,16 +485,21 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
 fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *const ast.Expr) FlowType {
     const callee_expr = self.exprs.items[callee];
     std.debug.assert(callee_expr.type == .function or callee_expr.type == .builtin_fn);
+    std.debug.assert(original_callee_expr.* == .variable);
 
     switch (callee_expr.type) {
         .builtin_fn => {
-            std.debug.assert(original_callee_expr.* == .variable);
             std.debug.assert(builtins.get(original_callee_expr.variable.name.lexeme) != null);
 
             const builtin = builtins.get(original_callee_expr.variable.name.lexeme).?;
             return builtin.ret_type;
         },
-        .function => @panic("Calling user defined functions is not yet supported"),
+        .function => {
+            _, const variable = self.resolveVariable(original_callee_expr.variable.name.lexeme);
+            std.debug.assert(variable.type == .function);
+
+            return self.functions.items[variable.extra_idx].ret_type;
+        },
         else => unreachable,
     }
 }
@@ -535,7 +540,7 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) v
         .type = var_type,
         .scope = self.scope,
         .stack_idx = self.locals.items.len,
-        .extra_idx = 0,
+        .extra_idx = if (var_type == .function) self.functions.items.len - 1 else 0,
     };
 
     if (self.scope == 0) {

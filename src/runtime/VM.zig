@@ -83,6 +83,7 @@ fn loadConstants(self: *VM) void {
 }
 
 fn loadFunctions(self: *VM) void {
+    var global_counter: usize = 0;
     while (self.ip < self.code.len) {
         const op = self.instruction();
         if (comptime debug_options.bytecode) {
@@ -90,22 +91,17 @@ fn loadFunctions(self: *VM) void {
         }
         switch (op) {
             .function => {
-                @panic("Functions yet are to be reworked");
-                // const name_idx = self.byte();
-                // const argc = self.byte();
-                // const end = self.short();
-                //
-                // const name = self.constants[name_idx];
-                //
-                // self.globals.put(self.gpa, name.string, .{
-                //     .function = .{
-                //         .name = name.string,
-                //         .arg_count = argc,
-                //         .start_ip = self.ip,
-                //     },
-                // }) catch oom();
-                //
-                // self.ip += end - 1;
+                defer global_counter += 1;
+
+                const argc = self.byte();
+                const end = self.short();
+
+                self.globals[global_counter] = .{ .function = .{
+                    .arg_count = argc,
+                    .start_ip = self.ip,
+                } };
+
+                self.ip += end - 1;
             },
             .functions_done => break,
             else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),

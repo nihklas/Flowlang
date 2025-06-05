@@ -6,15 +6,18 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
     }
     try writer.writeAll("\n");
 
+    var global_counter: usize = 0;
     for (fir.globals.items) |global| {
         if (global.type != .function) continue;
 
         const func = fir.functions.items[global.extra_idx];
-        try writer.print("func ({d}) {{\n", .{func.param_count});
+        try writer.print("${d} = func ({d}) {{\n", .{ global_counter, func.param_count });
         try dumpBlock(writer, fir, func.body, 1);
         try writer.writeAll("}");
+        try writer.writeAll("\n");
+
+        global_counter += 1;
     }
-    try writer.writeAll("\n");
     try writer.writeAll("\n");
 
     if (fir.entry == FIR.uninitialized_entry) return;
