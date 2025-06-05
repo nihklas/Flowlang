@@ -1,12 +1,10 @@
-foo(true);
-
-func foo(b: bool) {
-    const local = !b;
-    if b {
-        print("Ja");
-    } else if !local {
-        print("Nein");
+func fib(n: int) int {
+    if n <= 1 {
+        return n;
     }
-    print("Hello");
+
+    const result = fib(n - 1) + fib(n - 2);
+    return result;
 }
 
+print(fib(1));

@@ -44,6 +44,11 @@ fn dumpStmt(writer: anytype, fir: *const FIR, node_idx: usize, depth: usize) Wri
             try dumpExpr(writer, fir, node.index);
             try writer.writeAll(";");
         },
+        .@"return" => {
+            try writer.writeAll("return ");
+            try dumpExpr(writer, fir, node.index);
+            try writer.writeAll(";");
+        },
         .pop => try writer.writeAll("();"),
         .@"break" => try writer.writeAll("break;"),
         .@"continue" => try writer.writeAll("continue;"),

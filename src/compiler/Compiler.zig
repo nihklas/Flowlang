@@ -106,6 +106,10 @@ fn compileStmt(self: *Compiler, node_idx: usize) void {
             self.compileExpression(node.index);
             self.emitOpcode(.pop);
         },
+        .@"return" => {
+            self.compileExpression(node.index);
+            self.emitOpcode(.@"return");
+        },
         .pop => self.emitOpcode(.pop),
         .cond => self.compileCond(node.index),
         .loop => self.compileLoop(node.index),

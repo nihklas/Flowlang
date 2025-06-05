@@ -35,7 +35,7 @@ pub const Node = struct {
     ///
     /// `pop`, `break` and `continue` are special cases in that the index field is not used. It is a
     /// literal instruction for the compiler
-    kind: enum { expr, cond, loop, global, local, pop, @"break", @"continue" },
+    kind: enum { expr, cond, loop, global, local, pop, @"break", @"continue", @"return" },
     /// The index into the concrete node kind collection
     index: usize,
     /// index into the node collection to the node directly in front of the current one. If this
@@ -205,21 +205,9 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
         if (stmt.* != .function) continue;
         const function = stmt.function;
 
-        if (function.body.len == 0) continue;
-
-        self.scopeIncr();
-
-        for (function.params) |param| {
-            self.putVariable(param.variable.name.lexeme, null, typeFromToken(param.variable.type_hint.?.type).?);
-        }
-
-        const body = self.traverseBlock(function.body).?;
-
-        self.scopeDecr();
-
         self.putFunction(.{
             .name = function.name.lexeme,
-            .body = self.startOfBlock(body),
+            .body = 0,
             .ret_type = typeFromToken(function.ret_type.type).?,
             .param_count = function.params.len,
         });
@@ -323,18 +311,40 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
         .function => |function| {
-            if (self.scope == 0) return null;
+            if (self.scope > 0) {
+                self.putFunction(.{
+                    .name = function.name.lexeme,
+                    .body = 0,
+                    .ret_type = typeFromToken(function.ret_type.type).?,
+                    .param_count = function.params.len,
+                });
+            }
 
-            const body = self.startOfBlock(self.traverseBlock(function.body).?);
+            self.scopeIncr();
 
-            self.putFunction(.{
-                .name = function.name.lexeme,
-                .body = body,
-                .ret_type = typeFromToken(function.ret_type.type).?,
-                .param_count = function.params.len,
-            });
+            for (function.params) |param| {
+                self.putVariable(param.variable.name.lexeme, null, typeFromToken(param.variable.type_hint.?.type).?);
+            }
+
+            const body = self.traverseBlock(function.body).?;
+
+            self.scopeDecr();
+
+            _, const variable = self.resolveVariable(function.name.lexeme);
+            std.debug.assert(variable.type == .function);
+            self.functions.items[variable.extra_idx].body = self.startOfBlock(body);
         },
-        .@"return" => @panic("Not yet supported"),
+        .@"return" => |return_stmt| {
+            const expr = blk: {
+                if (return_stmt.value) |value| {
+                    break :blk self.traverseExpr(value);
+                }
+                self.exprs.append(self.alloc, .{ .op = .null, .type = .null }) catch oom();
+                break :blk self.exprs.items.len - 1;
+            };
+
+            self.nodes.append(self.alloc, .{ .kind = .@"return", .index = expr }) catch oom();
+        },
     }
 
     return self.nodes.items.len - 1;
