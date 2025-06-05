@@ -3,7 +3,7 @@ program: []const *Stmt,
 errors: std.ArrayListUnmanaged(ErrorInfo) = .empty,
 types: std.AutoHashMapUnmanaged(*const Expr, FlowType) = .empty,
 variables: std.ArrayListUnmanaged(Variable) = .empty,
-functions: std.StringHashMapUnmanaged(Function) = .empty,
+functions: std.ArrayListUnmanaged(Function) = .empty,
 current_scope: u8 = 0,
 loop_level: u8 = 0,
 
@@ -19,9 +19,8 @@ pub fn deinit(self: *Sema) void {
     self.types.deinit(self.alloc);
     self.variables.deinit(self.alloc);
 
-    var func_iter = self.functions.valueIterator();
-    while (func_iter.next()) |func| {
-        self.alloc.free(func.param_types);
+    for (self.functions.items) |func| {
+        self.alloc.free(func.arg_types);
     }
     self.functions.deinit(self.alloc);
 }
@@ -35,6 +34,8 @@ pub fn deinit(self: *Sema) void {
 ///
 /// collects all errors in a list and prints them through `error_reporter.zig`.
 pub fn analyse(self: *Sema) !void {
+    self.registerTopLevelFunctions();
+
     for (self.program) |stmt| {
         self.analyseStmt(stmt);
     }
@@ -42,6 +43,25 @@ pub fn analyse(self: *Sema) !void {
     if (self.errors.items.len > 0) {
         self.printError();
         return error.SemaError;
+    }
+}
+
+fn registerTopLevelFunctions(self: *Sema) void {
+    for (self.program) |stmt| {
+        if (stmt.* != .function) continue;
+        const function = stmt.function;
+        const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+        for (function.params, 0..) |param, i| {
+            std.debug.assert(param.* == .variable);
+            std.debug.assert(param.variable.type_hint != null);
+
+            arg_types[i] = typeFromToken(param.variable.type_hint.?.type).?;
+        }
+
+        self.putFunction(function.name, .{
+            .ret_type = typeFromToken(function.ret_type.type).?,
+            .arg_types = arg_types,
+        });
     }
 }
 
@@ -102,11 +122,25 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.analyseExpr(value);
             }
 
+            const extra_idx = blk: {
+                if (var_stmt.value) |value| {
+                    if (value.* == .variable) {
+                        if (self.findVariable(value.variable.name)) |existing_variable| {
+                            if (existing_variable.type == .function) {
+                                break :blk existing_variable.extra_idx;
+                            }
+                        }
+                    }
+                }
+                break :blk 0;
+            };
+
             const variable: Variable = .{
                 .name = var_stmt.name,
                 .constant = var_stmt.constant,
                 .type = self.typeFromVariable(stmt),
                 .scope = self.current_scope,
+                .extra_idx = extra_idx,
             };
 
             if (var_stmt.value) |value| {
@@ -134,17 +168,19 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             self.putVariable(variable);
         },
         .function => |function| {
-            const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
-            for (function.params, 0..) |param, i| {
-                std.debug.assert(param.* == .variable);
-                param_types[i] = self.typeFromVariable(param);
-            }
+            if (self.current_scope > 0) {
+                const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+                for (function.params, 0..) |param, i| {
+                    std.debug.assert(param.* == .variable);
+                    arg_types[i] = self.typeFromVariable(param);
+                }
 
-            self.putFunction(function.name, .{
-                // NOTE: This should never be null, as only valid return types get parsed
-                .ret_type = typeFromToken(function.ret_type.type).?,
-                .param_types = param_types,
-            });
+                self.putFunction(function.name, .{
+                    // NOTE: This should never be null, as only valid return types get parsed
+                    .ret_type = typeFromToken(function.ret_type.type).?,
+                    .arg_types = arg_types,
+                });
+            }
 
             self.scopeIncr();
             defer self.scopeDecr();
@@ -158,8 +194,10 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                     .name = param.variable.name,
                     .type = typeFromToken(param.variable.type_hint.?.type).?,
                     .scope = self.current_scope,
+                    .extra_idx = 0,
                 });
             }
+
             for (function.body) |inner_stmt| {
                 self.analyseStmt(inner_stmt);
             }
@@ -277,55 +315,59 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 self.analyseExpr(arg_expr);
             }
 
+            std.debug.assert(call.expr.* == .variable);
             if (self.getType(call.expr)) |callee_type| {
                 switch (callee_type) {
                     .builtin_fn => {
                         // NOTE: builtin functions cannot be aliased
-                        std.debug.assert(call.expr.* == .variable);
                         std.debug.assert(builtins.get(call.expr.variable.name.lexeme) != null);
 
                         const builtin = builtins.get(call.expr.variable.name.lexeme).?;
-                        if (call.args.len != builtin.arg_types.len) {
-                            const number_buffer = self.alloc.alloc(u8, 20) catch oom();
-                            defer self.alloc.free(number_buffer);
-
-                            const actual_arg_count = std.fmt.formatIntBuf(number_buffer, call.args.len, 10, .upper, .{});
-                            const expected_arg_count = std.fmt.formatIntBuf(number_buffer[actual_arg_count..], builtin.arg_types.len, 10, .upper, .{});
-
-                            self.pushError(.{
-                                .token = call.expr.getToken(),
-                                .err = FunctionError.ArgumentCountMismatch,
-                                .extra_info1 = self.alloc.dupe(u8, number_buffer[0..actual_arg_count]) catch oom(),
-                                .extra_info2 = self.alloc.dupe(u8, number_buffer[actual_arg_count .. actual_arg_count + expected_arg_count]) catch oom(),
-                            });
-                            return;
-                        }
-
-                        for (call.args, builtin.arg_types) |arg, param| {
-                            // NOTE: This happens if an argument is a variable, that does not exist
-                            if (self.getType(arg) == null) continue;
-
-                            // NOTE: these get checked at runtime
-                            if (param == .null) continue;
-
-                            if (self.getType(arg).? != param) {
-                                self.pushError(.{
-                                    .token = arg.getToken(),
-                                    .err = FunctionError.ArgumentTypeMismatch,
-                                    .extra_info1 = @tagName(param),
-                                    .extra_info2 = @tagName(self.getType(arg).?),
-                                });
-                            }
-                        }
-
-                        self.putType(expr, builtin.ret_type);
+                        self.validateFunction(builtin, call, expr);
                     },
-                    .function => {},
+                    .function => {
+                        const variable = self.findVariable(call.expr.variable.name) orelse return;
+                        std.debug.assert(variable.type == .function);
+
+                        const function = self.functions.items[variable.extra_idx];
+                        self.validateFunction(function, call, expr);
+                    },
                     else => self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable, .extra_info1 = call.expr.getToken().lexeme }),
                 }
             }
         },
     }
+}
+
+fn validateFunction(self: *Sema, function: anytype, call: anytype, expr: *const Expr) void {
+    if (call.args.len != function.arg_types.len) {
+        self.pushError(.{
+            .token = call.expr.getToken(),
+            .err = FunctionError.ArgumentCountMismatch,
+            .extra_info1 = self.formatNumber(call.args.len),
+            .extra_info2 = self.formatNumber(function.arg_types.len),
+        });
+        return;
+    }
+
+    for (call.args, function.arg_types) |arg, param| {
+        // NOTE: This happens if an argument is a variable, that does not exist
+        if (self.getType(arg) == null) continue;
+
+        // NOTE: these get checked at runtime
+        if (param == .null) continue;
+
+        if (self.getType(arg).? != param) {
+            self.pushError(.{
+                .token = arg.getToken(),
+                .err = FunctionError.ArgumentTypeMismatch,
+                .extra_info1 = @tagName(param),
+                .extra_info2 = @tagName(self.getType(arg).?),
+            });
+        }
+    }
+
+    self.putType(expr, function.ret_type);
 }
 
 fn putType(self: *Sema, expr: *const Expr, t: FlowType) void {
@@ -345,12 +387,13 @@ fn putVariable(self: *Sema, variable: Variable) void {
 }
 
 fn putFunction(self: *Sema, name: Token, function: Function) void {
-    self.functions.put(self.alloc, name.lexeme, function) catch oom();
+    self.functions.append(self.alloc, function) catch oom();
     self.putVariable(.{
         .name = name,
         .constant = true,
         .type = .function,
         .scope = self.current_scope,
+        .extra_idx = self.functions.items.len - 1,
     });
 }
 
@@ -368,6 +411,7 @@ fn findVariable(self: *Sema, name: Token) ?Variable {
             .constant = true,
             .type = .builtin_fn,
             .scope = 0,
+            .extra_idx = 0,
         };
     }
 
@@ -410,6 +454,15 @@ fn typeFromToken(token: Token) ?FlowType {
         .null => .null,
         else => null,
     };
+}
+
+fn formatNumber(self: *Sema, num: anytype) []const u8 {
+    if (num > 1_0000_00000_00000_00000) @panic("Number too large");
+    const number_buffer = self.alloc.alloc(u8, 20) catch oom();
+    defer self.alloc.free(number_buffer);
+
+    const result = std.fmt.bufPrint(number_buffer, "{d}", .{num}) catch @panic("How can this NOT work?");
+    return self.alloc.dupe(u8, result) catch oom();
 }
 
 fn printError(self: *Sema) void {
@@ -479,11 +532,13 @@ const Variable = struct {
     constant: bool,
     type: FlowType,
     scope: u8,
+    /// Only used for type == .function for indexing into the function collection
+    extra_idx: usize,
 };
 
 const Function = struct {
     ret_type: FlowType,
-    param_types: []FlowType,
+    arg_types: []FlowType,
 };
 
 const Sema = @This();

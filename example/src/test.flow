@@ -1,4 +1,12 @@
+foo(true);
+
 func foo(b: bool) {
-    print(b);
+    const local = !b;
+    if b {
+        print("Ja");
+    } else if !local {
+        print("Nein");
+    }
+    print("Hello");
 }
 
