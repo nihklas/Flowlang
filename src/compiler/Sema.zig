@@ -150,7 +150,15 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             defer self.scopeDecr();
 
             for (function.params) |param| {
-                self.analyseStmt(param);
+                std.debug.assert(param.* == .variable);
+                std.debug.assert(param.variable.type_hint != null);
+
+                self.putVariable(.{
+                    .constant = true,
+                    .name = param.variable.name,
+                    .type = typeFromToken(param.variable.type_hint.?.type).?,
+                    .scope = self.current_scope,
+                });
             }
             for (function.body) |inner_stmt| {
                 self.analyseStmt(inner_stmt);

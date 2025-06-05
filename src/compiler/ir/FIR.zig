@@ -204,14 +204,25 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
     for (program) |stmt| {
         if (stmt.* != .function) continue;
         const function = stmt.function;
-        if (self.traverseBlock(function.body)) |body| {
-            self.putFunction(.{
-                .name = function.name.lexeme,
-                .body = self.startOfBlock(body),
-                .ret_type = typeFromToken(function.ret_type.type).?,
-                .param_count = function.params.len,
-            });
+
+        if (function.body.len == 0) continue;
+
+        self.scopeIncr();
+
+        for (function.params) |param| {
+            self.putVariable(param.variable.name.lexeme, null, typeFromToken(param.variable.type_hint.?.type).?);
         }
+
+        const body = self.traverseBlock(function.body).?;
+
+        self.scopeDecr();
+
+        self.putFunction(.{
+            .name = function.name.lexeme,
+            .body = self.startOfBlock(body),
+            .ret_type = typeFromToken(function.ret_type.type).?,
+            .param_count = function.params.len,
+        });
     }
 }
 
@@ -237,6 +248,10 @@ fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) ?usize {
     self.scopeIncr();
     defer self.scopeDecr();
 
+    return self.traverseStmts(stmts);
+}
+
+fn traverseStmts(self: *FIR, stmts: []const *ast.Stmt) ?usize {
     var prev_node: ?usize = null;
     for (stmts) |stmt| {
         if (self.traverseStmt(stmt)) |current_node| {

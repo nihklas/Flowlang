@@ -1,10 +1,4 @@
-func foo() {
-    print("foos");
+func foo(b: bool) {
+    print(b);
 }
 
-func bar() {
-    print("bars");
-}
-
-foo();
-bar();
