@@ -2,9 +2,10 @@ func fib(n: int) int {
     if n <= 1 {
         return n;
     }
-
-    const result = fib(n - 1) + fib(n - 2);
-    return result;
+    
+    const a = fib(n - 1);
+    const b = fib(n - 2);
+    return a + b;
 }
 
-print(fib(1));
+print(fib(2));

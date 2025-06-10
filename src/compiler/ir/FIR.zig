@@ -326,13 +326,15 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 self.putVariable(param.variable.name.lexeme, null, typeFromToken(param.variable.type_hint.?.type).?);
             }
 
-            const body = self.traverseBlock(function.body).?;
+            const maybe_body = self.traverseBlock(function.body);
 
             self.scopeDecr();
 
             _, const variable = self.resolveVariable(function.name.lexeme);
             std.debug.assert(variable.type == .function);
-            self.functions.items[variable.extra_idx].body = self.startOfBlock(body);
+            self.functions.items[variable.extra_idx].body = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
+
+            if (self.scope == 0) return null;
         },
         .@"return" => |return_stmt| {
             const expr = blk: {
@@ -598,7 +600,7 @@ fn arena(self: *FIR) Allocator {
     return self.arena_state.allocator();
 }
 
-pub const uninitialized_entry = std.math.maxInt(usize);
+pub const uninitialized_entry = std.math.maxInt(@FieldType(FIR, "entry"));
 
 const FIR = @This();
 

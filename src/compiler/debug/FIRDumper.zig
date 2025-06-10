@@ -12,7 +12,9 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
 
         const func = fir.functions.items[global.extra_idx];
         try writer.print("${d} = func ({d}) {{\n", .{ global_counter, func.param_count });
-        try dumpBlock(writer, fir, func.body, 1);
+        if (func.body != FIR.uninitialized_entry) {
+            try dumpBlock(writer, fir, func.body, 1);
+        }
         try writer.writeAll("}");
         try writer.writeAll("\n");
 
