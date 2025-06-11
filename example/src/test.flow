@@ -1,11 +1,2 @@
-func fib(n: int) int {
-    if n <= 1 {
-        return n;
-    }
-    
-    const a = fib(n - 1);
-    const b = fib(n - 2);
-    return a + b;
-}
+var test: []int;
 
-print(fib(2));

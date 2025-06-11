@@ -29,11 +29,11 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
             try writer.print("Stmt '{s}'", .{variable.name.lexeme});
 
             if (variable.type_hint) |type_hint| {
-                try writer.writeAll(" ");
+                try writer.writeAll(" '");
                 for (0..type_hint.order) |_| {
                     try writer.writeAll("[]");
                 }
-                try writer.print("'{s}'", .{type_hint.type.lexeme});
+                try writer.print("{s}'", .{type_hint.type.lexeme});
             }
 
             try writer.writeAll("]\n");
