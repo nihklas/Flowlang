@@ -1,20 +1,27 @@
+pub const TypeHint = struct {
+    type: Token,
+    /// order (dimension) of the array, 0 means no array, 1 means []type, 2 means [][]type, ...
+    order: u8 = 0,
+};
+
 pub const Expr = union(enum) {
-    pub const Literal = union(enum) {
+    pub const Literal = union(FlowType) {
         null: void,
         bool: bool,
         int: Integer,
         float: Float,
         string: []const u8,
+        builtin_fn: void,
+        function: void,
     };
 
     literal: struct { token: Token, value: Literal },
-    grouping: struct { expr: *Expr },
+    grouping: struct { token: Token, expr: *Expr },
     unary: struct { op: Token, expr: *Expr },
-    binary: struct { lhs: *Expr, op: Token, rhs: *Expr, type: ?FlowType = null },
+    binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
-    assignment: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
-    append: struct { name: Token, value: *Expr, global: bool = false, local_idx: u8 = 0 },
-    variable: struct { name: Token, global: bool = false, local_idx: u8 = 0 },
+    assignment: struct { name: Token, value: *Expr },
+    variable: struct { name: Token },
     call: struct { expr: *Expr, args: []*Expr },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
@@ -25,10 +32,10 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
-    pub fn createGrouping(alloc: Allocator, expr: *Expr) *Expr {
+    pub fn createGrouping(alloc: Allocator, token: Token, expr: *Expr) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
-            .grouping = .{ .expr = expr },
+            .grouping = .{ .token = token, .expr = expr },
         };
         return new_expr;
     }
@@ -65,14 +72,6 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
-    pub fn createAppend(alloc: Allocator, name: Token, expr: *Expr) *Expr {
-        const new_expr = Expr.create(alloc);
-        new_expr.* = .{
-            .append = .{ .name = name, .value = expr },
-        };
-        return new_expr;
-    }
-
     pub fn createVariable(alloc: Allocator, name: Token) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
@@ -96,7 +95,6 @@ pub const Expr = union(enum) {
             .grouping => |grouping| grouping.expr.destroy(alloc),
             .unary => |unary| unary.expr.destroy(alloc),
             .assignment => |assignment| assignment.value.destroy(alloc),
-            .append => |append| append.value.destroy(alloc),
             .binary => |binary| {
                 binary.lhs.destroy(alloc);
                 binary.rhs.destroy(alloc);
@@ -117,12 +115,11 @@ pub const Expr = union(enum) {
     pub fn getToken(self: *Expr) Token {
         return switch (self.*) {
             .literal => self.literal.token,
-            .grouping => self.grouping.expr.getToken(),
+            .grouping => self.grouping.token,
             .unary => self.unary.op,
             .binary => self.binary.op,
             .logical => self.logical.op,
             .assignment => self.assignment.name,
-            .append => self.append.name,
             .variable => self.variable.name,
             .call => self.call.expr.getToken(),
         };
@@ -136,28 +133,22 @@ pub const Expr = union(enum) {
 pub const Stmt = union(enum) {
     expr: struct { expr: *Expr },
 
-    block: struct { stmts: []*Stmt, local_count: usize = 0 },
+    block: struct { stmts: []*Stmt },
 
-    loop: struct { condition: *Expr, body: []*Stmt, inc: ?*Stmt = null },
+    loop: struct { condition: *Expr, body: []*Stmt, inc: ?*Expr = null },
     @"break": struct { token: Token },
     @"continue": struct { token: Token },
 
     @"if": struct { condition: *Expr, true_branch: *Stmt, false_branch: ?*Stmt },
 
-    channel_read: struct { channel: Token, result: Token },
-    channel_write: struct { channel: Token, value: *Expr },
-    channel: struct { name: Token, type: FlowType },
     variable: struct {
         name: Token,
         constant: bool,
         value: ?*Expr,
-        type_hint: ?Token,
-        array: bool = false,
-        global: bool = false,
-        local_index: ?u8 = null,
+        type_hint: ?TypeHint,
     },
 
-    function: struct { name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt },
+    function: struct { name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt },
     @"return": struct { token: Token, value: ?*Expr },
 
     pub fn createExpr(alloc: Allocator, expr: *Expr) *Stmt {
@@ -208,31 +199,7 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createChannelRead(alloc: Allocator, channel: Token, result: Token) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .channel_read = .{ .channel = channel, .result = result },
-        };
-        return stmt;
-    }
-
-    pub fn createChannelWrite(alloc: Allocator, channel: Token, value: *Expr) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .channel_write = .{ .channel = channel, .value = value },
-        };
-        return stmt;
-    }
-
-    pub fn createChannel(alloc: Allocator, name: Token, type_hint: FlowType) *Stmt {
-        const stmt = Stmt.create(alloc);
-        stmt.* = .{
-            .channel = .{ .name = name, .type = type_hint },
-        };
-        return stmt;
-    }
-
-    pub fn createVariable(alloc: Allocator, name: Token, type_hint: ?Token, constant: bool, value: ?*Expr) *Stmt {
+    pub fn createVariable(alloc: Allocator, name: Token, type_hint: ?TypeHint, constant: bool, value: ?*Expr) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .variable = .{
@@ -245,7 +212,7 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createFunction(alloc: Allocator, name: Token, ret_type: Token, params: []*Stmt, body: []*Stmt) *Stmt {
+    pub fn createFunction(alloc: Allocator, name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
             .function = .{ .name = name, .ret_type = ret_type, .params = params, .body = body },
@@ -264,7 +231,7 @@ pub const Stmt = union(enum) {
     pub fn destroy(self: *Stmt, alloc: Allocator) void {
         defer alloc.destroy(self);
         switch (self.*) {
-            .channel_read, .channel, .@"break", .@"continue" => {},
+            .@"break", .@"continue" => {},
             .expr => |expr| expr.expr.destroy(alloc),
             .block => |block| {
                 for (block.stmts) |stmt| {
@@ -291,7 +258,6 @@ pub const Stmt = union(enum) {
                 }
             },
             .@"return" => |return_stmt| if (return_stmt.value) |value| value.destroy(alloc),
-            .channel_write => |channel_write| channel_write.value.destroy(alloc),
             .variable => |variable| if (variable.value) |value| value.destroy(alloc),
             .function => |function| {
                 for (function.params) |param| {
@@ -318,8 +284,8 @@ test "Expr.createLiteral" {
 }
 
 test "Expr.createGrouping" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const grouping = Expr.createGrouping(testing_alloc, literal);
+    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 2 }, .{ .float = 12.34 });
+    const grouping = Expr.createGrouping(testing_alloc, .{ .type = .@"(", .lexeme = "(", .line = 1, .column = 1 }, literal);
     defer grouping.destroy(testing_alloc);
 }
 
@@ -377,26 +343,6 @@ test "Stmt.createReturn" {
     defer return_stmt.destroy(testing_alloc);
 }
 
-test "Stmt.createChannel" {
-    const channel = Stmt.createChannel(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 }, .int);
-    defer channel.destroy(testing_alloc);
-}
-
-test "Stmt.createChannelWrite" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const channel_write = Stmt.createChannelWrite(testing_alloc, .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 }, expr);
-    defer channel_write.destroy(testing_alloc);
-}
-
-test "Stmt.createChannelRead" {
-    const channel_read = Stmt.createChannelRead(
-        testing_alloc,
-        .{ .type = .identifier, .lexeme = "chn", .line = 1, .column = 1 },
-        .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-    );
-    defer channel_read.destroy(testing_alloc);
-}
-
 test "Stmt.createLoop" {
     const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
     const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
@@ -420,7 +366,7 @@ test "Stmt.createVariable" {
     const loop = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        .{ .type = .string, .lexeme = "string", .line = 1, .column = 1 },
+        .{ .type = .{ .type = .string, .lexeme = "string", .line = 1, .column = 1 } },
         false,
         expr,
     );
@@ -433,7 +379,7 @@ test "Stmt.createFunction" {
     const variable = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 },
-        .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 },
+        .{ .type = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
         true,
         null,
     );
@@ -446,7 +392,7 @@ test "Stmt.createFunction" {
     const function = Stmt.createFunction(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 },
+        .{ .type = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
         params,
         body,
     );

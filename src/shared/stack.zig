@@ -1,19 +1,14 @@
-pub fn Stack(comptime T: type, size: usize) type {
+pub fn Stack(comptime T: type) type {
     return struct {
         const Self = @This();
         stack: []T,
         stack_top: usize = 0,
 
-        pub fn init(alloc: Allocator) Self {
+        /// Assumes `stack` to be empty
+        pub fn init(stack: []T) Self {
             return .{
-                .stack = alloc.alloc(T, size) catch oom(),
+                .stack = stack,
             };
-        }
-
-        pub fn deinit(self: *Self, alloc: Allocator) void {
-            alloc.free(self.stack);
-            self.stack_top = 0;
-            self.* = undefined;
         }
 
         pub fn dump(self: *Self) void {
@@ -28,7 +23,7 @@ pub fn Stack(comptime T: type, size: usize) type {
         }
 
         pub fn push(self: *Self, value: T) void {
-            if (self.stack_top == size) panic("Stackoverflow", .{});
+            if (self.stack_top == self.stack.len) panic("Stackoverflow", .{});
             defer self.stack_top += 1;
             self.stack[self.stack_top] = value;
         }
@@ -55,6 +50,5 @@ pub fn Stack(comptime T: type, size: usize) type {
 }
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const panic = std.debug.panic;
 const oom = @import("root.zig").oom;

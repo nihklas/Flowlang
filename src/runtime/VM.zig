@@ -3,27 +3,28 @@ const STACK_SIZE = 1024;
 gpa: Allocator,
 gc: Allocator,
 code: []const u8,
-ip: usize = 0,
-value_stack: Stack(FlowValue, STACK_SIZE),
-call_stack: Stack(CallFrame, STACK_SIZE),
-constants: [256]FlowValue = undefined,
-globals: std.StringHashMapUnmanaged(FlowValue),
+ip: usize,
+value_stack: Stack(FlowValue),
+call_stack: Stack(CallFrame),
+constants: [256]FlowValue,
+globals: [256]FlowValue,
 
 pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) VM {
     return .{
         .gpa = gpa,
         .gc = gc,
         .code = code,
-        .value_stack = .init(gpa),
-        .call_stack = .init(gpa),
-        .globals = .empty,
+        .ip = 0,
+        .value_stack = .init(gpa.alloc(FlowValue, STACK_SIZE) catch oom()),
+        .call_stack = .init(gpa.alloc(CallFrame, STACK_SIZE) catch oom()),
+        .constants = undefined,
+        .globals = undefined,
     };
 }
 
 pub fn deinit(self: *VM) void {
-    self.value_stack.deinit(self.gpa);
-    self.call_stack.deinit(self.gpa);
-    self.globals.deinit(self.gpa);
+    self.gpa.free(self.value_stack.stack);
+    self.gpa.free(self.call_stack.stack);
     self.* = undefined;
 }
 
@@ -82,6 +83,7 @@ fn loadConstants(self: *VM) void {
 }
 
 fn loadFunctions(self: *VM) void {
+    var global_counter: usize = 0;
     while (self.ip < self.code.len) {
         const op = self.instruction();
         if (comptime debug_options.bytecode) {
@@ -89,19 +91,15 @@ fn loadFunctions(self: *VM) void {
         }
         switch (op) {
             .function => {
-                const name_idx = self.byte();
+                defer global_counter += 1;
+
                 const argc = self.byte();
                 const end = self.short();
 
-                const name = self.constants[name_idx];
-
-                self.globals.put(self.gpa, name.string, .{
-                    .function = .{
-                        .name = name.string,
-                        .arg_count = argc,
-                        .start_ip = self.ip,
-                    },
-                }) catch oom();
+                self.globals[global_counter] = .{ .function = .{
+                    .arg_count = argc,
+                    .start_ip = self.ip,
+                } };
 
                 self.ip += end - 1;
             },
@@ -114,9 +112,9 @@ fn loadFunctions(self: *VM) void {
 fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
-        if (comptime debug_options.stack) {
+        defer if (comptime debug_options.stack) {
             self.value_stack.dump();
-        }
+        };
         if (comptime debug_options.bytecode) {
             std.debug.print("{x:0>4} {}\n", .{ self.ip, op });
         }
@@ -133,14 +131,14 @@ fn runWhileSwitch(self: *VM) void {
                 const constant = self.constants[self.byte()];
                 self.push(constant);
             },
-            .negate => {
+            .negate_i => {
                 const value = self.pop();
-                const negated: FlowValue = switch (value) {
-                    .float => .{ .float = -value.float },
-                    .int => .{ .int = -value.int },
-
-                    .null, .bool, .string, .builtin_fn, .function => unreachable,
-                };
+                const negated: FlowValue = .{ .int = -value.int };
+                self.push(negated);
+            },
+            .negate_f => {
+                const value = self.pop();
+                const negated: FlowValue = .{ .float = -value.float };
                 self.push(negated);
             },
             .not => {
@@ -157,24 +155,20 @@ fn runWhileSwitch(self: *VM) void {
                     self.push(.{ .bool = !equal });
                 }
             },
-            .create_global => {
+            .get_builtin => {
                 const name = self.pop();
-                const value = self.pop();
-
-                self.globals.put(self.gpa, name.string, value) catch oom();
+                self.push(.{ .builtin_fn = builtins.get(name.string).? });
             },
             .get_global => {
-                const name = self.pop();
-                const value: FlowValue = self.globals.get(name.string) orelse .{ .builtin_fn = builtins.get(name.string).? };
+                const idx = self.byte();
+                const value = self.globals[idx];
 
                 self.push(value);
             },
             .set_global => {
-                const name = self.pop();
+                const idx = self.byte();
                 const value = self.value_stack.at(0);
-
-                // We can safely assume capacity, as this set only works if the global already exists
-                self.globals.putAssumeCapacity(name.string, value);
+                self.globals[idx] = value;
             },
             .get_local => {
                 const idx = self.byte();

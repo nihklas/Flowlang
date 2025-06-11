@@ -10,7 +10,6 @@ pub const BuiltinFunction = struct {
 };
 
 pub const FlowFunction = struct {
-    name: []const u8,
     arg_count: u8,
     start_ip: usize,
 };
@@ -41,8 +40,8 @@ pub const FlowValue = union(FlowType) {
             .int => try writer.print("{d}", .{self.int}),
             .float => try writer.print("{d}", .{self.float}),
             .string => try writer.print("{s}", .{self.string}),
-            .function => try writer.print("<fn {s}>", .{self.function.name}),
-            .builtin_fn => try writer.print("<builtin fn>", .{}),
+            .function => try writer.writeAll("<fn>"),
+            .builtin_fn => try writer.writeAll("<builtin fn>"),
         }
     }
 

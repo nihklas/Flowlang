@@ -1,19 +1,25 @@
 pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer std.debug.assert(gpa.deinit() == .ok);
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const gpa, const is_debug = switch (@import("builtin").mode) {
+        .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+    };
+    defer if (is_debug) {
+        _ = debug_allocator.deinit();
+    };
 
-    const code = try readByteCode(gpa.allocator());
-    defer gpa.allocator().free(code);
+    const code = try readByteCode(gpa);
+    defer gpa.free(code);
 
-    if (comptime debug_options.dump) {
-        DumpTruck.dump(code);
+    if (comptime debug_options.dump_bc) {
+        BytecodeDumper.dump(code);
         return;
     }
 
-    var gc: GC = .init(gpa.allocator());
+    var gc: GC = .init(gpa);
     defer gc.deinit();
 
-    var vm: VM = .init(gpa.allocator(), gc.allocator(), code);
+    var vm: VM = .init(gpa, gc.allocator(), code);
     defer vm.deinit();
 
     vm.run();
@@ -52,5 +58,5 @@ fn readByteCode(alloc: std.mem.Allocator) ![]const u8 {
 const std = @import("std");
 const VM = @import("VM.zig");
 const GC = @import("GC.zig");
-const DumpTruck = @import("debug/BytecodeDumper.zig");
+const BytecodeDumper = @import("shared").debug.BytecodeDumper;
 const debug_options = @import("debug_options");

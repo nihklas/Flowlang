@@ -58,7 +58,20 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
 
     const name = self.previous();
 
-    const type_hint = self.typeHint();
+    const type_hint = blk: {
+        if (self.match(.@":")) |colon| {
+            const result = self.typeHint();
+
+            if (result == null) {
+                error_reporter.reportError(colon, "Expected typehint after ':'", .{});
+                return ParserError.UnexpectedToken;
+            }
+
+            break :blk result;
+        }
+
+        break :blk null;
+    };
 
     const value = blk: {
         if (self.match(.@"=")) |_| {
@@ -83,16 +96,26 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
     try self.consume(.@")", "Expected ')' after function parameters");
     const close_paren = self.previous();
 
-    // null implies void
-    const type_hint: Token = if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token|
-        token
-    else
-        .{
-            .type = .null,
-            .line = close_paren.line,
-            .column = close_paren.column,
-            .lexeme = "null",
-        };
+    const type_hint: ast.TypeHint = blk: {
+        if (self.check(.@"{")) {
+            break :blk .{
+                .type = .{
+                    .type = .null,
+                    .line = close_paren.line,
+                    .column = close_paren.column,
+                    .lexeme = "null",
+                },
+                .order = 0,
+            };
+        }
+
+        const result = self.typeHint();
+        if (result == null) {
+            error_reporter.reportError(self.peek(), "Unexpected Token, expected either typehint or '{{'", .{});
+            return error.UnexpectedToken;
+        }
+        break :blk result.?;
+    };
 
     try self.consume(.@"{", "Expected '{' before function body");
 
@@ -122,6 +145,10 @@ fn parameters(self: *Parser) ParserError![]*Stmt {
 
 fn param(self: *Parser) ?*Stmt {
     if (self.match(.identifier)) |name| {
+        self.consume(.@":", "Expected ':' in front of type hint") catch {
+            self.has_error = true;
+            return null;
+        };
         const type_hint = self.typeHint();
         if (type_hint == null) {
             error_reporter.reportError(name, "Expected type hint after parameter name", .{});
@@ -189,9 +216,25 @@ fn block(self: *Parser) ParserError![]*Stmt {
 
 fn ifStatement(self: *Parser) ParserError!*Stmt {
     const condition = try self.expression();
-    const then = try self.statement();
+    const then = blk: {
+        const stmt = try self.statement();
+        if (stmt.* == .block) break :blk stmt;
 
-    const else_branch = if (self.match(.@"else")) |_| try self.statement() else null;
+        const stmts = self.alloc.alloc(*Stmt, 1) catch oom();
+        stmts[0] = stmt;
+        break :blk Stmt.createBlock(self.alloc, stmts);
+    };
+
+    const else_branch = blk: {
+        if (self.match(.@"else") == null) break :blk null;
+
+        const stmt = try self.statement();
+        if (stmt.* == .block) break :blk stmt;
+
+        const stmts = self.alloc.alloc(*Stmt, 1) catch oom();
+        stmts[0] = stmt;
+        break :blk Stmt.createBlock(self.alloc, stmts);
+    };
 
     return Stmt.createIf(self.alloc, condition, then, else_branch);
 }
@@ -227,25 +270,16 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
         break :blk expr;
     };
 
-    const maybe_increment: ?*Stmt = blk: {
+    const maybe_increment = blk: {
         if (self.check(.@"{")) {
             break :blk null;
         }
 
-        const expr = try self.expression();
-        break :blk Stmt.createExpr(self.alloc, expr);
+        break :blk try self.expression();
     };
 
     try self.consume(.@"{", "Expected '{' before loop body");
     const body = try self.block();
-
-    // for-loop gets desugared into this structure:
-    //
-    // block
-    // initializer
-    // loop
-    //     body
-    //     inc
 
     var outer_scope: std.ArrayList(*Stmt) = .init(self.alloc);
 
@@ -253,12 +287,7 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
         outer_scope.append(initializer) catch oom();
     }
 
-    const loop_body = if (maybe_increment) |increment|
-        std.mem.concat(self.alloc, *Stmt, &.{ body, &.{increment} }) catch oom()
-    else
-        body;
-
-    const loop = Stmt.createLoop(self.alloc, condition, loop_body);
+    const loop = Stmt.createLoop(self.alloc, condition, body);
     outer_scope.append(loop) catch oom();
 
     if (maybe_increment) |increment| {
@@ -452,27 +481,27 @@ fn primary(self: *Parser) ParserError!*Expr {
         return Expr.createVariable(self.alloc, token);
     }
 
-    if (self.match(.@"(")) |_| {
+    if (self.match(.@"(")) |open_paren| {
         const expr = try self.expression();
         errdefer expr.destroy(self.alloc);
 
         try self.consume(.@")", "Expected ')' after Expression");
 
-        return Expr.createGrouping(self.alloc, expr);
+        return Expr.createGrouping(self.alloc, open_paren, expr);
     }
 
     error_reporter.reportError(self.peek(), "UnexpectedToken: Expected Expression, got '{s}'", .{@tagName(self.peek().type)});
     return ParserError.UnexpectedToken;
 }
 
-fn typeHint(self: *Parser) ?Token {
-    if (self.match(.@":")) |colon| {
-        if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
-            return token;
-        }
+fn typeHint(self: *Parser) ?ast.TypeHint {
+    var order: u8 = 0;
+    while (self.match(.@"[") != null and self.match(.@"]") != null) {
+        order += 1;
+    }
 
-        error_reporter.reportError(colon, "Expected type after ':'", .{});
-        self.has_error = true;
+    if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
+        return .{ .type = token, .order = order };
     }
 
     return null;
@@ -1022,9 +1051,9 @@ const ParserError = error{
 const Parser = @This();
 
 const std = @import("std");
-const Token = @import("Token.zig");
-const ast = @import("ast.zig");
-const error_reporter = @import("error_reporter.zig");
+const Token = @import("ir/Token.zig");
+const ast = @import("ir/ast.zig");
+const error_reporter = @import("util/error_reporter.zig");
 const definitions = @import("shared").definitions;
 const oom = @import("shared").oom;
 const Integer = definitions.Integer;

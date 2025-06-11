@@ -1,690 +1,559 @@
 alloc: Allocator,
 program: []const *Stmt,
-constants: ArrayList(FlowValue),
-globals: HashMap(Global),
-functions: HashMap(Function),
-variables: Stack(Variable, MAX_LOCAL_SIZE),
-current_function: Stack(Function, MAX_LOCAL_SIZE),
-scope_depth: usize = 0,
-loop_level: usize = 0,
-last_expr_type: FlowType = .null,
-has_error: bool = false,
+errors: std.ArrayListUnmanaged(ErrorInfo) = .empty,
+types: std.AutoHashMapUnmanaged(*const Expr, FlowType) = .empty,
+variables: std.ArrayListUnmanaged(Variable) = .empty,
+functions: std.ArrayListUnmanaged(Function) = .empty,
+current_scope: u8 = 0,
+loop_level: u8 = 0,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
         .program = program,
         .alloc = alloc,
-        .constants = .empty,
-        .globals = .empty,
-        .functions = .empty,
-        .variables = .init(alloc),
-        .current_function = .init(alloc),
     };
 }
 
 pub fn deinit(self: *Sema) void {
-    var functions = self.functions.iterator();
-    while (functions.next()) |func| {
-        self.alloc.free(func.value_ptr.param_types);
-    }
-
-    self.constants.deinit(self.alloc);
-    self.globals.deinit(self.alloc);
-    self.functions.deinit(self.alloc);
+    self.errors.deinit(self.alloc);
+    self.types.deinit(self.alloc);
     self.variables.deinit(self.alloc);
-    self.current_function.deinit(self.alloc);
+
+    for (self.functions.items) |func| {
+        self.alloc.free(func.arg_types);
+    }
+    self.functions.deinit(self.alloc);
 }
 
+/// Analyses the ast. Applies the following checks:
+///
+/// - type checking
+/// - Unknown variables
+/// - Mutation of constants
+/// - duplicate declarations (Functions and Variables in the same scope)
+///
+/// collects all errors in a list and prints them through `error_reporter.zig`.
 pub fn analyse(self: *Sema) !void {
-    self.resolveFunctions();
-    self.resolveGlobals();
+    self.registerTopLevelFunctions();
 
     for (self.program) |stmt| {
-        self.statement(stmt);
+        self.analyseStmt(stmt);
     }
 
-    if (self.has_error) {
-        return error.CompileError;
-    }
-
-    if (self.constants.items.len > std.math.maxInt(u8)) {
-        return error.TooManyConstants;
+    if (self.errors.items.len > 0) {
+        self.printError();
+        return error.SemaError;
     }
 }
 
-fn resolveFunctions(self: *Sema) void {
-    for (self.program) |stmt| switch (stmt.*) {
-        .function => |func| {
-            const func_name = func.name.lexeme;
-            if (self.functions.get(func_name)) |_| {
-                self.err(func.name, "Function '{s}' is already defined", .{func_name});
+fn registerTopLevelFunctions(self: *Sema) void {
+    for (self.program) |stmt| {
+        if (stmt.* != .function) continue;
+        const function = stmt.function;
+        const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+        for (function.params, 0..) |param, i| {
+            std.debug.assert(param.* == .variable);
+            std.debug.assert(param.variable.type_hint != null);
+
+            arg_types[i] = typeFromToken(param.variable.type_hint.?.type).?;
+        }
+
+        self.putFunction(function.name, .{
+            .ret_type = typeFromToken(function.ret_type.type).?,
+            .arg_types = arg_types,
+        });
+    }
+}
+
+fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
+    switch (stmt.*) {
+        .expr => |expr_stmt| self.analyseExpr(expr_stmt.expr),
+        .block => |block_stmt| {
+            self.scopeIncr();
+            defer self.scopeDecr();
+
+            for (block_stmt.stmts) |inner_stmt| {
+                self.analyseStmt(inner_stmt);
+            }
+        },
+        .loop => |loop_stmt| {
+            self.scopeIncr();
+            defer self.scopeDecr();
+
+            self.loop_level += 1;
+            defer self.loop_level -= 1;
+
+            self.analyseExpr(loop_stmt.condition);
+            for (loop_stmt.body) |inner_stmt| {
+                self.analyseStmt(inner_stmt);
+            }
+            if (loop_stmt.inc) |inc| {
+                self.analyseExpr(inc);
+            }
+        },
+        inline .@"break", .@"continue" => |keyword| {
+            if (self.loop_level == 0) {
+                self.pushError(.{
+                    .token = keyword.token,
+                    .err = ContextError.NotInALoop,
+                    .extra_info1 = @tagName(stmt.*),
+                });
+            }
+        },
+        .@"if" => |if_stmt| {
+            self.analyseExpr(if_stmt.condition);
+            self.analyseStmt(if_stmt.true_branch);
+            if (if_stmt.false_branch) |false_branch| {
+                self.analyseStmt(false_branch);
+            }
+        },
+        .variable => |var_stmt| {
+            if (var_stmt.constant and var_stmt.value == null) {
+                self.pushError(.{ .token = var_stmt.name, .err = VariableError.ConstantWithoutValue, .extra_info1 = var_stmt.name.lexeme });
                 return;
             }
 
-            const param_types = self.alloc.alloc(FlowType, func.params.len) catch oom();
-
-            for (func.params, param_types) |param, *param_type| {
-                param_type.* = tokenToType(param.variable.type_hint.?);
+            if (var_stmt.type_hint == null and var_stmt.value == null) {
+                self.pushError(.{ .token = var_stmt.name, .err = VariableError.UnresolvableType });
+                return;
             }
 
-            self.constant(.{ .string = func_name });
+            if (var_stmt.value) |value| {
+                self.analyseExpr(value);
+            }
 
-            self.functions.put(self.alloc, func_name, .{
-                .param_types = param_types,
-                .ret_type = tokenToType(func.ret_type),
-            }) catch oom();
+            const extra_idx = blk: {
+                if (var_stmt.value) |value| {
+                    if (value.* == .variable) {
+                        if (self.findVariable(value.variable.name)) |existing_variable| {
+                            if (existing_variable.type == .function) {
+                                break :blk existing_variable.extra_idx;
+                            }
+                        }
+                    }
+                }
+                break :blk 0;
+            };
 
-            self.globals.put(self.alloc, func_name, .{
-                .constant = true,
-                .token = func.name,
-                .type = .function,
-            }) catch oom();
+            const variable: Variable = .{
+                .name = var_stmt.name,
+                .constant = var_stmt.constant,
+                .type = self.typeFromVariable(stmt),
+                .scope = self.current_scope,
+                .extra_idx = extra_idx,
+            };
+
+            if (var_stmt.value) |value| {
+                if (self.getType(value).? != variable.type) {
+                    self.pushError(.{
+                        .token = value.getToken(),
+                        .err = TypeError.UnexpectedType,
+                        .extra_info1 = @tagName(variable.type),
+                        .extra_info2 = @tagName(self.getType(value).?),
+                    });
+                }
+            }
+
+            if (self.findVariable(variable.name)) |existing_variable| {
+                if (existing_variable.scope == variable.scope) {
+                    self.pushError(.{
+                        .token = variable.name,
+                        .err = VariableError.VariableAlreadyExists,
+                        .extra_info1 = variable.name.lexeme,
+                    });
+                    return;
+                }
+            }
+
+            self.putVariable(variable);
         },
-        else => {},
-    };
-}
+        .function => |function| {
+            if (self.current_scope > 0) {
+                const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+                for (function.params, 0..) |param, i| {
+                    std.debug.assert(param.* == .variable);
+                    arg_types[i] = self.typeFromVariable(param);
+                }
 
-fn resolveGlobals(self: *Sema) void {
-    for (self.program) |stmt| switch (stmt.*) {
-        .variable => |variable| {
-            const gop = self.globals.getOrPut(self.alloc, variable.name.lexeme) catch oom();
-            if (gop.found_existing) {
-                self.err(
-                    variable.name,
-                    "Variable '{s}' already defined at {d}:{d}, duplicated definition",
-                    .{ variable.name, gop.value_ptr.token.line, gop.value_ptr.token.column },
-                );
-                continue;
+                self.putFunction(function.name, .{
+                    // NOTE: This should never be null, as only valid return types get parsed
+                    .ret_type = typeFromToken(function.ret_type.type).?,
+                    .arg_types = arg_types,
+                });
             }
 
-            var global: Global = .{ .token = variable.name, .constant = variable.constant };
-            if (variable.type_hint) |type_token| {
-                global.type = tokenToType(type_token);
+            self.scopeIncr();
+            defer self.scopeDecr();
+
+            for (function.params) |param| {
+                std.debug.assert(param.* == .variable);
+                std.debug.assert(param.variable.type_hint != null);
+
+                self.putVariable(.{
+                    .constant = true,
+                    .name = param.variable.name,
+                    .type = typeFromToken(param.variable.type_hint.?.type).?,
+                    .scope = self.current_scope,
+                    .extra_idx = 0,
+                });
             }
-            gop.value_ptr.* = global;
+
+            for (function.body) |inner_stmt| {
+                self.analyseStmt(inner_stmt);
+            }
         },
-        else => {},
-    };
-}
-
-fn statement(self: *Sema, stmt: *Stmt) void {
-    self.last_expr_type = .null;
-    switch (stmt.*) {
-        .expr => self.expression(stmt.expr.expr),
-        .@"if" => self.ifStatement(stmt),
-        .block => self.blockStatement(stmt),
-        .loop => self.loopStatement(stmt),
-        .@"break" => self.breakStatement(stmt),
-        .@"continue" => self.continueStatement(stmt),
-        .function => self.functionDeclaration(stmt),
-        .@"return" => self.returnStatement(stmt),
-        .variable => self.varDeclaration(stmt),
-        else => panic("Illegal Instruction: {s}", .{@tagName(stmt.*)}),
+        .@"return" => |return_stmt| {
+            if (return_stmt.value) |value| {
+                self.analyseExpr(value);
+            }
+        },
     }
 }
 
-fn expression(self: *Sema, expr: *Expr) void {
+fn analyseExpr(self: *Sema, expr: *const Expr) void {
     switch (expr.*) {
-        .literal => self.literalExpression(expr),
-        .unary => self.unaryExpression(expr),
-        .grouping => self.expression(expr.grouping.expr),
-        .assignment => self.assignmentExpression(expr),
-        .binary => self.binaryExpression(expr),
-        .logical => self.logicalExpression(expr),
-        .variable => self.variableExpression(expr),
-        .call => self.callExpression(expr),
-        .append => @panic("TODO"),
-    }
-}
-
-// ---------- Statements
-
-fn ifStatement(self: *Sema, stmt: *Stmt) void {
-    const if_stmt = stmt.@"if";
-    self.expression(if_stmt.condition);
-    self.statement(if_stmt.true_branch);
-    if (if_stmt.false_branch) |false_branch| {
-        self.statement(false_branch);
-    }
-}
-
-fn blockStatement(self: *Sema, stmt: *Stmt) void {
-    const block = stmt.block;
-    self.beginScope();
-
-    for (block.stmts) |inner_stmt| {
-        self.statement(inner_stmt);
-    }
-
-    stmt.block.local_count = self.localCount();
-    self.endScope();
-}
-
-fn loopStatement(self: *Sema, stmt: *Stmt) void {
-    const loop = stmt.loop;
-    self.beginScope();
-    self.expression(loop.condition);
-    self.loop_level += 1;
-    for (loop.body) |body_stmt| {
-        self.statement(body_stmt);
-    }
-    self.loop_level -= 1;
-    self.endScope();
-}
-
-fn breakStatement(self: *Sema, stmt: *Stmt) void {
-    const break_stmt = stmt.@"break";
-    if (self.loop_level < 1) {
-        self.err(break_stmt.token, "'break' is only allowed in loops", .{});
-    }
-}
-
-fn continueStatement(self: *Sema, stmt: *Stmt) void {
-    const continue_stmt = stmt.@"continue";
-    if (self.loop_level < 1) {
-        self.err(continue_stmt.token, "'continue' is only allowed in loops", .{});
-    }
-}
-
-fn returnStatement(self: *Sema, stmt: *Stmt) void {
-    const return_stmt = stmt.@"return";
-    const func = self.current_function.at(0);
-
-    if (return_stmt.value) |value| {
-        self.expression(value);
-
-        if (func.ret_type != self.last_expr_type) {
-            self.err(value.getToken(), "Return type mismatch. Expected '{s}', got '{s}'", .{
-                @tagName(func.ret_type),
-                @tagName(self.last_expr_type),
-            });
-        }
-    } else if (func.ret_type != .null) {
-        self.err(return_stmt.token, "Missing return value", .{});
-    }
-}
-
-fn functionDeclaration(self: *Sema, stmt: *Stmt) void {
-    const func = stmt.function;
-
-    self.beginScope();
-
-    self.current_function.push(self.functions.get(func.name.lexeme).?);
-    for (func.params) |param| {
-        self.variables.push(.{
-            .token = param.variable.name,
-            .constant = true,
-            .scope_depth = self.scope_depth,
-            .type = tokenToType(param.variable.type_hint.?),
-        });
-    }
-
-    for (func.body) |line| {
-        self.statement(line);
-    }
-    _ = self.current_function.pop();
-
-    self.endScope();
-}
-
-fn varDeclaration(self: *Sema, stmt: *Stmt) void {
-    const variable = stmt.variable;
-    const name = variable.name.lexeme;
-
-    if (builtins.get(name)) |_| {
-        self.err(stmt.variable.name, "'{s}' is a builtin and cannot be reassigned", .{name});
-        return;
-    }
-
-    self.resolveValue(stmt);
-
-    const existent, _ = self.findLocal(name);
-    if (existent != null and existent.?.scope_depth == self.scope_depth) {
-        self.err(
-            stmt.variable.name,
-            "Variable '{s}' already defined at {d}:{d}, duplicated definition",
-            .{ name, existent.?.token.line, existent.?.token.column },
-        );
-        return;
-    }
-
-    if (stmt.variable.type_hint == null) {
-        self.err(stmt.variable.name, "Cannot infer type of variable", .{});
-        return;
-    }
-
-    const type_hint = tokenToType(stmt.variable.type_hint.?);
-
-    if (self.scope_depth == 0) {
-        self.globals.getPtr(name).?.type = type_hint;
-        self.constant(.{ .string = name });
-        stmt.variable.global = true;
-    } else {
-        self.variables.push(.{
-            .token = stmt.variable.name,
-            .type = type_hint,
-            .constant = stmt.variable.constant,
-            .scope_depth = self.scope_depth,
-        });
-    }
-}
-
-// ---------- Expressions
-
-fn literalExpression(self: *Sema, expr: *Expr) void {
-    self.last_expr_type = blk: switch (expr.literal.value) {
-        .int => |int| {
-            self.constant(.{ .int = int });
-            break :blk .int;
+        .literal => self.putType(expr, expr.literal.value),
+        .grouping => {
+            self.analyseExpr(expr.grouping.expr);
+            self.putType(expr, self.getType(expr.grouping.expr).?);
         },
-        .float => |float| {
-            self.constant(.{ .float = float });
-            break :blk .float;
-        },
-        .string => |string| {
-            self.constant(.{ .string = string });
-            break :blk .string;
-        },
-        .null => .null,
-        .bool => .bool,
-    };
-}
-
-fn unaryExpression(self: *Sema, expr: *Expr) void {
-    self.expression(expr.unary.expr);
-    switch (expr.unary.op.type) {
-        .@"!" => {
-            self.last_expr_type = .bool;
-        },
-        .@"-" => {
-            if (self.last_expr_type != .int and self.last_expr_type != .float) {
-                self.err(
-                    expr.unary.expr.getToken(),
-                    "Expected expression following '-' to be int or float, got '{s}'",
-                    .{@tagName(self.last_expr_type)},
-                );
+        .unary => |unary| {
+            self.analyseExpr(unary.expr);
+            switch (unary.op.type) {
+                .@"-" => {
+                    const value_type = self.getType(unary.expr).?;
+                    if (value_type != .int and value_type != .float) {
+                        self.pushError(.{ .token = unary.op, .err = TypeError.NegateWithNonNumeric, .extra_info1 = @tagName(value_type) });
+                    }
+                    self.putType(expr, value_type);
+                },
+                .@"!" => self.putType(expr, .bool),
+                else => unreachable,
             }
         },
-        else => unreachable,
-    }
-}
+        .binary => |binary| {
+            self.analyseExpr(binary.lhs);
+            self.analyseExpr(binary.rhs);
+            const left_type = self.getType(binary.lhs).?;
+            const right_type = self.getType(binary.rhs).?;
+            switch (binary.op.type) {
+                .@".", .@".=" => self.putType(expr, .string),
+                .@"==", .@"!=" => {
+                    // if the two types are non-null and different, print error
+                    if (left_type != .null and right_type != .null and left_type != right_type) {
+                        self.pushError(.{
+                            .token = binary.op,
+                            .err = TypeError.EqualityCheckOfUnequalTypes,
+                            .extra_info1 = @tagName(left_type),
+                            .extra_info2 = @tagName(right_type),
+                        });
+                    }
+                    self.putType(expr, .bool);
+                },
+                .@"<", .@"<=", .@">=", .@">", .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => {
+                    var both_numeric = true;
+                    if (left_type != .int and left_type != .float) {
+                        self.pushError(.{ .token = binary.lhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(left_type) });
+                        both_numeric = false;
+                    }
+                    if (right_type != .int and right_type != .float) {
+                        self.pushError(.{ .token = binary.rhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(right_type) });
+                        both_numeric = false;
+                    }
+                    if (both_numeric and left_type != right_type) {
+                        self.pushError(.{
+                            .token = binary.op,
+                            .err = TypeError.ArithmeticWithUnequalTypes,
+                            .extra_info1 = @tagName(left_type),
+                            .extra_info2 = @tagName(right_type),
+                        });
+                    }
+                    // as they have to be of equal types, we can just use one of them to keep going.
+                    // we go with the left one just because.
+                    // In case of unequal types, the binary expression still needs a valid type to
+                    // be further processed so we unconditionally use the left type
+                    self.putType(expr, left_type);
+                },
+                else => unreachable,
+            }
+        },
+        .logical => |logical| {
+            self.analyseExpr(logical.lhs);
+            self.analyseExpr(logical.rhs);
+            self.putType(expr, .bool);
+        },
+        .assignment => |assignment| {
+            self.analyseExpr(assignment.value);
 
-fn binaryExpression(self: *Sema, expr: *Expr) void {
-    self.expression(expr.binary.lhs);
-    const left_type = self.last_expr_type;
+            if (self.findVariable(assignment.name)) |existing_variable| {
+                if (existing_variable.type != self.getType(assignment.value)) {
+                    self.pushError(.{
+                        .token = assignment.value.getToken(),
+                        .err = TypeError.UnexpectedType,
+                        .extra_info1 = @tagName(existing_variable.type),
+                        .extra_info2 = @tagName(self.getType(assignment.value).?),
+                    });
+                } else if (existing_variable.constant) {
+                    self.pushError(.{ .token = assignment.name, .err = VariableError.ConstantMutation, .extra_info1 = assignment.name.lexeme });
+                }
+            } else {
+                self.pushError(.{ .token = assignment.name, .err = VariableError.UnknownVariable, .extra_info1 = assignment.name.lexeme });
+            }
 
-    self.expression(expr.binary.rhs);
-    const right_type = self.last_expr_type;
+            self.putType(expr, self.getType(assignment.value).?);
+        },
+        .variable => |variable| {
+            if (self.findVariable(variable.name)) |found_var| {
+                self.putType(expr, found_var.type);
+            } else {
+                self.pushError(.{ .token = variable.name, .err = VariableError.UnknownVariable, .extra_info1 = variable.name.lexeme });
+            }
+        },
+        .call => |call| {
+            self.analyseExpr(call.expr);
+            for (call.args) |arg_expr| {
+                self.analyseExpr(arg_expr);
+            }
 
-    // set last_expr_type
-    self.last_expr_type = switch (expr.binary.op.type) {
-        .@"==", .@"!=", .@"<", .@"<=", .@">=", .@">" => .bool,
-        .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => left_type,
-        .@".", .@".=" => .string,
-        else => unreachable,
-    };
+            std.debug.assert(call.expr.* == .variable);
+            if (self.getType(call.expr)) |callee_type| {
+                switch (callee_type) {
+                    .builtin_fn => {
+                        // NOTE: builtin functions cannot be aliased
+                        std.debug.assert(builtins.get(call.expr.variable.name.lexeme) != null);
 
-    // Check types
-    switch (expr.binary.op.type) {
-        // String concats always work
-        .@".", .@".=" => {},
-        // Equality works with same type and with null always
-        .@"==", .@"!=" => {
-            if (left_type != .null and right_type != .null) {
-                if (left_type != right_type) {
-                    self.err(
-                        expr.binary.op,
-                        "Cannot compare value of type '{s}' to value of type '{s}'",
-                        .{ @tagName(left_type), @tagName(right_type) },
-                    );
+                        const builtin = builtins.get(call.expr.variable.name.lexeme).?;
+                        self.validateFunction(builtin, call, expr);
+                    },
+                    .function => {
+                        const variable = self.findVariable(call.expr.variable.name) orelse return;
+                        std.debug.assert(variable.type == .function);
+
+                        const function = self.functions.items[variable.extra_idx];
+                        self.validateFunction(function, call, expr);
+                    },
+                    else => self.pushError(.{ .token = call.expr.getToken(), .err = TypeError.NotACallable, .extra_info1 = call.expr.getToken().lexeme }),
                 }
             }
         },
-        .@"<", .@"<=", .@">=", .@">", .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => {
-            self.checkNumericOperands(
-                expr.binary.lhs.getToken(),
-                left_type,
-                expr.binary.rhs.getToken(),
-                right_type,
-                expr.binary.op.type,
-            );
-            expr.binary.type = left_type;
-        },
-        else => unreachable,
     }
 }
 
-fn logicalExpression(self: *Sema, expr: *Expr) void {
-    self.expression(expr.logical.lhs);
-    self.expression(expr.logical.rhs);
-    self.last_expr_type = .bool;
-}
-
-fn assignmentExpression(self: *Sema, expr: *Expr) void {
-    const assignment = expr.assignment;
-    self.expression(assignment.value);
-    const resulted_type = self.last_expr_type;
-    const name = assignment.name.lexeme;
-
-    const maybe_variable, const local_idx = self.findLocal(name);
-
-    if (maybe_variable) |variable| {
-        if (variable.constant) {
-            self.err(expr.assignment.value.getToken(), "Cannot assign to a constant", .{});
-            return;
-        }
-
-        if (resulted_type != .null and variable.type != resulted_type) {
-            self.err(
-                expr.assignment.value.getToken(),
-                "Type mismatch: Expected value of type '{s}', got '{s}'",
-                .{ @tagName(variable.type), @tagName(resulted_type) },
-            );
-        }
-
-        self.last_expr_type = variable.type;
-
-        const idx = local_idx.?;
-        if (idx > std.math.maxInt(u8)) {
-            // This kinda should not be really possible, hopefully
-            panic("Too many locals: {d}", .{idx});
-        }
-        expr.assignment.local_idx = @intCast(idx);
-        return;
-    }
-
-    const global = self.globals.get(name) orelse {
-        self.err(expr.variable.name, "Undefined variable: '{s}'", .{name});
-        return;
-    };
-
-    if (global.constant) {
-        self.err(assignment.value.getToken(), "Cannot assign to a constant", .{});
-        return;
-    }
-
-    if (resulted_type != .null and global.type != resulted_type) {
-        error_reporter.reportError(
-            assignment.value.getToken(),
-            "Type mismatch: Expected value of type '{s}', got '{s}'",
-            .{ @tagName(global.type.?), @tagName(resulted_type) },
-        );
-        self.has_error = true;
-    }
-
-    self.last_expr_type = global.type.?;
-
-    expr.assignment.global = true;
-}
-
-fn variableExpression(self: *Sema, expr: *Expr) void {
-    const name = expr.variable.name.lexeme;
-
-    if (builtins.get(name)) |_| {
-        self.constant(.{ .string = name });
-        expr.variable.global = true;
-        self.last_expr_type = .builtin_fn;
-        return;
-    }
-
-    const maybe_variable, const local_idx = self.findLocal(name);
-
-    if (maybe_variable) |variable| {
-        self.last_expr_type = variable.type;
-        const idx = local_idx.?;
-
-        if (idx > std.math.maxInt(u8)) {
-            // This kinda should not be really possible, hopefully
-            panic("Too many locals: {d}", .{idx});
-        }
-        expr.variable.local_idx = @intCast(idx);
-        return;
-    }
-
-    const global = self.globals.get(name) orelse {
-        self.err(expr.variable.name, "Undefined variable: '{s}'", .{name});
-        return;
-    };
-
-    if (global.type == null) {
-        self.err(expr.variable.name, "Could not infer type of variable '{s}'", .{name});
-        return;
-    }
-
-    self.last_expr_type = global.type.?;
-    expr.variable.global = true;
-}
-
-fn callExpression(self: *Sema, expr: *Expr) void {
-    const call = expr.call;
-
-    self.expression(call.expr);
-    const name = call.expr.getToken().lexeme;
-    if (self.last_expr_type != .builtin_fn and self.last_expr_type != .function) {
-        self.err(call.expr.getToken(), "'{s}' is not callable", .{name});
-        return;
-    }
-
-    const expected_args, const ret_type = self.getFunctionSignature(name) orelse unreachable;
-
-    if (expected_args.len != call.args.len) {
-        self.err(call.expr.getToken(), "'{s}' expected {d} arguments, got {d}", .{
-            name,
-            expected_args.len,
-            call.args.len,
+fn validateFunction(self: *Sema, function: anytype, call: anytype, expr: *const Expr) void {
+    if (call.args.len != function.arg_types.len) {
+        self.pushError(.{
+            .token = call.expr.getToken(),
+            .err = FunctionError.ArgumentCountMismatch,
+            .extra_info1 = self.formatNumber(call.args.len),
+            .extra_info2 = self.formatNumber(function.arg_types.len),
         });
-    } else {
-        self.checkArgs(call.args, expected_args);
-    }
-
-    self.last_expr_type = ret_type;
-}
-
-// ---------- utils
-
-fn resolveValue(self: *Sema, stmt: *Stmt) void {
-    if (stmt.variable.value == null) return;
-
-    const value = stmt.variable.value.?;
-    self.expression(value);
-    const value_type = self.last_expr_type;
-
-    if (value_type == .null and stmt.variable.type_hint == null) return;
-
-    if (stmt.variable.type_hint == null) {
-        var expr_token = value.getToken();
-        expr_token.type = switch (value_type) {
-            .bool => .bool,
-            .int => .int,
-            .float => .float,
-            .string => .string,
-            .null, .builtin_fn, .function => unreachable,
-        };
-        stmt.variable.type_hint = expr_token;
         return;
     }
 
-    if (value_type == .null) {
-        return;
-    }
+    for (call.args, function.arg_types) |arg, param| {
+        // NOTE: This happens if an argument is a variable, that does not exist
+        if (self.getType(arg) == null) continue;
 
-    const correct_type = switch (stmt.variable.type_hint.?.type) {
-        .bool => value_type == .bool,
-        .string => value_type == .string,
-        .int => value_type == .int,
-        .float => value_type == .float,
-        else => unreachable,
-    };
+        // NOTE: these get checked at runtime
+        if (param == .null) continue;
 
-    if (!correct_type) {
-        error_reporter.reportError(
-            stmt.variable.type_hint.?,
-            "Type Mismatch: Expected '{s}', got '{?}'",
-            .{
-                @tagName(stmt.variable.type_hint.?.type),
-                value_type,
-            },
-        );
-        self.has_error = true;
-    }
-}
-
-fn checkNumericOperands(self: *Sema, left: Token, lhs: FlowType, right: Token, rhs: FlowType, op: Token.Type) void {
-    if (!isNumeric(lhs)) {
-        self.err(
-            left,
-            "Expected left operand of '{s}' to be int or float, got '{s}'",
-            .{ @tagName(op), @tagName(lhs) },
-        );
-    }
-
-    if (!isNumeric(rhs)) {
-        self.err(
-            right,
-            "Expected right operand of '{s}' to be int or float, got '{s}'",
-            .{ @tagName(op), @tagName(rhs) },
-        );
-    }
-
-    if (lhs != rhs) {
-        self.err(
-            right,
-            "Expected operands of '{s}' to be the same. Got left: '{s}', right: '{s}'",
-            .{ @tagName(op), @tagName(lhs), @tagName(rhs) },
-        );
-    }
-}
-
-fn findLocal(self: *Sema, name: []const u8) struct { ?Variable, ?usize } {
-    var stack_idx: usize = 0;
-    while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
-        const local = self.variables.at(stack_idx);
-        if (local.scope_depth <= self.scope_depth and std.mem.eql(u8, name, local.token.lexeme)) {
-            return .{ local, self.variables.stack_top - 1 - stack_idx };
+        if (self.getType(arg).? != param) {
+            self.pushError(.{
+                .token = arg.getToken(),
+                .err = FunctionError.ArgumentTypeMismatch,
+                .extra_info1 = @tagName(param),
+                .extra_info2 = @tagName(self.getType(arg).?),
+            });
         }
     }
 
-    return .{ null, null };
+    self.putType(expr, function.ret_type);
 }
 
-fn getFunctionSignature(self: *Sema, name: []const u8) ?struct { []const FlowType, FlowType } {
-    if (builtins.get(name)) |builtin| {
-        return .{ builtin.arg_types, builtin.ret_type };
+fn putType(self: *Sema, expr: *const Expr, t: FlowType) void {
+    self.types.put(self.alloc, expr, t) catch oom();
+}
+
+fn getType(self: *Sema, expr: *const Expr) ?FlowType {
+    return self.types.get(expr);
+}
+
+fn pushError(self: *Sema, err: ErrorInfo) void {
+    self.errors.append(self.alloc, err) catch oom();
+}
+
+fn putVariable(self: *Sema, variable: Variable) void {
+    self.variables.append(self.alloc, variable) catch oom();
+}
+
+fn putFunction(self: *Sema, name: Token, function: Function) void {
+    self.functions.append(self.alloc, function) catch oom();
+    self.putVariable(.{
+        .name = name,
+        .constant = true,
+        .type = .function,
+        .scope = self.current_scope,
+        .extra_idx = self.functions.items.len - 1,
+    });
+}
+
+fn findVariable(self: *Sema, name: Token) ?Variable {
+    var rev_iter = std.mem.reverseIterator(self.variables.items);
+    while (rev_iter.next()) |variable| {
+        if (std.mem.eql(u8, variable.name.lexeme, name.lexeme)) {
+            return variable;
+        }
     }
 
-    if (self.functions.get(name)) |func| {
-        return .{ func.param_types, func.ret_type };
+    if (builtins.get(name.lexeme)) |_| {
+        return .{
+            .name = name,
+            .constant = true,
+            .type = .builtin_fn,
+            .scope = 0,
+            .extra_idx = 0,
+        };
     }
 
     return null;
 }
 
-fn checkArgs(self: *Sema, args: []*Expr, expected: []const FlowType) void {
-    for (args, expected) |arg, arg_type| {
-        self.expression(arg);
+fn scopeIncr(self: *Sema) void {
+    self.current_scope += 1;
+}
 
-        if (arg_type != .null and self.last_expr_type != arg_type) {
-            self.err(arg.getToken(), "Expected argument of type '{s}', got '{s}'", .{
-                @tagName(arg_type),
-                @tagName(self.last_expr_type),
-            });
+fn scopeDecr(self: *Sema) void {
+    self.current_scope -= 1;
+
+    var write_idx: usize = 0;
+    for (self.variables.items, 0..) |variable, read_idx| {
+        if (variable.scope <= self.current_scope) {
+            if (write_idx != read_idx) {
+                self.variables.items[write_idx] = variable;
+            }
+            write_idx += 1;
         }
     }
+    self.variables.shrinkRetainingCapacity(write_idx);
 }
 
-fn localCount(self: *Sema) usize {
-    var locals_count: usize = 0;
-    var stack_idx: usize = 0;
-    while (stack_idx < self.variables.stack_top) : (stack_idx += 1) {
-        const local = self.variables.at(stack_idx);
-        if (local.scope_depth < self.scope_depth) {
-            break;
-        }
-        locals_count += 1;
-    }
-    return locals_count;
+fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
+    std.debug.assert(stmt.* == .variable);
+    const variable = stmt.variable;
+
+    const t = variable.type_hint orelse return self.getType(variable.value.?).?;
+    return typeFromToken(t.type).?;
 }
 
-fn isNumeric(value_type: FlowType) bool {
-    return value_type == .int or value_type == .float;
-}
-
-fn beginScope(self: *Sema) void {
-    self.scope_depth += 1;
-}
-
-fn endScope(self: *Sema) void {
-    self.scope_depth -= 1;
-    while (self.variables.stack_top > 0 and self.variables.at(0).scope_depth > self.scope_depth) {
-        _ = self.variables.pop();
-    }
-}
-
-fn tokenToType(token: Token) FlowType {
+fn typeFromToken(token: Token) ?FlowType {
     return switch (token.type) {
         .bool => .bool,
+        .string => .string,
         .int => .int,
         .float => .float,
-        .string => .string,
         .null => .null,
-        else => unreachable,
+        else => null,
     };
 }
 
-fn constant(self: *Sema, value: FlowValue) void {
-    for (self.constants.items) |c| {
-        if (c.equals(value)) return;
+fn formatNumber(self: *Sema, num: anytype) []const u8 {
+    if (num > 1_0000_00000_00000_00000) @panic("Number too large");
+    const number_buffer = self.alloc.alloc(u8, 20) catch oom();
+    defer self.alloc.free(number_buffer);
+
+    const result = std.fmt.bufPrint(number_buffer, "{d}", .{num}) catch @panic("How can this NOT work?");
+    return self.alloc.dupe(u8, result) catch oom();
+}
+
+fn printError(self: *Sema) void {
+    for (self.errors.items) |e| {
+        switch (e.err) {
+            TypeError.EqualityCheckOfUnequalTypes => error_reporter.reportError(e.token, "Operands of Equality-Check (== and !=) have to be of the same type, got '{s}' and '{s}'", .{ e.extra_info1, e.extra_info2 }),
+            TypeError.ArithmeticWithNonNumeric => error_reporter.reportError(e.token, "Operand of Arithmetic Operations has to be either int or float, got '{s}'", .{e.extra_info1}),
+            TypeError.ArithmeticWithUnequalTypes => error_reporter.reportError(e.token, "Operands of Arithmetic Operations have to be of the same numeric type, got '{s}' and '{s}'", .{ e.extra_info1, e.extra_info2 }),
+            TypeError.NegateWithNonNumeric => error_reporter.reportError(e.token, "Operand of Negate Operations has to be either int or float, got '{s}'", .{e.extra_info1}),
+            TypeError.NotACallable => error_reporter.reportError(e.token, "'{s}' is not a callable", .{e.extra_info1}),
+            TypeError.UnexpectedType => error_reporter.reportError(e.token, "Unexpected type, expected '{s}', got '{s}'", .{ e.extra_info1, e.extra_info2 }),
+
+            VariableError.UnresolvableType => error_reporter.reportError(e.token, "Type of Variable could not be resolved. Consider adding an explicit Typehint", .{}),
+            VariableError.UnknownVariable => error_reporter.reportError(e.token, "Variable '{s}' is not defined", .{e.extra_info1}),
+            VariableError.VariableAlreadyExists => error_reporter.reportError(e.token, "Variable '{s}' already exists", .{e.extra_info1}),
+            VariableError.ConstantMutation => error_reporter.reportError(e.token, "Constant '{s}' cannot be re-assigned", .{e.extra_info1}),
+            VariableError.ConstantWithoutValue => error_reporter.reportError(e.token, "Constant '{s}' must have an initial value", .{e.extra_info1}),
+
+            ContextError.NotInALoop => error_reporter.reportError(e.token, "'{s}' is only allowed inside a loop", .{e.extra_info1}),
+
+            FunctionError.ArgumentTypeMismatch => error_reporter.reportError(e.token, "Unexpected argument type, expected '{s}', got '{s}'", .{ e.extra_info1, e.extra_info2 }),
+            FunctionError.ArgumentCountMismatch => {
+                error_reporter.reportError(e.token, "Argument count mismatch, found {s} but expected {s}", .{ e.extra_info1, e.extra_info2 });
+                // They are allocated because they need a buffer for printing a number into a string
+                self.alloc.free(e.extra_info1);
+                self.alloc.free(e.extra_info2);
+            },
+        }
     }
-    self.constants.append(self.alloc, value) catch oom();
 }
 
-fn err(self: *Sema, token: Token, comptime fmt: []const u8, args: anytype) void {
-    error_reporter.reportError(token, fmt, args);
-    self.has_error = true;
-}
-
-// ---------- Types
-
-const Global = struct {
+const ErrorInfo = struct {
     token: Token,
-    constant: bool,
-    type: ?FlowType = null,
+    err: SemaError,
+    extra_info1: []const u8 = "",
+    extra_info2: []const u8 = "",
+};
+
+// combine all possible errors here
+const SemaError = TypeError || VariableError || ContextError || FunctionError;
+
+const TypeError = error{
+    EqualityCheckOfUnequalTypes,
+    ArithmeticWithNonNumeric,
+    ArithmeticWithUnequalTypes,
+    NegateWithNonNumeric,
+    NotACallable,
+    UnexpectedType,
+};
+const VariableError = error{
+    UnresolvableType,
+    UnknownVariable,
+    VariableAlreadyExists,
+    ConstantMutation,
+    ConstantWithoutValue,
+};
+const ContextError = error{
+    NotInALoop,
+};
+const FunctionError = error{
+    ArgumentCountMismatch,
+    ArgumentTypeMismatch,
 };
 
 const Variable = struct {
-    token: Token,
+    name: Token,
     constant: bool,
     type: FlowType,
-    scope_depth: usize,
+    scope: u8,
+    /// Only used for type == .function for indexing into the function collection
+    extra_idx: usize,
 };
 
 const Function = struct {
-    param_types: []FlowType,
     ret_type: FlowType,
+    arg_types: []FlowType,
 };
-
-// ----------- Imports and aliases
 
 const Sema = @This();
 
-const error_reporter = @import("error_reporter.zig");
-
-const ast = @import("ast.zig");
-const Stmt = ast.Stmt;
-const Expr = ast.Expr;
-const Token = @import("Token.zig");
-
-const Stack = @import("shared").Stack;
-const oom = @import("shared").oom;
-const definitions = @import("shared").definitions;
-const FlowType = definitions.FlowType;
-const FlowValue = definitions.FlowValue;
-const builtins = @import("shared").builtins;
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const HashMap = std.StringHashMapUnmanaged;
-const ArrayList = std.ArrayListUnmanaged;
-const panic = std.debug.panic;
 
-const MAX_LOCAL_SIZE = 1024;
+const ast = @import("ir/ast.zig");
+const Stmt = ast.Stmt;
+const Expr = ast.Expr;
+
+const shared = @import("shared");
+const oom = shared.oom;
+const FlowType = shared.definitions.FlowType;
+const builtins = shared.builtins;
+const error_reporter = @import("util/error_reporter.zig");
+
+const Token = @import("ir/Token.zig");

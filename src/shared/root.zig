@@ -2,6 +2,10 @@ pub const OpCode = @import("byte_code.zig").OpCode;
 pub const definitions = @import("definitions.zig");
 pub const Stack = @import("stack.zig").Stack;
 
+pub const debug = struct {
+    pub const BytecodeDumper = @import("debug/BytecodeDumper.zig");
+};
+
 pub fn oom() noreturn {
     std.io.getStdErr().writeAll("Out Of Memory! Proceeding to panic") catch {};
     std.debug.panic("OOM", .{});

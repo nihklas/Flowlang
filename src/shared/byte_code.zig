@@ -14,7 +14,8 @@ pub const OpCode = enum(u8) {
     pop,
     constant,
 
-    negate,
+    negate_i,
+    negate_f,
     not,
 
     concat,
@@ -39,7 +40,6 @@ pub const OpCode = enum(u8) {
     lower_equal,
 
     // variables
-    create_global,
     get_global,
     set_global,
 
@@ -48,6 +48,7 @@ pub const OpCode = enum(u8) {
 
     // functions
     function, // operands: 1 byte for constant idx name, 1 byte for arg count, 2 byte for line count
+    get_builtin,
     call,
     @"return",
 

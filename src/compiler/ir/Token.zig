@@ -60,7 +60,6 @@ pub const Type = enum {
     int,
     float,
     string,
-    channel,
     void,
 
     // Literals
@@ -91,7 +90,6 @@ pub const ReservedKeywords = std.StaticStringMap(Type).initComptime(.{
     .{ "int", .int },
     .{ "float", .float },
     .{ "string", .string },
-    .{ "channel", .channel },
     .{ "return", .@"return" },
 });
 
