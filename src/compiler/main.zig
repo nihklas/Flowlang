@@ -91,7 +91,7 @@ fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    return try file.readToEndAlloc(alloc, 1 * 1024 * 1024); // 1 GB
+    return try file.readToEndAlloc(alloc, 1 * 1024 * 1024); // 1 MB
 }
 
 const debug_options = @import("debug_options");

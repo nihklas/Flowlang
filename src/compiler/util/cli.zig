@@ -24,7 +24,10 @@ pub fn parse() Options {
             switch (argument_counter) {
                 0 => input_arg = argument,
                 1 => output_arg = argument,
-                else => {},
+                else => {
+                    std.debug.print("Error: Unexpected argument: {s}\n", .{argument});
+                    printHelpAndQuit(1);
+                },
             }
 
             argument_counter += 1;
