@@ -17,7 +17,6 @@ Non-exhaustive list of some of the biggest and most important features planned:
 - Easy, Colorless concurrency model
 - Gargabe Collection
 - Byte-Code VM shipped in the final executable
-- Uses the Zig Buildsystem for Compilation
 - Extendable VM (through Zig Modules)
 - Type-Safe
 
@@ -25,51 +24,23 @@ Non-exhaustive list of some of the biggest and most important features planned:
 
 The file `example/src/main.flow` shows the current possible things that the flow compiler supports.
 
-This language uses the zig build system, so to use Flow you have to have zig installed.
-
-You need to create a build.zig file and put the following contents:
-
-```zig
-const std = @import("std");
-const flow = @import("flow");
-
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    const flow_out = flow.compile(b, .{
-        .name = "flow-example",
-        .source = b.path("src/main.flow"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    b.installArtifact(flow_out);
-
-    const run_flow = b.addRunArtifact(flow_out);
-    const run_step = b.step("run", "Run the code directly");
-    run_step.dependOn(&run_flow.step);
-}
-```
-
-You can change the name and source entries. If you know your way around the buildsystem, you can of
-course do some more crazy things, but this setup is enough to get you started with just Flow.
-
-Now, to get flow itself, you need to fetch it with this:
+If you are using `nix`, you can start an ad-hoc shell environment including
+`flowc` with this command:
 
 ```bash
-zig fetch --save=flow git+https://gitlab.com/flowlang/flowlang.git
+nix shell nixpkgs#gitlab:flowlang/flowlang
 ```
 
-Now you can run `zig build` to compile your project and get the binary under `zig-out/bin/<binary>`
-or you run the code with `zig build run` directly.
+Otherwise, you need to install Flow from source, by cloning this Repository and
+running `zig build`. After that, the compiler is located at
+`zig-out/bin/compiler`.
 
 ### Extensions
 
 Flow supports extensions for the runtime and compiler. That means, you can write
 Zig Modules to implement performance critical tasks and export them to be
 globally available functions in Flow-Land. For an example on how to write an
-extension yourself, you can look at [betterAdd](https://gitlab.com/flowlang/betteradd).
+extension yourself, you can look at [betterAdd](https://gitlab.com/flowlang/betterAdd).
 
 You can fetch the module via Zig's package manager:
 
@@ -92,7 +63,7 @@ This `exports.zig` includes all modules exports the functions that are needed.
 You can define different names for these functions in here as well, to avoid
 naming collisions.
 
-Here is the modified `build.zig` from above to include this example module:
+Here is the `build.zig` to build the compiler with the extension enabled.
 
 ```zig
 const std = @import("std");
@@ -104,24 +75,26 @@ pub fn build(b: *std.Build) void {
 
     const betterAdd = b.dependency("betterAdd", .{});
 
-    const flow_out = flow.compile(b, .{
-        .name = "flow-example",
-        .source = b.path("src/test.flow"),
+    const flow_dep = b.dependency("flow", .{});
+
+    const compiler = flow.buildCompiler(b, flow_dep.builder, .{
         .target = target,
         .optimize = optimize,
-        .extension = .{
-            .modules = &.{.{ .name = "betterAdd", .module = betterAdd.module("betterAdd") }},
-            .export_file = b.path("exports.zig"),
+        .extensions = .{
+            .modules = &.{
+                .{ .name = "betterAdd", .module = betterAdd.module("betterAdd") },
+            },
+            .exports_file = b.path("exports.zig"),
         },
     });
 
-    b.installArtifact(flow_out);
-
-    const run_flow = b.addRunArtifact(flow_out);
-    const run_step = b.step("run", "Run the code directly");
-    run_step.dependOn(&run_flow.step);
+    b.installArtifact(compiler);
 }
 ```
+
+To add more extensions, you just have to add them as a dependency via `zig fetch`,
+re-export the functions you want to use and add another entry in the `.modules`
+array.
 
 ## Syntax and Grammar
 
