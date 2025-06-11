@@ -94,7 +94,6 @@ fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
     return try file.readToEndAlloc(alloc, 1 * 1024 * 1024); // 1 MB
 }
 
-const debug_options = @import("debug_options");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Token = @import("ir/Token.zig");

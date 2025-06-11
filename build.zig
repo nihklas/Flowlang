@@ -11,21 +11,10 @@ pub fn build(b: *Build) !void {
 
     const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
-    const dump_bytecode = b.option(bool, "dump-bc", "Dump the Bytecode instead of running the VM") orelse false;
-    const dump_ast = b.option(bool, "dump-ast", "Dump the AST and exit") orelse false;
-    const dump_fir = b.option(bool, "dump-fir", "Dump the FIR and exit") orelse false;
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
     const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
     const integration_test_case = b.option([]const u8, "case", "Specific integration test case to run");
-
-    const debug_options = b.addOptions();
-    debug_options.addOption(bool, "dump_bc", dump_bytecode);
-    debug_options.addOption(bool, "dump_ast", dump_ast);
-    debug_options.addOption(bool, "dump_fir", dump_fir);
-    debug_options.addOption(bool, "stack", trace_stack);
-    debug_options.addOption(bool, "bytecode", trace_bytecode);
-    debug_options.addOption(bool, "memory", trace_memory);
 
     const extension_options = b.addOptions();
     extension_options.addOption(bool, "enabled", false);
@@ -34,57 +23,15 @@ pub fn build(b: *Build) !void {
     const test_options = b.addOptions();
     test_options.addOption(bool, "use_stderr", use_stderr);
 
-    // Shared code between compiler and runtime
-    // such as value types and representations
-    const shared = b.addModule("shared", .{
-        .root_source_file = b.path("src/shared/root.zig"),
+    const compiler = buildCompiler(b, b, .{
         .target = target,
         .optimize = optimize,
-    });
-    shared.addOptions("module_debug_options", debug_options);
-    shared.addOptions("extensions", extension_options);
-
-    const flow_std = b.addModule("flow_std", .{
-        .root_source_file = b.path("src/std/stdlib.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    flow_std.addImport("shared", shared);
-    shared.addImport("flow_std", flow_std);
-
-    // Runtime
-    const runtime_mod = b.addModule("runtime", .{
-        .root_source_file = b.path("src/runtime/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "debug_options", .module = debug_options.createModule() },
-            .{ .name = "shared", .module = shared },
+        .debug = .{
+            .trace_stack = trace_stack,
+            .trace_bytecode = trace_bytecode,
+            .trace_memory = trace_memory,
         },
     });
-    const runtime = b.addExecutable(.{
-        .name = "runtime",
-        .root_module = runtime_mod,
-    });
-    b.installArtifact(runtime);
-
-    // Compiler
-    const compiler_mod = b.addModule("compiler", .{
-        .root_source_file = b.path("src/compiler/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "debug_options", .module = debug_options.createModule() },
-            .{ .name = "shared", .module = shared },
-        },
-    });
-    compiler_mod.addAnonymousImport("runtime", .{ .root_source_file = runtime.getEmittedBin() });
-    const compiler = b.addExecutable(.{
-        .name = "compiler",
-        .root_module = compiler_mod,
-    });
-    b.installArtifact(compiler);
-    compiler.step.dependOn(&runtime.step);
 
     // Unit tests in compiler and runtime
     const exe_unit_tests = b.addTest(.{
@@ -92,7 +39,7 @@ pub fn build(b: *Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    exe_unit_tests.root_module.addImport("shared", shared);
+    exe_unit_tests.root_module.addImport("shared", buildShared(b, .{ .target = target, .optimize = optimize }));
     exe_unit_tests.root_module.addOptions("testing_options", test_options);
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
@@ -106,7 +53,6 @@ pub fn build(b: *Build) !void {
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
     check_step.dependOn(&compiler.step);
-    check_step.dependOn(&runtime.step);
 
     const run_compiler = b.addRunArtifact(compiler);
     const compile_step = b.step("compile", "Run the compiler, pass --help to get more information");
@@ -115,4 +61,111 @@ pub fn build(b: *Build) !void {
     if (b.args) |args| {
         run_compiler.addArgs(args);
     }
+}
+
+const ExtensionOptions = struct {
+    modules: []const struct { name: []const u8, module: *Module },
+    exports_file: LazyPath,
+};
+
+const CompilerOptions = struct {
+    extensions: ?ExtensionOptions = null,
+    target: Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    debug: ?struct {
+        trace_stack: bool = false,
+        trace_bytecode: bool = false,
+        trace_memory: bool = false,
+    } = null,
+};
+
+pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerOptions) *Compile {
+    const shared = buildShared(flow_builder, compile_options);
+
+    const debug_options = flow_builder.addOptions();
+    if (compile_options.debug) |debug| {
+        debug_options.addOption(bool, "stack", debug.trace_stack);
+        debug_options.addOption(bool, "bytecode", debug.trace_bytecode);
+        debug_options.addOption(bool, "memory", debug.trace_memory);
+    } else {
+        debug_options.addOption(bool, "stack", false);
+        debug_options.addOption(bool, "bytecode", false);
+        debug_options.addOption(bool, "memory", false);
+    }
+
+    const flow_std = flow_builder.addModule("flow_std", .{
+        .root_source_file = flow_builder.path("src/std/stdlib.zig"),
+        .target = compile_options.target,
+        .optimize = compile_options.optimize,
+    });
+
+    // Runtime
+    const runtime_mod = flow_builder.addModule("runtime", .{
+        .root_source_file = flow_builder.path("src/runtime/main.zig"),
+        .target = compile_options.target,
+        .optimize = compile_options.optimize,
+        .imports = &.{
+            .{ .name = "debug_options", .module = debug_options.createModule() },
+        },
+    });
+    const runtime = flow_builder.addExecutable(.{
+        .name = "runtime",
+        .root_module = runtime_mod,
+    });
+    // NOTE: This seems to be needed to enable the .getEmittedBin() call
+    flow_builder.installArtifact(runtime);
+
+    // Compiler
+    const compiler_mod = flow_builder.addModule("compiler", .{
+        .root_source_file = flow_builder.path("src/compiler/main.zig"),
+        .target = compile_options.target,
+        .optimize = compile_options.optimize,
+        .imports = &.{
+            .{ .name = "debug_options", .module = debug_options.createModule() },
+        },
+    });
+    compiler_mod.addAnonymousImport("runtime", .{ .root_source_file = runtime.getEmittedBin() });
+    const compiler = flow_builder.addExecutable(.{
+        .name = "compiler",
+        .root_module = compiler_mod,
+    });
+
+    b.installArtifact(compiler);
+    compiler.step.dependOn(&runtime.step);
+
+    flow_std.addImport("shared", shared);
+    shared.addImport("flow_std", flow_std);
+    compiler_mod.addImport("shared", shared);
+    runtime_mod.addImport("shared", shared);
+
+    return compiler;
+}
+
+fn buildShared(b: *Build, compile_options: CompilerOptions) *Module {
+    const shared = b.addModule("shared", .{
+        .root_source_file = b.path("src/shared/root.zig"),
+        .target = compile_options.target,
+        .optimize = compile_options.optimize,
+    });
+
+    const ext_opts = b.addOptions();
+    ext_opts.addOption(bool, "enabled", compile_options.extensions != null);
+
+    if (compile_options.extensions) |extension_options| {
+        const extension = b.addModule("flow_ext", .{
+            .target = compile_options.target,
+            .optimize = compile_options.optimize,
+            .root_source_file = extension_options.exports_file,
+        });
+
+        for (extension_options.modules) |mod| {
+            mod.module.addImport("shared", shared);
+            extension.addImport(mod.name, mod.module);
+        }
+
+        shared.addImport("flow_ext", extension);
+    }
+
+    shared.addOptions("extensions", ext_opts);
+    return shared;
 }

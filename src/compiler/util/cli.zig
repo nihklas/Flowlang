@@ -1,9 +1,9 @@
 pub const Options = struct {
     source: []const u8,
     output: []const u8,
-    dump_bc: bool = debug_options.dump_bc,
-    dump_ast: bool = debug_options.dump_ast,
-    dump_fir: bool = debug_options.dump_fir,
+    dump_bc: bool = false,
+    dump_ast: bool = false,
+    dump_fir: bool = false,
 };
 
 pub fn parse() Options {
@@ -81,4 +81,3 @@ pub fn printHelpAndQuit(exit_code: u8) noreturn {
 }
 
 const std = @import("std");
-const debug_options = @import("debug_options");
