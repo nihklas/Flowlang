@@ -110,7 +110,17 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
 fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
     try writeIndent(writer, depth);
     switch (expr.*) {
-        .literal => |literal| try writer.print("(Literal Expr '{s}')\n", .{literal.token.lexeme}),
+        .literal => |literal| {
+            if (literal.value != .array) {
+                try writer.print("(Literal Expr '{s}')\n", .{literal.token.lexeme});
+                return;
+            }
+
+            try writer.writeAll("(Array Literal Expr)\n");
+            for (literal.value.array) |item| {
+                try dumpExpr(writer, item, depth + 1);
+            }
+        },
         .grouping => |group| {
             try writer.writeAll("(Grouping Expr)\n");
             try dumpExpr(writer, group.expr, depth + 1);

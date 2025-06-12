@@ -448,6 +448,24 @@ fn call(self: *Parser) ParserError!*Expr {
 }
 
 fn primary(self: *Parser) ParserError!*Expr {
+    if (self.match(.@"[")) |open_bracket| {
+        const items: []*Expr = blk: {
+            var items_list: std.ArrayList(*Expr) = .init(self.alloc);
+            defer items_list.deinit();
+
+            while (!self.check(.@"]") and !self.isAtEnd()) {
+                items_list.append(try self.expression()) catch oom();
+
+                if (self.match(.@",") == null) break;
+            }
+
+            break :blk items_list.toOwnedSlice() catch oom();
+        };
+        try self.consume(.@"]", "Expected ']' after array literal");
+
+        return Expr.createLiteral(self.alloc, open_bracket, .{ .array = items });
+    }
+
     if (self.match(.null)) |token| {
         return Expr.createLiteral(self.alloc, token, .null);
     }

@@ -211,7 +211,20 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
 
 fn analyseExpr(self: *Sema, expr: *const Expr) void {
     switch (expr.*) {
-        .literal => self.putType(expr, expr.literal.value.toFlowType()),
+        .literal => switch (expr.literal.value) {
+            .null => self.putType(expr, .null),
+            .bool => self.putType(expr, .primitive(.bool)),
+            .int => self.putType(expr, .primitive(.int)),
+            .float => self.putType(expr, .primitive(.float)),
+            .string => self.putType(expr, .primitive(.string)),
+            .builtin_fn => self.putType(expr, .primitive(.builtin_fn)),
+            .function => self.putType(expr, .primitive(.function)),
+            .array => |arr| {
+                for (arr) |value| {
+                    self.analyseExpr(value);
+                }
+            },
+        },
         .grouping => {
             self.analyseExpr(expr.grouping.expr);
             self.putType(expr, self.getType(expr.grouping.expr).?);

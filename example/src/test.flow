@@ -1,2 +1,4 @@
-var test: []int;
+const hallo = 1;
+
+var test: []int = [1, 2, hallo];
 

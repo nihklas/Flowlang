@@ -12,32 +12,7 @@ pub const Expr = union(enum) {
         string: []const u8,
         builtin_fn: void,
         function: void,
-        array: []Literal,
-
-        pub fn toFlowType(self: *const Literal) FlowType {
-            return switch (self.*) {
-                .null => .null,
-                .bool => .primitive(.bool),
-                .int => .primitive(.int),
-                .float => .primitive(.float),
-                .string => .primitive(.string),
-                .builtin_fn => .primitive(.builtin_fn),
-                .function => .primitive(.function),
-                .array => {
-                    var tmp = self.array;
-                    var order: usize = 0;
-                    while (tmp.len > 0 and tmp[0] == .array) {
-                        order += 1;
-                        tmp = tmp[0].array;
-                    }
-
-                    return .{
-                        .order = @intCast(order),
-                        .type = if (tmp.len == 0) .null else tmp[0].toFlowType().type,
-                    };
-                },
-            };
-        }
+        array: []*Expr,
     };
 
     literal: struct { token: Token, value: Literal },
