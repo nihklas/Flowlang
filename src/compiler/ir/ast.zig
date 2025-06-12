@@ -12,8 +12,7 @@ pub const Expr = union(enum) {
         string: []const u8,
         builtin_fn: void,
         function: void,
-        /// TODO: Change type to []Literal
-        array: void,
+        array: []Literal,
 
         pub fn toFlowType(self: *const Literal) FlowType {
             return switch (self.*) {
@@ -24,8 +23,19 @@ pub const Expr = union(enum) {
                 .string => .primitive(.string),
                 .builtin_fn => .primitive(.builtin_fn),
                 .function => .primitive(.function),
-                // TODO:
-                .array => unreachable,
+                .array => {
+                    var tmp = self.array;
+                    var order: usize = 0;
+                    while (tmp.len > 0 and tmp[0] == .array) {
+                        order += 1;
+                        tmp = tmp[0].array;
+                    }
+
+                    return .{
+                        .order = @intCast(order),
+                        .type = if (tmp.len == 0) .null else tmp[0].toFlowType().type,
+                    };
+                },
             };
         }
     };
