@@ -83,7 +83,7 @@ fn compileConstants(self: *Compiler) void {
                 self.emitMultibyte(constant.float);
             },
             .bool, .null => {},
-            .builtin_fn, .function => unreachable,
+            .builtin_fn, .function, .array => unreachable,
         }
     }
 

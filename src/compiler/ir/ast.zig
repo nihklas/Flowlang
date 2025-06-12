@@ -13,6 +13,7 @@ pub const Expr = union(enum) {
         string: []const u8,
         builtin_fn: void,
         function: void,
+        array: void,
     };
 
     literal: struct { token: Token, value: Literal },

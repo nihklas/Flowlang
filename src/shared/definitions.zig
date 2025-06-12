@@ -14,6 +14,22 @@ pub const FlowFunction = struct {
     start_ip: usize,
 };
 
+pub const FlowArray = struct {
+    type: FlowPrimitive,
+    order: u8,
+    items: []FlowValue,
+};
+
+pub const FlowPrimitive = enum {
+    null,
+    bool,
+    int,
+    float,
+    string,
+    builtin_fn,
+    function,
+};
+
 pub const FlowType = enum {
     null,
     bool,
@@ -22,6 +38,7 @@ pub const FlowType = enum {
     string,
     builtin_fn,
     function,
+    array,
 };
 
 pub const FlowValue = union(FlowType) {
@@ -32,6 +49,7 @@ pub const FlowValue = union(FlowType) {
     string: []const u8,
     builtin_fn: BuiltinFunction,
     function: FlowFunction,
+    array: FlowArray,
 
     pub fn format(self: FlowValue, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self) {
@@ -42,6 +60,7 @@ pub const FlowValue = union(FlowType) {
             .string => try writer.print("{s}", .{self.string}),
             .function => try writer.writeAll("<fn>"),
             .builtin_fn => try writer.writeAll("<builtin fn>"),
+            .array => try writer.writeAll("<array>"),
         }
     }
 
@@ -49,10 +68,12 @@ pub const FlowValue = union(FlowType) {
         if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
 
         return switch (self) {
+            .null => true,
             .int => self.int == other.int,
             .float => self.float == other.float,
             .bool => self.bool == other.bool,
-            .null => true,
+            .function => self.function.start_ip == other.function.start_ip,
+            .builtin_fn => self.builtin_fn.function == other.builtin_fn.function,
             .string => {
                 const a = self.string;
                 const b = other.string;
@@ -64,8 +85,20 @@ pub const FlowValue = union(FlowType) {
                 }
                 return true;
             },
-            .function => self.function.start_ip == other.function.start_ip,
-            .builtin_fn => self.builtin_fn.function == other.builtin_fn.function,
+            .array => {
+                const a = self.array;
+                const b = other.array;
+
+                if (a.type != b.type) return false;
+                if (a.order != b.order) return false;
+                if (a.items.len != b.items.len) return false;
+
+                for (a.items, b.items) |ia, ib| {
+                    if (!ia.equals(ib)) return false;
+                }
+
+                return true;
+            },
         };
     }
 
@@ -76,6 +109,7 @@ pub const FlowValue = union(FlowType) {
             .int => self.int != 0,
             .float => self.float != 0,
             .string => self.string.len > 0,
+            .array => self.array.items.len > 0,
             .builtin_fn, .function => true,
         };
     }
