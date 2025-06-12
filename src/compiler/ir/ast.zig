@@ -1,11 +1,10 @@
 pub const TypeHint = struct {
-    type: Token,
-    /// order (dimension) of the array, 0 means no array, 1 means []type, 2 means [][]type, ...
-    order: u8 = 0,
+    type: FlowType,
+    token: Token,
 };
 
 pub const Expr = union(enum) {
-    pub const Literal = union(FlowType) {
+    pub const Literal = union(enum) {
         null: void,
         bool: bool,
         int: Integer,
@@ -13,7 +12,22 @@ pub const Expr = union(enum) {
         string: []const u8,
         builtin_fn: void,
         function: void,
+        /// TODO: Change type to []Literal
         array: void,
+
+        pub fn toFlowType(self: *const Literal) FlowType {
+            return switch (self.*) {
+                .null => .null,
+                .bool => .primitive(.bool),
+                .int => .primitive(.int),
+                .float => .primitive(.float),
+                .string => .primitive(.string),
+                .builtin_fn => .primitive(.builtin_fn),
+                .function => .primitive(.function),
+                // TODO:
+                .array => unreachable,
+            };
+        }
     };
 
     literal: struct { token: Token, value: Literal },
@@ -367,7 +381,7 @@ test "Stmt.createVariable" {
     const loop = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        .{ .type = .{ .type = .string, .lexeme = "string", .line = 1, .column = 1 } },
+        null,
         false,
         expr,
     );
@@ -380,7 +394,7 @@ test "Stmt.createFunction" {
     const variable = Stmt.createVariable(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 },
-        .{ .type = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
+        null,
         true,
         null,
     );
@@ -393,7 +407,7 @@ test "Stmt.createFunction" {
     const function = Stmt.createFunction(
         testing_alloc,
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
-        .{ .type = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
+        .{ .type = .primitive(.int), .token = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
         params,
         body,
     );
@@ -411,4 +425,3 @@ const oom = @import("shared").oom;
 const Integer = definitions.Integer;
 const Float = definitions.Float;
 const FlowType = definitions.FlowType;
-const FlowValue = definitions.FlowValue;

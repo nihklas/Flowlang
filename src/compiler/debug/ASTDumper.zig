@@ -30,10 +30,10 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
 
             if (variable.type_hint) |type_hint| {
                 try writer.writeAll(" '");
-                for (0..type_hint.order) |_| {
+                for (0..type_hint.type.order) |_| {
                     try writer.writeAll("[]");
                 }
-                try writer.print("{s}'", .{type_hint.type.lexeme});
+                try writer.print("{s}'", .{@tagName(type_hint.type.type)});
             }
 
             try writer.writeAll("]\n");
@@ -81,10 +81,10 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
         },
         .function => |function| {
             try writer.print("[Function Declaration '{s}' ", .{function.name.lexeme});
-            for (0..function.ret_type.order) |_| {
+            for (0..function.ret_type.type.order) |_| {
                 try writer.writeAll("[]");
             }
-            try writer.print("'{s}']\n", .{function.ret_type.type.lexeme});
+            try writer.print("'{s}']\n", .{@tagName(function.ret_type.type.type)});
 
             try writeIndent(writer, depth + 1);
             try writer.writeAll("(Parameters)\n");

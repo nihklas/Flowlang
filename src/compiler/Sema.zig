@@ -55,11 +55,11 @@ fn registerTopLevelFunctions(self: *Sema) void {
             std.debug.assert(param.* == .variable);
             std.debug.assert(param.variable.type_hint != null);
 
-            arg_types[i] = typeFromToken(param.variable.type_hint.?.type).?;
+            arg_types[i] = param.variable.type_hint.?.type;
         }
 
         self.putFunction(function.name, .{
-            .ret_type = typeFromToken(function.ret_type.type).?,
+            .ret_type = function.ret_type.type,
             .arg_types = arg_types,
         });
     }
@@ -126,7 +126,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 if (var_stmt.value) |value| {
                     if (value.* == .variable) {
                         if (self.findVariable(value.variable.name)) |existing_variable| {
-                            if (existing_variable.type == .function) {
+                            if (existing_variable.type.isPrimitive(.function)) {
                                 break :blk existing_variable.extra_idx;
                             }
                         }
@@ -144,12 +144,12 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             };
 
             if (var_stmt.value) |value| {
-                if (self.getType(value).? != variable.type) {
+                if (!self.getType(value).?.equals(&variable.type)) {
                     self.pushError(.{
                         .token = value.getToken(),
                         .err = TypeError.UnexpectedType,
-                        .extra_info1 = @tagName(variable.type),
-                        .extra_info2 = @tagName(self.getType(value).?),
+                        .extra_info1 = @tagName(variable.type.type),
+                        .extra_info2 = @tagName(self.getType(value).?.type),
                     });
                 }
             }
@@ -176,8 +176,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 }
 
                 self.putFunction(function.name, .{
-                    // NOTE: This should never be null, as only valid return types get parsed
-                    .ret_type = typeFromToken(function.ret_type.type).?,
+                    .ret_type = function.ret_type.type,
                     .arg_types = arg_types,
                 });
             }
@@ -192,7 +191,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.putVariable(.{
                     .constant = true,
                     .name = param.variable.name,
-                    .type = typeFromToken(param.variable.type_hint.?.type).?,
+                    .type = param.variable.type_hint.?.type,
                     .scope = self.current_scope,
                     .extra_idx = 0,
                 });
@@ -212,7 +211,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
 
 fn analyseExpr(self: *Sema, expr: *const Expr) void {
     switch (expr.*) {
-        .literal => self.putType(expr, expr.literal.value),
+        .literal => self.putType(expr, expr.literal.value.toFlowType()),
         .grouping => {
             self.analyseExpr(expr.grouping.expr);
             self.putType(expr, self.getType(expr.grouping.expr).?);
@@ -222,12 +221,12 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             switch (unary.op.type) {
                 .@"-" => {
                     const value_type = self.getType(unary.expr).?;
-                    if (value_type != .int and value_type != .float) {
-                        self.pushError(.{ .token = unary.op, .err = TypeError.NegateWithNonNumeric, .extra_info1 = @tagName(value_type) });
+                    if (!value_type.isPrimitive(.int) and !value_type.isPrimitive(.float)) {
+                        self.pushError(.{ .token = unary.op, .err = TypeError.NegateWithNonNumeric, .extra_info1 = @tagName(value_type.type) });
                     }
                     self.putType(expr, value_type);
                 },
-                .@"!" => self.putType(expr, .bool),
+                .@"!" => self.putType(expr, .primitive(.bool)),
                 else => unreachable,
             }
         },
@@ -237,35 +236,35 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             const left_type = self.getType(binary.lhs).?;
             const right_type = self.getType(binary.rhs).?;
             switch (binary.op.type) {
-                .@".", .@".=" => self.putType(expr, .string),
+                .@".", .@".=" => self.putType(expr, .primitive(.string)),
                 .@"==", .@"!=" => {
                     // if the two types are non-null and different, print error
-                    if (left_type != .null and right_type != .null and left_type != right_type) {
+                    if (!left_type.isNull() and !right_type.isNull() and !left_type.equals(&right_type)) {
                         self.pushError(.{
                             .token = binary.op,
                             .err = TypeError.EqualityCheckOfUnequalTypes,
-                            .extra_info1 = @tagName(left_type),
-                            .extra_info2 = @tagName(right_type),
+                            .extra_info1 = @tagName(left_type.type),
+                            .extra_info2 = @tagName(right_type.type),
                         });
                     }
-                    self.putType(expr, .bool);
+                    self.putType(expr, .primitive(.bool));
                 },
                 .@"<", .@"<=", .@">=", .@">", .@"+", .@"+=", .@"-", .@"-=", .@"*", .@"*=", .@"/", .@"/=", .@"%", .@"%=" => {
                     var both_numeric = true;
-                    if (left_type != .int and left_type != .float) {
-                        self.pushError(.{ .token = binary.lhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(left_type) });
+                    if (!left_type.isPrimitive(.int) and !left_type.isPrimitive(.float)) {
+                        self.pushError(.{ .token = binary.lhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(left_type.type) });
                         both_numeric = false;
                     }
-                    if (right_type != .int and right_type != .float) {
-                        self.pushError(.{ .token = binary.rhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(right_type) });
+                    if (!right_type.isPrimitive(.int) and !right_type.isPrimitive(.float)) {
+                        self.pushError(.{ .token = binary.rhs.getToken(), .err = TypeError.ArithmeticWithNonNumeric, .extra_info1 = @tagName(right_type.type) });
                         both_numeric = false;
                     }
-                    if (both_numeric and left_type != right_type) {
+                    if (both_numeric and !left_type.equals(&right_type)) {
                         self.pushError(.{
                             .token = binary.op,
                             .err = TypeError.ArithmeticWithUnequalTypes,
-                            .extra_info1 = @tagName(left_type),
-                            .extra_info2 = @tagName(right_type),
+                            .extra_info1 = @tagName(left_type.type),
+                            .extra_info2 = @tagName(right_type.type),
                         });
                     }
                     // as they have to be of equal types, we can just use one of them to keep going.
@@ -280,18 +279,18 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
         .logical => |logical| {
             self.analyseExpr(logical.lhs);
             self.analyseExpr(logical.rhs);
-            self.putType(expr, .bool);
+            self.putType(expr, .primitive(.bool));
         },
         .assignment => |assignment| {
             self.analyseExpr(assignment.value);
 
             if (self.findVariable(assignment.name)) |existing_variable| {
-                if (existing_variable.type != self.getType(assignment.value)) {
+                if (!existing_variable.type.equals(&self.getType(assignment.value).?)) {
                     self.pushError(.{
                         .token = assignment.value.getToken(),
                         .err = TypeError.UnexpectedType,
-                        .extra_info1 = @tagName(existing_variable.type),
-                        .extra_info2 = @tagName(self.getType(assignment.value).?),
+                        .extra_info1 = @tagName(existing_variable.type.type),
+                        .extra_info2 = @tagName(self.getType(assignment.value).?.type),
                     });
                 } else if (existing_variable.constant) {
                     self.pushError(.{ .token = assignment.name, .err = VariableError.ConstantMutation, .extra_info1 = assignment.name.lexeme });
@@ -317,7 +316,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
 
             std.debug.assert(call.expr.* == .variable);
             if (self.getType(call.expr)) |callee_type| {
-                switch (callee_type) {
+                switch (callee_type.type) {
                     .builtin_fn => {
                         // NOTE: builtin functions cannot be aliased
                         std.debug.assert(builtins.get(call.expr.variable.name.lexeme) != null);
@@ -327,7 +326,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                     },
                     .function => {
                         const variable = self.findVariable(call.expr.variable.name) orelse return;
-                        std.debug.assert(variable.type == .function);
+                        std.debug.assert(variable.type.isPrimitive(.function));
 
                         const function = self.functions.items[variable.extra_idx];
                         self.validateFunction(function, call, expr);
@@ -355,14 +354,14 @@ fn validateFunction(self: *Sema, function: anytype, call: anytype, expr: *const 
         if (self.getType(arg) == null) continue;
 
         // NOTE: these get checked at runtime
-        if (param == .null) continue;
+        if (param.isNull()) continue;
 
-        if (self.getType(arg).? != param) {
+        if (!self.getType(arg).?.equals(&param)) {
             self.pushError(.{
                 .token = arg.getToken(),
                 .err = FunctionError.ArgumentTypeMismatch,
-                .extra_info1 = @tagName(param),
-                .extra_info2 = @tagName(self.getType(arg).?),
+                .extra_info1 = @tagName(param.type),
+                .extra_info2 = @tagName(self.getType(arg).?.type),
             });
         }
     }
@@ -391,7 +390,7 @@ fn putFunction(self: *Sema, name: Token, function: Function) void {
     self.putVariable(.{
         .name = name,
         .constant = true,
-        .type = .function,
+        .type = .primitive(.function),
         .scope = self.current_scope,
         .extra_idx = self.functions.items.len - 1,
     });
@@ -409,7 +408,7 @@ fn findVariable(self: *Sema, name: Token) ?Variable {
         return .{
             .name = name,
             .constant = true,
-            .type = .builtin_fn,
+            .type = .primitive(.builtin_fn),
             .scope = 0,
             .extra_idx = 0,
         };
@@ -442,18 +441,7 @@ fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
     const variable = stmt.variable;
 
     const t = variable.type_hint orelse return self.getType(variable.value.?).?;
-    return typeFromToken(t.type).?;
-}
-
-fn typeFromToken(token: Token) ?FlowType {
-    return switch (token.type) {
-        .bool => .bool,
-        .string => .string,
-        .int => .int,
-        .float => .float,
-        .null => .null,
-        else => null,
-    };
+    return t.type;
 }
 
 fn formatNumber(self: *Sema, num: anytype) []const u8 {

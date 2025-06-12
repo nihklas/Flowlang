@@ -8,7 +8,7 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
 
     var global_counter: usize = 0;
     for (fir.globals.items) |global| {
-        if (global.type != .function) continue;
+        if (!global.type.isPrimitive(.function)) continue;
 
         const func = fir.functions.items[global.extra_idx];
         try writer.print("${d} = func ({d}) {{\n", .{ global_counter, func.param_count });
@@ -145,11 +145,13 @@ fn dumpLoop(writer: anytype, fir: *const FIR, loop_idx: usize, depth: usize) Wri
 fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void {
     const variable = fir.globals.items[var_idx];
 
-    if (variable.type == .function) return;
+    if (variable.type.isPrimitive(.function)) return;
 
     try writer.print("${d} = ", .{var_idx});
     if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx);
+    } else {
+        try writer.writeAll("null");
     }
     try writer.writeAll(";");
 }
@@ -159,7 +161,7 @@ fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wri
 
     try writer.print("%{d} = ", .{variable.stack_idx});
 
-    if (variable.type == .function) {
+    if (variable.type.isPrimitive(.function)) {
         const func = fir.functions.items[variable.extra_idx];
         try writer.print("func ({d}) {{\n", .{func.param_count});
         try dumpBlock(writer, fir, func.body, depth + 1);
@@ -167,6 +169,8 @@ fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wri
         try writer.writeAll("}");
     } else if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx);
+    } else {
+        try writer.writeAll("null");
     }
     try writer.writeAll(";");
 }

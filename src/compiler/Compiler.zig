@@ -34,7 +34,7 @@ pub fn compile(self: *Compiler) []const u8 {
 
 fn compileFunctions(self: *Compiler) void {
     for (self.fir.globals.items) |global| {
-        if (global.type != .function) continue;
+        if (!global.type.isPrimitive(.function)) continue;
         const func = self.fir.functions.items[global.extra_idx];
 
         self.emitOpcode(.function);
@@ -44,7 +44,7 @@ fn compileFunctions(self: *Compiler) void {
         const op_idx = self.byte_code.items.len;
 
         self.compileBlock(func.body);
-        if (func.ret_type == .null) {
+        if (func.ret_type.isNull()) {
             self.emitOpcode(.null);
             self.emitOpcode(.@"return");
         }
@@ -184,7 +184,7 @@ fn compileLoop(self: *Compiler, loop_idx: usize) void {
 fn compileGlobal(self: *Compiler, var_idx: usize) void {
     const global = self.fir.globals.items[var_idx];
 
-    if (global.type == .function) {
+    if (global.type.isPrimitive(.function)) {
         return;
     } else if (global.expr) |expr| {
         self.compileExpression(expr);
@@ -201,7 +201,7 @@ fn compileGlobal(self: *Compiler, var_idx: usize) void {
 fn compileLocal(self: *Compiler, var_idx: usize) void {
     const local = self.fir.locals.items[var_idx];
 
-    if (local.type == .function) {
+    if (local.type.isPrimitive(.function)) {
         @panic("Local functions not yet allowed");
     } else if (local.expr) |expr| {
         self.compileExpression(expr);
@@ -269,7 +269,10 @@ fn compileUnary(self: *Compiler, expr: FIR.Node.Expr) void {
 
     switch (expr.op) {
         .not => self.emitOpcode(.not),
-        .negate => self.emitOpcode(if (expr.type == .int) .negate_i else .negate_f),
+        .negate => {
+            std.debug.assert(expr.type.order == 0);
+            self.emitOpcode(if (expr.type.isPrimitive(.int)) .negate_i else .negate_f);
+        },
         else => unreachable,
     }
 }
@@ -281,6 +284,11 @@ fn compileBinary(self: *Compiler, expr: FIR.Node.Expr) void {
     self.compileExpression(expr.operands[1]);
 
     switch (expr.op) {
+        .add, .sub, .div, .mul, .mod => std.debug.assert(expr.type.order == 0),
+        else => {},
+    }
+
+    switch (expr.op) {
         .equal => self.emitOpcode(.equal),
         .unequal => self.emitOpcode(.unequal),
         .less => self.emitOpcode(.lower),
@@ -288,11 +296,11 @@ fn compileBinary(self: *Compiler, expr: FIR.Node.Expr) void {
         .greater => self.emitOpcode(.greater),
         .greater_equal => self.emitOpcode(.greater_equal),
         .concat => self.emitOpcode(.concat),
-        .add => self.emitOpcode(if (expr.type == .int) .add_i else .add_f),
-        .sub => self.emitOpcode(if (expr.type == .int) .sub_i else .sub_f),
-        .div => self.emitOpcode(if (expr.type == .int) .div_i else .div_f),
-        .mul => self.emitOpcode(if (expr.type == .int) .mul_i else .mul_f),
-        .mod => self.emitOpcode(if (expr.type == .int) .mod_i else .mod_f),
+        .add => self.emitOpcode(if (expr.type.isPrimitive(.int)) .add_i else .add_f),
+        .sub => self.emitOpcode(if (expr.type.isPrimitive(.int)) .sub_i else .sub_f),
+        .div => self.emitOpcode(if (expr.type.isPrimitive(.int)) .div_i else .div_f),
+        .mul => self.emitOpcode(if (expr.type.isPrimitive(.int)) .mul_i else .mul_f),
+        .mod => self.emitOpcode(if (expr.type.isPrimitive(.int)) .mod_i else .mod_f),
         else => unreachable,
     }
 }

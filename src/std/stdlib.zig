@@ -10,8 +10,10 @@ fn _print(_: Allocator, args: []FlowValue) FlowValue {
 }
 
 pub const readline: BuiltinFunction = .{
-    .arg_types = &.{.string},
-    .ret_type = .string,
+    .arg_types = &.{
+        .{ .type = .string, .order = 0 },
+    },
+    .ret_type = .{ .type = .string, .order = 0 },
     .function = &_readline,
 };
 
@@ -26,8 +28,10 @@ fn _readline(gc_alloc: Allocator, args: []FlowValue) FlowValue {
 }
 
 pub const readfile: BuiltinFunction = .{
-    .arg_types = &.{.string},
-    .ret_type = .string,
+    .arg_types = &.{
+        .{ .type = .string, .order = 0 },
+    },
+    .ret_type = .{ .type = .string, .order = 0 },
     .function = &_readfile,
 };
 
@@ -45,7 +49,10 @@ fn _readfile(gc_alloc: Allocator, args: []FlowValue) FlowValue {
 }
 
 pub const writefile: BuiltinFunction = .{
-    .arg_types = &.{ .string, .string },
+    .arg_types = &.{
+        .{ .type = .string, .order = 0 },
+        .{ .type = .string, .order = 0 },
+    },
     .ret_type = .null,
     .function = &_writefile,
 };
@@ -66,7 +73,7 @@ fn _writefile(_: Allocator, args: []FlowValue) FlowValue {
 
 pub const time: BuiltinFunction = .{
     .arg_types = &.{},
-    .ret_type = .int,
+    .ret_type = .{ .type = .int, .order = 0 },
     .function = &_time,
 };
 

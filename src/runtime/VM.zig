@@ -148,7 +148,7 @@ fn runWhileSwitch(self: *VM) void {
             .equal, .unequal => {
                 const rhs = self.pop();
                 const lhs = self.pop();
-                const equal = lhs.equals(rhs);
+                const equal = lhs.equals(&rhs);
                 if (op == .equal) {
                     self.push(.{ .bool = equal });
                 } else {

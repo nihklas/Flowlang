@@ -208,7 +208,7 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
         self.putFunction(.{
             .name = function.name.lexeme,
             .body = 0,
-            .ret_type = typeFromToken(function.ret_type.type).?,
+            .ret_type = function.ret_type.type,
             .param_count = function.params.len,
         });
     }
@@ -293,18 +293,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         },
         .variable => |variable| {
             const initializer = if (variable.value) |value| self.traverseExpr(value) else null;
-            const typehint: FlowType = blk: {
-                if (variable.type_hint) |typehint| {
-                    break :blk switch (typehint.type.type) {
-                        .bool => .bool,
-                        .string => .string,
-                        .int => .int,
-                        .float => .float,
-                        else => unreachable,
-                    };
-                }
-                break :blk self.exprs.getLast().type;
-            };
+            const typehint = if (variable.type_hint) |typehint| typehint.type else self.exprs.getLast().type;
 
             self.putVariable(variable.name.lexeme, initializer, typehint);
         },
@@ -315,7 +304,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 self.putFunction(.{
                     .name = function.name.lexeme,
                     .body = 0,
-                    .ret_type = typeFromToken(function.ret_type.type).?,
+                    .ret_type = function.ret_type.type,
                     .param_count = function.params.len,
                 });
             }
@@ -323,7 +312,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             self.scopeIncr();
 
             for (function.params) |param| {
-                self.putVariable(param.variable.name.lexeme, null, typeFromToken(param.variable.type_hint.?.type).?);
+                self.putVariable(param.variable.name.lexeme, null, param.variable.type_hint.?.type);
             }
 
             const maybe_body = self.traverseBlock(function.body);
@@ -331,7 +320,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             self.scopeDecr();
 
             _, const variable = self.resolveVariable(function.name.lexeme);
-            std.debug.assert(variable.type == .function);
+            std.debug.assert(variable.type.isPrimitive(.function));
             self.functions.items[variable.extra_idx].body = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
 
             if (self.scope == 0) return null;
@@ -358,12 +347,12 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
         .literal => {
             const value = resolveFlowValue(expr);
             const node_expr: Node.Expr = blk: switch (value) {
-                .bool => |boolean| .{ .op = if (boolean) .true else .false, .type = .bool },
+                .bool => |boolean| .{ .op = if (boolean) .true else .false, .type = .primitive(.bool) },
                 .null => .{ .op = .null, .type = .null },
                 .string, .int, .float => {
                     const operands = self.arena().alloc(usize, 1) catch oom();
                     operands[0] = self.resolveConstant(value);
-                    break :blk .{ .op = .literal, .type = self.constants.items[operands[0]], .operands = operands };
+                    break :blk .{ .op = .literal, .type = self.constants.items[operands[0]].getType(), .operands = operands };
                 },
                 else => unreachable,
             };
@@ -376,13 +365,13 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[1] = self.traverseExpr(binary.rhs);
 
             const op: Node.Expr.Operator, const flow_type: FlowType = switch (binary.op.type) {
-                .@"==" => .{ .equal, .bool },
-                .@"!=" => .{ .unequal, .bool },
-                .@"<" => .{ .less, .bool },
-                .@"<=" => .{ .less_equal, .bool },
-                .@">=" => .{ .greater_equal, .bool },
-                .@">" => .{ .greater, .bool },
-                .@".", .@".=" => .{ .concat, .string },
+                .@"==" => .{ .equal, .primitive(.bool) },
+                .@"!=" => .{ .unequal, .primitive(.bool) },
+                .@"<" => .{ .less, .primitive(.bool) },
+                .@"<=" => .{ .less_equal, .primitive(.bool) },
+                .@">=" => .{ .greater_equal, .primitive(.bool) },
+                .@">" => .{ .greater, .primitive(.bool) },
+                .@".", .@".=" => .{ .concat, .primitive(.string) },
                 .@"+", .@"+=" => .{ .add, self.exprs.items[operands[0]].type },
                 .@"-", .@"-=" => .{ .sub, self.exprs.items[operands[0]].type },
                 .@"*", .@"*=" => .{ .mul, self.exprs.items[operands[0]].type },
@@ -399,14 +388,14 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[0] = self.traverseExpr(logical.lhs);
             operands[1] = self.traverseExpr(logical.rhs);
 
-            self.exprs.append(self.alloc, .{ .op = if (logical.op.type == .@"and") .@"and" else .@"or", .type = .bool, .operands = operands }) catch oom();
+            self.exprs.append(self.alloc, .{ .op = if (logical.op.type == .@"and") .@"and" else .@"or", .type = .primitive(.bool), .operands = operands }) catch oom();
         },
         .unary => |unary| {
             const operands = self.arena().alloc(usize, 1) catch oom();
             operands[0] = self.traverseExpr(unary.expr);
 
             const op: Node.Expr.Operator, const flow_type: FlowType = switch (unary.op.type) {
-                .@"!" => .{ .not, .bool },
+                .@"!" => .{ .not, .primitive(.bool) },
                 .@"-" => .{ .negate, self.exprs.items[operands[0]].type },
                 else => unreachable,
             };
@@ -417,9 +406,9 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             const var_idx, const variable_node = self.resolveVariable(variable.name.lexeme);
             const operands = self.arena().alloc(usize, 1) catch oom();
 
-            if (variable_node.type == .builtin_fn) {
+            if (variable_node.type.isPrimitive(.builtin_fn)) {
                 operands[0] = self.resolveConstant(.{ .string = variable_node.name });
-                self.exprs.append(self.alloc, .{ .op = .builtin_fn, .type = .builtin_fn, .operands = operands }) catch oom();
+                self.exprs.append(self.alloc, .{ .op = .builtin_fn, .type = .primitive(.builtin_fn), .operands = operands }) catch oom();
             } else {
                 operands[0] = var_idx;
                 self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .global else .local, .type = variable_node.type, .operands = operands }) catch oom();
@@ -473,7 +462,7 @@ fn resolveFlowValue(expr: *const ast.Expr) FlowValue {
 
 fn resolveConstant(self: *FIR, value: FlowValue) usize {
     return for (self.constants.items, 0..) |c, i| {
-        if (c.equals(value)) break i;
+        if (c.equals(&value)) break i;
     } else {
         self.constants.append(self.alloc, value) catch oom();
         return self.constants.items.len - 1;
@@ -484,7 +473,7 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
     if (builtins.get(name)) |_| {
         return .{ 0, .{
             .name = name,
-            .type = .builtin_fn,
+            .type = .primitive(.builtin_fn),
             .scope = 0,
             .expr = null,
             .stack_idx = 0,
@@ -511,10 +500,10 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
 
 fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *const ast.Expr) FlowType {
     const callee_expr = self.exprs.items[callee];
-    std.debug.assert(callee_expr.type == .function or callee_expr.type == .builtin_fn);
+    std.debug.assert(callee_expr.type.isPrimitive(.function) or callee_expr.type.isPrimitive(.builtin_fn));
     std.debug.assert(original_callee_expr.* == .variable);
 
-    switch (callee_expr.type) {
+    switch (callee_expr.type.type) {
         .builtin_fn => {
             std.debug.assert(builtins.get(original_callee_expr.variable.name.lexeme) != null);
 
@@ -523,7 +512,7 @@ fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *c
         },
         .function => {
             _, const variable = self.resolveVariable(original_callee_expr.variable.name.lexeme);
-            std.debug.assert(variable.type == .function);
+            std.debug.assert(variable.type.isPrimitive(.function));
 
             return self.functions.items[variable.extra_idx].ret_type;
         },
@@ -567,7 +556,7 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) v
         .type = var_type,
         .scope = self.scope,
         .stack_idx = self.locals.items.len,
-        .extra_idx = if (var_type == .function) self.functions.items.len - 1 else 0,
+        .extra_idx = if (var_type.isPrimitive(.function)) self.functions.items.len - 1 else 0,
     };
 
     if (self.scope == 0) {
@@ -582,7 +571,7 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) v
 
 fn putFunction(self: *FIR, function: Node.Function) void {
     self.functions.append(self.alloc, function) catch oom();
-    self.putVariable(function.name, null, .function);
+    self.putVariable(function.name, null, .primitive(.function));
 }
 
 fn typeFromToken(token: Token) ?FlowType {

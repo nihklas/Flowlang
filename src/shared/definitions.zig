@@ -15,8 +15,7 @@ pub const FlowFunction = struct {
 };
 
 pub const FlowArray = struct {
-    type: FlowPrimitive,
-    order: u8,
+    type: FlowType,
     items: []FlowValue,
 };
 
@@ -30,18 +29,30 @@ pub const FlowPrimitive = enum {
     function,
 };
 
-pub const FlowType = enum {
-    null,
-    bool,
-    int,
-    float,
-    string,
-    builtin_fn,
-    function,
-    array,
+pub const FlowType = struct {
+    order: u8,
+    type: FlowPrimitive,
+
+    pub const @"null": FlowType = .{ .type = .null, .order = 0 };
+
+    pub fn primitive(primitive_type: FlowPrimitive) FlowType {
+        return .{ .type = primitive_type, .order = 0 };
+    }
+
+    pub fn isNull(self: *const FlowType) bool {
+        return self.type == .null;
+    }
+
+    pub fn isPrimitive(self: *const FlowType, primitive_type: FlowPrimitive) bool {
+        return self.type == primitive_type and self.order == 0;
+    }
+
+    pub fn equals(self: *const FlowType, other: *const FlowType) bool {
+        return self.type == other.type and self.order == other.order;
+    }
 };
 
-pub const FlowValue = union(FlowType) {
+pub const FlowValue = union(enum) {
     null: void,
     bool: bool,
     int: Integer,
@@ -50,6 +61,19 @@ pub const FlowValue = union(FlowType) {
     builtin_fn: BuiltinFunction,
     function: FlowFunction,
     array: FlowArray,
+
+    pub fn getType(self: *const FlowValue) FlowType {
+        return switch (self.*) {
+            .null => .null,
+            .bool => .primitive(.bool),
+            .int => .primitive(.int),
+            .float => .primitive(.float),
+            .string => .primitive(.string),
+            .builtin_fn => .primitive(.builtin_fn),
+            .function => .primitive(.function),
+            .array => self.array.type,
+        };
+    }
 
     pub fn format(self: FlowValue, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self) {
@@ -64,10 +88,10 @@ pub const FlowValue = union(FlowType) {
         }
     }
 
-    pub fn equals(self: FlowValue, other: FlowValue) bool {
-        if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
+    pub fn equals(self: *const FlowValue, other: *const FlowValue) bool {
+        if (std.meta.activeTag(self.*) != std.meta.activeTag(other.*)) return false;
 
-        return switch (self) {
+        return switch (self.*) {
             .null => true,
             .int => self.int == other.int,
             .float => self.float == other.float,
@@ -89,12 +113,12 @@ pub const FlowValue = union(FlowType) {
                 const a = self.array;
                 const b = other.array;
 
-                if (a.type != b.type) return false;
-                if (a.order != b.order) return false;
+                if (a.type.type != b.type.type) return false;
+                if (a.type.order != b.type.order) return false;
                 if (a.items.len != b.items.len) return false;
 
                 for (a.items, b.items) |ia, ib| {
-                    if (!ia.equals(ib)) return false;
+                    if (!ia.equals(&ib)) return false;
                 }
 
                 return true;

@@ -99,13 +99,13 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
     const type_hint: ast.TypeHint = blk: {
         if (self.check(.@"{")) {
             break :blk .{
-                .type = .{
+                .token = .{
                     .type = .null,
                     .line = close_paren.line,
                     .column = close_paren.column,
                     .lexeme = "null",
                 },
-                .order = 0,
+                .type = .null,
             };
         }
 
@@ -501,7 +501,19 @@ fn typeHint(self: *Parser) ?ast.TypeHint {
     }
 
     if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
-        return .{ .type = token, .order = order };
+        return .{
+            .type = .{
+                .type = switch (token.type) {
+                    .string => .string,
+                    .int => .int,
+                    .float => .float,
+                    .bool => .bool,
+                    else => unreachable,
+                },
+                .order = order,
+            },
+            .token = token,
+        };
     }
 
     return null;
