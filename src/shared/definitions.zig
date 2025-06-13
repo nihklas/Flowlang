@@ -50,6 +50,13 @@ pub const FlowType = struct {
     pub fn equals(self: *const FlowType, other: *const FlowType) bool {
         return self.type == other.type and self.order == other.order;
     }
+
+    pub fn format(self: FlowType, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        for (0..self.order) |_| {
+            try writer.writeAll("[]");
+        }
+        try writer.print("{s}", .{@tagName(self.type)});
+    }
 };
 
 pub const FlowValue = union(enum) {
