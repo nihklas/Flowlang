@@ -48,7 +48,12 @@ pub const FlowType = struct {
     }
 
     pub fn equals(self: *const FlowType, other: *const FlowType) bool {
-        return self.type == other.type and self.order == other.order;
+        // a null primitive is "equal" to any other type in the sense of type checking
+        if (self.isPrimitive(.null)) return true;
+        if (other.isPrimitive(.null)) return true;
+
+        if (self.order != other.order) return false;
+        return self.type == .null or other.type == .null or self.type == other.type;
     }
 
     pub fn format(self: FlowType, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {

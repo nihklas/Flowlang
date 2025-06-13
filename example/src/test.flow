@@ -1,4 +1,8 @@
 const hallo = 1;
 
-var test: []int = [1, 2, hallo];
+var test = [hallo];
+
+const other = [2];
+
+print(test == other);
 

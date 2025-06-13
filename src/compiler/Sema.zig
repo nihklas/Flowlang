@@ -210,6 +210,13 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 for (arr) |value| {
                     self.analyseExpr(value);
                 }
+
+                if (arr.len == 0) {
+                    self.putType(expr, .{ .order = 1, .type = .null });
+                } else {
+                    const first_entry = self.getType(arr[0]).?;
+                    self.putType(expr, .{ .order = first_entry.order + 1, .type = first_entry.type });
+                }
             },
         },
         .grouping => {
