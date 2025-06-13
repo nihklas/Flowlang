@@ -1,24 +1,18 @@
 tokens: []const Token,
-alloc: Allocator,
+arena: Allocator,
 current: usize = 0,
 has_error: bool = false,
 
-pub fn createAST(alloc: Allocator, tokens: []const Token) ![]const *Stmt {
+pub fn createAST(arena: Allocator, tokens: []const Token) ![]const *Stmt {
     var parser: Parser = .{
         .tokens = tokens,
-        .alloc = alloc,
+        .arena = arena,
     };
     return try parser.parse();
 }
 
 fn parse(self: *Parser) ![]const *Stmt {
-    var stmt_list: std.ArrayList(*Stmt) = .init(self.alloc);
-    errdefer {
-        for (stmt_list.items) |stmt| {
-            stmt.destroy(self.alloc);
-        }
-        stmt_list.deinit();
-    }
+    var stmt_list: std.ArrayList(*Stmt) = .init(self.arena);
 
     while (!self.isAtEnd()) {
         if (self.declaration()) |stmt| {
@@ -82,7 +76,7 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
 
     try self.consume(.@";", "Expected ';' after variable declaration");
 
-    return Stmt.createVariable(self.alloc, name, type_hint, keyword.type == .@"const", value);
+    return Stmt.createVariable(self.arena, name, type_hint, keyword.type == .@"const", value);
 }
 
 fn funcDeclaration(self: *Parser) ParserError!*Stmt {
@@ -121,13 +115,13 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
 
     const body = try self.block();
 
-    return Stmt.createFunction(self.alloc, name, type_hint, params, body);
+    return Stmt.createFunction(self.arena, name, type_hint, params, body);
 }
 
 fn parameters(self: *Parser) ParserError![]*Stmt {
     if (self.check(.@")")) return &.{};
 
-    var params: std.ArrayList(*Stmt) = .init(self.alloc);
+    var params: std.ArrayList(*Stmt) = .init(self.arena);
     defer params.deinit();
 
     while (!self.check(.@")") and !self.isAtEnd()) {
@@ -156,7 +150,7 @@ fn param(self: *Parser) ?*Stmt {
             return null;
         }
 
-        return Stmt.createVariable(self.alloc, name, type_hint, true, null);
+        return Stmt.createVariable(self.arena, name, type_hint, true, null);
     }
 
     error_reporter.reportError(self.peek(), "Expected parameter name", .{});
@@ -179,30 +173,24 @@ fn statement(self: *Parser) ParserError!*Stmt {
 
     if (self.match(.@"break")) |token| {
         try self.consume(.@";", "Expected ';' after 'break'");
-        return Stmt.createBreak(self.alloc, token);
+        return Stmt.createBreak(self.arena, token);
     }
 
     if (self.match(.@"continue")) |token| {
         try self.consume(.@";", "Expected ';' after 'continue'");
-        return Stmt.createContinue(self.alloc, token);
+        return Stmt.createContinue(self.arena, token);
     }
 
     if (self.match(.@"{")) |_| {
         const stmts = try self.block();
-        return Stmt.createBlock(self.alloc, stmts);
+        return Stmt.createBlock(self.arena, stmts);
     }
 
     return self.expressionStatement();
 }
 
 fn block(self: *Parser) ParserError![]*Stmt {
-    var stmt_list: std.ArrayList(*Stmt) = .init(self.alloc);
-    errdefer {
-        for (stmt_list.items) |stmt| {
-            stmt.destroy(self.alloc);
-        }
-        stmt_list.deinit();
-    }
+    var stmt_list: std.ArrayList(*Stmt) = .init(self.arena);
 
     while (!self.check(.@"}") and !self.isAtEnd()) {
         const stmt = try self.declaration();
@@ -220,9 +208,9 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
         const stmt = try self.statement();
         if (stmt.* == .block) break :blk stmt;
 
-        const stmts = self.alloc.alloc(*Stmt, 1) catch oom();
+        const stmts = self.arena.alloc(*Stmt, 1) catch oom();
         stmts[0] = stmt;
-        break :blk Stmt.createBlock(self.alloc, stmts);
+        break :blk Stmt.createBlock(self.arena, stmts);
     };
 
     const else_branch = blk: {
@@ -231,12 +219,12 @@ fn ifStatement(self: *Parser) ParserError!*Stmt {
         const stmt = try self.statement();
         if (stmt.* == .block) break :blk stmt;
 
-        const stmts = self.alloc.alloc(*Stmt, 1) catch oom();
+        const stmts = self.arena.alloc(*Stmt, 1) catch oom();
         stmts[0] = stmt;
-        break :blk Stmt.createBlock(self.alloc, stmts);
+        break :blk Stmt.createBlock(self.arena, stmts);
     };
 
-    return Stmt.createIf(self.alloc, condition, then, else_branch);
+    return Stmt.createIf(self.arena, condition, then, else_branch);
 }
 
 fn returnStatement(self: *Parser) ParserError!*Stmt {
@@ -244,7 +232,7 @@ fn returnStatement(self: *Parser) ParserError!*Stmt {
     const value = if (!self.check(.@";")) try self.expression() else null;
 
     try self.consume(.@";", "Expected ';' after return statement");
-    return Stmt.createReturn(self.alloc, keyword, value);
+    return Stmt.createReturn(self.arena, keyword, value);
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {
@@ -262,7 +250,7 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
 
     const condition: *Expr = blk: {
         if (self.match(.@";")) |t| {
-            break :blk Expr.createLiteral(self.alloc, t, .{ .bool = true });
+            break :blk Expr.createLiteral(self.arena, t, .{ .bool = true });
         }
 
         const expr = try self.expression();
@@ -281,13 +269,13 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     try self.consume(.@"{", "Expected '{' before loop body");
     const body = try self.block();
 
-    var outer_scope: std.ArrayList(*Stmt) = .init(self.alloc);
+    var outer_scope: std.ArrayList(*Stmt) = .init(self.arena);
 
     if (maybe_initializer) |initializer| {
         outer_scope.append(initializer) catch oom();
     }
 
-    const loop = Stmt.createLoop(self.alloc, condition, body);
+    const loop = Stmt.createLoop(self.arena, condition, body);
     outer_scope.append(loop) catch oom();
 
     if (maybe_increment) |increment| {
@@ -295,16 +283,15 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     }
 
     const outer_scope_stmts = outer_scope.toOwnedSlice() catch oom();
-    return Stmt.createBlock(self.alloc, outer_scope_stmts);
+    return Stmt.createBlock(self.arena, outer_scope_stmts);
 }
 
 fn expressionStatement(self: *Parser) ParserError!*Stmt {
     const expr = try self.expression();
-    errdefer expr.destroy(self.alloc);
 
     try self.consume(.@";", "Expected ';' after expression");
 
-    return Stmt.createExpr(self.alloc, expr);
+    return Stmt.createExpr(self.arena, expr);
 }
 
 fn expression(self: *Parser) ParserError!*Expr {
@@ -318,11 +305,11 @@ fn assignment(self: *Parser) ParserError!*Expr {
 
         var expr = try self.expression();
         if (op.type != .@"=") {
-            const identifier_expr = Expr.createVariable(self.alloc, identifier);
-            expr = Expr.createBinary(self.alloc, identifier_expr, op, expr);
+            const identifier_expr = Expr.createVariable(self.arena, identifier);
+            expr = Expr.createBinary(self.arena, identifier_expr, op, expr);
         }
 
-        return Expr.createAssignment(self.alloc, identifier, expr);
+        return Expr.createAssignment(self.arena, identifier, expr);
     }
 
     return self.concat();
@@ -330,11 +317,10 @@ fn assignment(self: *Parser) ParserError!*Expr {
 
 fn concat(self: *Parser) ParserError!*Expr {
     var lhs = try self.orExpr();
-    errdefer lhs.destroy(self.alloc);
 
     while (self.match(.@".")) |op| {
         const rhs = try self.expression();
-        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+        lhs = Expr.createBinary(self.arena, lhs, op, rhs);
     }
 
     return lhs;
@@ -342,11 +328,10 @@ fn concat(self: *Parser) ParserError!*Expr {
 
 fn orExpr(self: *Parser) ParserError!*Expr {
     var lhs = try self.andExpr();
-    errdefer lhs.destroy(self.alloc);
 
     while (self.match(.@"or")) |op| {
         const rhs = try self.andExpr();
-        lhs = Expr.createLogical(self.alloc, lhs, op, rhs);
+        lhs = Expr.createLogical(self.arena, lhs, op, rhs);
     }
 
     return lhs;
@@ -354,11 +339,10 @@ fn orExpr(self: *Parser) ParserError!*Expr {
 
 fn andExpr(self: *Parser) ParserError!*Expr {
     var lhs = try self.equality();
-    errdefer lhs.destroy(self.alloc);
 
     while (self.match(.@"and")) |op| {
         const rhs = try self.equality();
-        lhs = Expr.createLogical(self.alloc, lhs, op, rhs);
+        lhs = Expr.createLogical(self.arena, lhs, op, rhs);
     }
 
     return lhs;
@@ -366,11 +350,10 @@ fn andExpr(self: *Parser) ParserError!*Expr {
 
 fn equality(self: *Parser) ParserError!*Expr {
     var lhs = try self.comparison();
-    errdefer lhs.destroy(self.alloc);
 
     while (self.matchOneOf(&.{ .@"!=", .@"==" })) |op| {
         const rhs = try self.comparison();
-        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+        lhs = Expr.createBinary(self.arena, lhs, op, rhs);
     }
 
     return lhs;
@@ -378,11 +361,10 @@ fn equality(self: *Parser) ParserError!*Expr {
 
 fn comparison(self: *Parser) ParserError!*Expr {
     var lhs = try self.term();
-    errdefer lhs.destroy(self.alloc);
 
     while (self.matchOneOf(&.{ .@"<", .@"<=", .@">=", .@">" })) |op| {
         const rhs = try self.term();
-        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+        lhs = Expr.createBinary(self.arena, lhs, op, rhs);
     }
 
     return lhs;
@@ -390,11 +372,10 @@ fn comparison(self: *Parser) ParserError!*Expr {
 
 fn term(self: *Parser) ParserError!*Expr {
     var lhs = try self.factor();
-    errdefer lhs.destroy(self.alloc);
 
     while (self.matchOneOf(&.{ .@"+", .@"-" })) |op| {
         const rhs = try self.factor();
-        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+        lhs = Expr.createBinary(self.arena, lhs, op, rhs);
     }
 
     return lhs;
@@ -402,11 +383,10 @@ fn term(self: *Parser) ParserError!*Expr {
 
 fn factor(self: *Parser) ParserError!*Expr {
     var lhs = try self.unary();
-    errdefer lhs.destroy(self.alloc);
 
     while (self.matchOneOf(&.{ .@"*", .@"/", .@"%" })) |op| {
         const rhs = try self.unary();
-        lhs = Expr.createBinary(self.alloc, lhs, op, rhs);
+        lhs = Expr.createBinary(self.arena, lhs, op, rhs);
     }
 
     return lhs;
@@ -415,8 +395,7 @@ fn factor(self: *Parser) ParserError!*Expr {
 fn unary(self: *Parser) ParserError!*Expr {
     if (self.matchOneOf(&.{ .@"-", .@"!" })) |op| {
         const expr = try self.unary();
-        errdefer expr.destroy(self.alloc);
-        return Expr.createUnary(self.alloc, op, expr);
+        return Expr.createUnary(self.arena, op, expr);
     }
 
     return self.call();
@@ -430,7 +409,7 @@ fn call(self: *Parser) ParserError!*Expr {
     }
 
     const params: []*Expr = blk: {
-        var params_list: std.ArrayList(*Expr) = .init(self.alloc);
+        var params_list: std.ArrayList(*Expr) = .init(self.arena);
         defer params_list.deinit();
 
         while (!self.check(.@")") and !self.isAtEnd()) {
@@ -444,13 +423,13 @@ fn call(self: *Parser) ParserError!*Expr {
 
     try self.consume(.@")", "Expected ')' after parameters");
 
-    return Expr.createCall(self.alloc, expr, params);
+    return Expr.createCall(self.arena, expr, params);
 }
 
 fn primary(self: *Parser) ParserError!*Expr {
     if (self.match(.@"[")) |open_bracket| {
         const items: []*Expr = blk: {
-            var items_list: std.ArrayList(*Expr) = .init(self.alloc);
+            var items_list: std.ArrayList(*Expr) = .init(self.arena);
             defer items_list.deinit();
 
             while (!self.check(.@"]") and !self.isAtEnd()) {
@@ -463,26 +442,26 @@ fn primary(self: *Parser) ParserError!*Expr {
         };
         try self.consume(.@"]", "Expected ']' after array literal");
 
-        return Expr.createLiteral(self.alloc, open_bracket, .{ .array = items });
+        return Expr.createLiteral(self.arena, open_bracket, .{ .array = items });
     }
 
     if (self.match(.null)) |token| {
-        return Expr.createLiteral(self.alloc, token, .null);
+        return Expr.createLiteral(self.arena, token, .null);
     }
     if (self.matchOneOf(&.{ .true, .false })) |token| {
-        return Expr.createLiteral(self.alloc, token, .{ .bool = token.type == .true });
+        return Expr.createLiteral(self.arena, token, .{ .bool = token.type == .true });
     }
 
     if (self.match(.number)) |token| {
         if (std.fmt.parseInt(Integer, token.lexeme, 10)) |value| {
-            return Expr.createLiteral(self.alloc, token, .{ .int = value });
+            return Expr.createLiteral(self.arena, token, .{ .int = value });
         } else |err| switch (err) {
             error.InvalidCharacter => {
                 const value = std.fmt.parseFloat(Float, token.lexeme) catch {
                     error_reporter.reportError(token, "Could not convert '{s}' to float", .{token.lexeme});
                     return ParserError.SyntaxError;
                 };
-                return Expr.createLiteral(self.alloc, token, .{ .float = value });
+                return Expr.createLiteral(self.arena, token, .{ .float = value });
             },
             error.Overflow => {
                 error_reporter.reportError(token, "Could not convert '{s}' to int", .{token.lexeme});
@@ -492,20 +471,19 @@ fn primary(self: *Parser) ParserError!*Expr {
     }
 
     if (self.match(.string_literal)) |token| {
-        return Expr.createLiteral(self.alloc, token, .{ .string = token.lexeme });
+        return Expr.createLiteral(self.arena, token, .{ .string = token.lexeme });
     }
 
     if (self.match(.identifier)) |token| {
-        return Expr.createVariable(self.alloc, token);
+        return Expr.createVariable(self.arena, token);
     }
 
     if (self.match(.@"(")) |open_paren| {
         const expr = try self.expression();
-        errdefer expr.destroy(self.alloc);
 
         try self.consume(.@")", "Expected ')' after Expression");
 
-        return Expr.createGrouping(self.alloc, open_paren, expr);
+        return Expr.createGrouping(self.arena, open_paren, expr);
     }
 
     error_reporter.reportError(self.peek(), "UnexpectedToken: Expected Expression, got '{s}'", .{@tagName(self.peek().type)});
@@ -631,11 +609,11 @@ test "Expression Statement with Literals" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(6, program.len);
 
@@ -675,11 +653,11 @@ test "Expression Statement with Grouping" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(2, program.len);
 
@@ -707,11 +685,11 @@ test "Expression Statement with Unary" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(2, program.len);
 
@@ -737,11 +715,11 @@ test "Expression Statement with Factors" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(3, program.len);
 
@@ -804,11 +782,11 @@ test "Expression Statement with Terms" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(3, program.len);
 
@@ -872,11 +850,11 @@ test "Expression Statement with Comparisons" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(4, program.len);
 
@@ -938,11 +916,11 @@ test "Expression Statement with Equality" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(2, program.len);
 
@@ -984,11 +962,11 @@ test "Expression Statement with Logical" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(2, program.len);
 
@@ -1029,11 +1007,11 @@ test "Expression Statement with Assignment" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(1, program.len);
 
@@ -1057,11 +1035,11 @@ test "Block" {
     const tokens = try Scanner.scan(testing_alloc, input);
     defer testing_alloc.free(tokens);
 
-    const program = try createAST(testing_alloc, tokens);
-    defer testing_alloc.free(program);
-    defer for (program) |stmt| {
-        stmt.destroy(testing_alloc);
-    };
+    var testing_arena_state: std.heap.ArenaAllocator = .init(testing_alloc);
+    defer testing_arena_state.deinit();
+    const testing_arena = testing_arena_state.allocator();
+
+    const program = try createAST(testing_arena, tokens);
 
     try testing.expectEqual(1, program.len);
 

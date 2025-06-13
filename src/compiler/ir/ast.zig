@@ -88,30 +88,6 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
-    pub fn destroy(self: *Expr, alloc: Allocator) void {
-        defer alloc.destroy(self);
-        switch (self.*) {
-            .literal, .variable => {},
-            .grouping => |grouping| grouping.expr.destroy(alloc),
-            .unary => |unary| unary.expr.destroy(alloc),
-            .assignment => |assignment| assignment.value.destroy(alloc),
-            .binary => |binary| {
-                binary.lhs.destroy(alloc);
-                binary.rhs.destroy(alloc);
-            },
-            .logical => |logical| {
-                logical.lhs.destroy(alloc);
-                logical.rhs.destroy(alloc);
-            },
-            .call => |call| {
-                call.expr.destroy(alloc);
-                for (call.args) |expr| {
-                    expr.destroy(alloc);
-                }
-            },
-        }
-    }
-
     pub fn getToken(self: *Expr) Token {
         return switch (self.*) {
             .literal => self.literal.token,
@@ -228,179 +204,159 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn destroy(self: *Stmt, alloc: Allocator) void {
-        defer alloc.destroy(self);
-        switch (self.*) {
-            .@"break", .@"continue" => {},
-            .expr => |expr| expr.expr.destroy(alloc),
-            .block => |block| {
-                for (block.stmts) |stmt| {
-                    stmt.destroy(alloc);
-                }
-                alloc.free(block.stmts);
-            },
-            .loop => |loop| {
-                for (loop.body) |body| {
-                    body.destroy(alloc);
-                }
-                alloc.free(loop.body);
-
-                loop.condition.destroy(alloc);
-                if (loop.inc) |inc| {
-                    inc.destroy(alloc);
-                }
-            },
-            .@"if" => |if_stmt| {
-                if_stmt.condition.destroy(alloc);
-                if_stmt.true_branch.destroy(alloc);
-                if (if_stmt.false_branch) |false_branch| {
-                    false_branch.destroy(alloc);
-                }
-            },
-            .@"return" => |return_stmt| if (return_stmt.value) |value| value.destroy(alloc),
-            .variable => |variable| if (variable.value) |value| value.destroy(alloc),
-            .function => |function| {
-                for (function.params) |param| {
-                    param.destroy(alloc);
-                }
-                alloc.free(function.params);
-
-                for (function.body) |stmt| {
-                    stmt.destroy(alloc);
-                }
-                alloc.free(function.body);
-            },
-        }
-    }
-
     fn create(alloc: Allocator) *Stmt {
         return alloc.create(Stmt) catch oom();
     }
 };
 
 test "Expr.createLiteral" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    defer literal.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    _ = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
 }
 
 test "Expr.createGrouping" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 2 }, .{ .float = 12.34 });
-    const grouping = Expr.createGrouping(testing_alloc, .{ .type = .@"(", .lexeme = "(", .line = 1, .column = 1 }, literal);
-    defer grouping.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const literal = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 2 }, .{ .float = 12.34 });
+    _ = Expr.createGrouping(testing_arena_state.allocator(), .{ .type = .@"(", .lexeme = "(", .line = 1, .column = 1 }, literal);
 }
 
 test "Expr.createUnary" {
-    const literal = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const unary = Expr.createUnary(testing_alloc, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, literal);
-    defer unary.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const literal = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    _ = Expr.createUnary(testing_arena_state.allocator(), .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, literal);
 }
 
 test "Expr.createBinary" {
-    const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const binary = Expr.createBinary(testing_alloc, left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
-    defer binary.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const left = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const right = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    _ = Expr.createBinary(testing_arena_state.allocator(), left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
 }
 
 test "Expr.createLogical" {
-    const left = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const binary = Expr.createLogical(testing_alloc, left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
-    defer binary.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const left = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const right = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    _ = Expr.createLogical(testing_arena_state.allocator(), left, .{ .type = .@"-", .lexeme = "-", .line = 1, .column = 1 }, right);
 }
 
 test "Expr.createAssignment" {
-    const right = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const assignment = Expr.createAssignment(testing_alloc, .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 }, right);
-    defer assignment.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const right = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    _ = Expr.createAssignment(testing_arena_state.allocator(), .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 }, right);
 }
 
 test "Expr.createVariable" {
-    const variable = Expr.createVariable(testing_alloc, .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 });
-    defer variable.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    _ = Expr.createVariable(testing_arena_state.allocator(), .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 });
 }
 
 test "Stmt.createExpr" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    defer expr_stmt.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const expr = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    _ = Stmt.createExpr(testing_arena_state.allocator(), expr);
 }
 
 test "Stmt.createBlock" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const expr_stmt = Stmt.createExpr(testing_alloc, expr);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
 
-    const stmts = try testing_alloc.alloc(*Stmt, 1);
+    const expr = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr_stmt = Stmt.createExpr(testing_arena_state.allocator(), expr);
+
+    const stmts = try testing_arena_state.allocator().alloc(*Stmt, 1);
     stmts[0] = expr_stmt;
 
-    const block = Stmt.createBlock(testing_alloc, stmts);
-    defer block.destroy(testing_alloc);
+    _ = Stmt.createBlock(testing_arena_state.allocator(), stmts);
 }
 
 test "Stmt.createReturn" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const return_stmt = Stmt.createReturn(testing_alloc, .{ .type = .@"return", .lexeme = "return", .line = 1, .column = 1 }, expr);
-    defer return_stmt.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const expr = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    _ = Stmt.createReturn(testing_arena_state.allocator(), .{ .type = .@"return", .lexeme = "return", .line = 1, .column = 1 }, expr);
 }
 
 test "Stmt.createLoop" {
-    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    const body = try testing_alloc.alloc(*Stmt, 1);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const condition = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr_stmt = Stmt.createExpr(testing_arena_state.allocator(), expr);
+    const body = try testing_arena_state.allocator().alloc(*Stmt, 1);
     body[0] = expr_stmt;
-    const loop = Stmt.createLoop(testing_alloc, condition, body);
-    defer loop.destroy(testing_alloc);
+    _ = Stmt.createLoop(testing_arena_state.allocator(), condition, body);
 }
 
 test "Stmt.createIf" {
-    const condition = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const expr_stmt = Stmt.createExpr(testing_alloc, expr);
-    const if_stmt = Stmt.createIf(testing_alloc, condition, expr_stmt, null);
-    defer if_stmt.destroy(testing_alloc);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const condition = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr_stmt = Stmt.createExpr(testing_arena_state.allocator(), expr);
+    _ = Stmt.createIf(testing_arena_state.allocator(), condition, expr_stmt, null);
 }
 
 test "Stmt.createVariable" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const loop = Stmt.createVariable(
-        testing_alloc,
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const expr = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    _ = Stmt.createVariable(
+        testing_arena_state.allocator(),
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
         null,
         false,
         expr,
     );
-    defer loop.destroy(testing_alloc);
 }
 
 test "Stmt.createFunction" {
-    const expr = Expr.createLiteral(testing_alloc, .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    const expr_stmt = Stmt.createExpr(testing_alloc, expr);
+    var testing_arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer testing_arena_state.deinit();
+
+    const expr = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
+    const expr_stmt = Stmt.createExpr(testing_arena_state.allocator(), expr);
     const variable = Stmt.createVariable(
-        testing_alloc,
+        testing_arena_state.allocator(),
         .{ .type = .identifier, .lexeme = "param", .line = 1, .column = 1 },
         null,
         true,
         null,
     );
 
-    const params = try testing_alloc.alloc(*Stmt, 1);
+    const params = try testing_arena_state.allocator().alloc(*Stmt, 1);
     params[0] = variable;
-    const body = try testing_alloc.alloc(*Stmt, 1);
+    const body = try testing_arena_state.allocator().alloc(*Stmt, 1);
     body[0] = expr_stmt;
 
-    const function = Stmt.createFunction(
-        testing_alloc,
+    _ = Stmt.createFunction(
+        testing_arena_state.allocator(),
         .{ .type = .identifier, .lexeme = "name", .line = 1, .column = 1 },
         .{ .type = .primitive(.int), .token = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
         params,
         body,
     );
-    defer function.destroy(testing_alloc);
 }
-
-const testing = std.testing;
-const testing_alloc = testing.allocator;
 
 const Token = @import("Token.zig");
 const std = @import("std");
