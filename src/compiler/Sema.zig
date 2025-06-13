@@ -331,6 +331,32 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 }
             }
         },
+        .index => |index| {
+            self.analyseExpr(index.expr);
+            self.analyseExpr(index.index);
+
+            // expr is a non-existent variable
+            if (self.getType(index.expr) == null) return;
+
+            const expr_type = self.getType(index.expr).?;
+
+            if (expr_type.order == 0) {
+                self.pushError(VariableError.IndexOnNonArray, expr.getToken(), .{expr_type});
+                return;
+            }
+
+            // index is a non-existent variable
+            if (self.getType(index.index) == null) return;
+
+            const index_type = self.getType(index.index).?;
+
+            if (!index_type.isPrimitive(.int)) {
+                self.pushError(VariableError.IndexNotAnInt, index.index.getToken(), .{index_type});
+                return;
+            }
+
+            self.putType(expr, .{ .type = expr_type.type, .order = expr_type.order - 1 });
+        },
     }
 }
 
@@ -377,6 +403,8 @@ fn pushError(self: *Sema, comptime err: SemaError, token: Token, args: anytype) 
         VariableError.VariableAlreadyExists => "Variable '{s}' already exists",
         VariableError.ConstantMutation => "Constant '{s}' cannot be re-assigned",
         VariableError.ConstantWithoutValue => "Constant '{s}' must have an initial value",
+        VariableError.IndexOnNonArray => "Can only index on arrays, '{}' given",
+        VariableError.IndexNotAnInt => "Index has to be an integer, '{}' given",
 
         ContextError.NotInALoop => "'{s}' is only allowed inside a loop",
 
@@ -493,6 +521,8 @@ const VariableError = error{
     VariableAlreadyExists,
     ConstantMutation,
     ConstantWithoutValue,
+    IndexOnNonArray,
+    IndexNotAnInt,
 };
 const ContextError = error{
     NotInALoop,

@@ -402,7 +402,7 @@ fn unary(self: *Parser) ParserError!*Expr {
 }
 
 fn call(self: *Parser) ParserError!*Expr {
-    const expr = try self.primary();
+    const expr = try self.index();
 
     if (self.match(.@"(") == null) {
         return expr;
@@ -424,6 +424,18 @@ fn call(self: *Parser) ParserError!*Expr {
     try self.consume(.@")", "Expected ')' after parameters");
 
     return Expr.createCall(self.arena, expr, params);
+}
+
+fn index(self: *Parser) ParserError!*Expr {
+    var expr = try self.primary();
+
+    while (self.match(.@"[")) |bracket| {
+        const index_expr = try self.expression();
+        try self.consume(.@"]", "Expected ']' after index");
+        expr = Expr.createIndex(self.arena, expr, bracket, index_expr);
+    }
+
+    return expr;
 }
 
 fn primary(self: *Parser) ParserError!*Expr {

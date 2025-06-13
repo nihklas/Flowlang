@@ -430,6 +430,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
 
             self.exprs.append(self.alloc, .{ .op = .call, .operands = operands, .type = self.resolveFunctionReturnType(operands[0], call.expr) }) catch oom();
         },
+        .index => @panic("Not supported"),
     }
     return self.exprs.items.len - 1;
 }

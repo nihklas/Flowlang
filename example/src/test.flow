@@ -6,3 +6,5 @@ const other = [2];
 
 print(test == other);
 
+print(test[0]);
+
