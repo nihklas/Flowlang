@@ -135,6 +135,16 @@ fn runWhileSwitch(self: *VM) void {
                 }
                 self.push(.{ .array = arr });
             },
+            .index => {
+                const index = self.pop().int;
+                const array = self.pop().array;
+                if (index < 0) {
+                    std.debug.panic("IndexUnderflow: {d}\n", .{index});
+                } else if (index > array.len) {
+                    std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ index, array.len });
+                }
+                self.push(array[@intCast(index)]);
+            },
             .constant => {
                 const constant = self.constants[self.byte()];
                 self.push(constant);

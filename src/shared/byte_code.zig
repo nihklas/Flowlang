@@ -3,7 +3,9 @@ pub const OpCode = enum(u8) {
     true,
     false,
     null,
+
     array,
+    index,
 
     // constant definitions
     integer,

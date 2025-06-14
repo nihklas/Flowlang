@@ -103,8 +103,8 @@ pub const Node = struct {
             @"and",
             /// Operands: 2 -> expressions
             @"or",
-            /// /// Operands: 2 -> expressions (first array, second index)
-            /// index,
+            /// Operands: 2 -> expressions (first array, second index)
+            index,
             /// Operands: n >= 1 -> 0 = callee, 1..n = arguments
             call,
             /// Operands: 1 -> constant string
@@ -443,7 +443,14 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
 
             self.exprs.append(self.alloc, .{ .op = .call, .operands = operands, .type = self.resolveFunctionReturnType(operands[0], call.expr) }) catch oom();
         },
-        .index => @panic("Not supported"),
+        .index => |index| {
+            const operands = self.arena().alloc(usize, 2) catch oom();
+            operands[0] = self.traverseExpr(index.expr);
+            operands[1] = self.traverseExpr(index.index);
+            const item_type = self.exprs.items[operands[0]].type;
+            std.debug.assert(item_type.order > 0);
+            self.exprs.append(self.alloc, .{ .op = .index, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order - 1 } }) catch oom();
+        },
     }
     return self.exprs.items.len - 1;
 }

@@ -96,14 +96,14 @@ pub const FlowValue = union(enum) {
             .function => try writer.writeAll("<fn>"),
             .builtin_fn => try writer.writeAll("<builtin fn>"),
             .array => {
-                try writer.writeAll("array(");
+                try writer.writeAll("[");
                 for (self.array, 0..) |item, i| {
                     try writer.print("{}", .{item});
                     if (i < self.array.len - 1) {
                         try writer.writeAll(", ");
                     }
                 }
-                try writer.writeAll(")");
+                try writer.writeAll("]");
             },
         }
     }
