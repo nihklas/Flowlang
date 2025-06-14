@@ -348,7 +348,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
 fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
     switch (expr.*) {
         .grouping => return self.traverseExpr(expr.grouping.expr),
-        .literal => {
+        .literal => lit: {
             if (expr.literal.value != .array) {
                 const value = resolveFlowValue(expr);
                 const node_expr: Node.Expr = blk: switch (value) {
@@ -362,14 +362,20 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                     else => unreachable,
                 };
                 self.exprs.append(self.alloc, node_expr) catch oom();
-            } else {
-                const operands = self.arena().alloc(usize, expr.literal.value.array.len) catch oom();
-                for (expr.literal.value.array, 0..) |item, i| {
-                    operands[i] = self.traverseExpr(item);
-                }
-                const item_type = self.exprs.items[operands[0]].type;
-                self.exprs.append(self.alloc, .{ .op = .array, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order + 1 } }) catch oom();
+                break :lit;
             }
+
+            if (expr.literal.value.array.len == 0) {
+                self.exprs.append(self.alloc, .{ .op = .array, .operands = &.{}, .type = .{ .type = .null, .order = 1 } }) catch oom();
+                break :lit;
+            }
+
+            const operands = self.arena().alloc(usize, expr.literal.value.array.len) catch oom();
+            for (expr.literal.value.array, 0..) |item, i| {
+                operands[i] = self.traverseExpr(item);
+            }
+            const item_type = self.exprs.items[operands[0]].type;
+            self.exprs.append(self.alloc, .{ .op = .array, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order + 1 } }) catch oom();
         },
         .binary => |binary| {
             const operands = self.arena().alloc(usize, 2) catch oom();
