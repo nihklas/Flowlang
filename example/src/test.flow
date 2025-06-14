@@ -1,10 +1,9 @@
-const hallo = 1;
+const hallo = 2;
 
-var test = [hallo];
+var test = [hallo, 1, 4, 5];
 
-const other = [2];
+const other = [2, 1, 4, 5];
 
 print(test == other);
 
-print(test[0]);
-
+// print(test[0]);

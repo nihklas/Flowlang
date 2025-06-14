@@ -259,6 +259,13 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.compileExpression(expr.operands[0]);
             self.emitOpcode(.call);
         },
+        .array => {
+            for (expr.operands) |item| {
+                self.compileExpression(item);
+            }
+            self.emitOpcode(.array);
+            self.emitByte(@intCast(expr.operands.len));
+        },
     }
 }
 

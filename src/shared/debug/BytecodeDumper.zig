@@ -46,6 +46,7 @@ fn runDump(self: *Dumper) void {
             .jump_back => self.jumpInstruction("OP_JUMP_BACK", false),
             .jump => self.jumpInstruction("OP_JUMP", true),
             .call => self.printInstruction("OP_CALL", "", .{}),
+            .array => self.printInstruction("OP_ARRAY", "", .{}),
             .get_builtin => self.variableInstruction("OP_GET_BUILTIN"),
             .get_global => self.variableInstruction("OP_GET_GLOBAL"),
             .set_global => self.variableInstruction("OP_SET_GLOBAL"),

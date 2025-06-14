@@ -103,10 +103,14 @@ pub const Node = struct {
             @"and",
             /// Operands: 2 -> expressions
             @"or",
+            /// /// Operands: 2 -> expressions (first array, second index)
+            /// index,
             /// Operands: n >= 1 -> 0 = callee, 1..n = arguments
             call,
             /// Operands: 1 -> constant string
             builtin_fn,
+            /// Operands: n
+            array,
         };
     };
 
@@ -345,18 +349,27 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
     switch (expr.*) {
         .grouping => return self.traverseExpr(expr.grouping.expr),
         .literal => {
-            const value = resolveFlowValue(expr);
-            const node_expr: Node.Expr = blk: switch (value) {
-                .bool => |boolean| .{ .op = if (boolean) .true else .false, .type = .primitive(.bool) },
-                .null => .{ .op = .null, .type = .null },
-                .string, .int, .float => {
-                    const operands = self.arena().alloc(usize, 1) catch oom();
-                    operands[0] = self.resolveConstant(value);
-                    break :blk .{ .op = .literal, .type = self.constants.items[operands[0]].getType(), .operands = operands };
-                },
-                else => unreachable,
-            };
-            self.exprs.append(self.alloc, node_expr) catch oom();
+            if (expr.literal.value != .array) {
+                const value = resolveFlowValue(expr);
+                const node_expr: Node.Expr = blk: switch (value) {
+                    .bool => |boolean| .{ .op = if (boolean) .true else .false, .type = .primitive(.bool) },
+                    .null => .{ .op = .null, .type = .null },
+                    .string, .int, .float => {
+                        const operands = self.arena().alloc(usize, 1) catch oom();
+                        operands[0] = self.resolveConstant(value);
+                        break :blk .{ .op = .literal, .type = self.constants.items[operands[0]].getType(), .operands = operands };
+                    },
+                    else => unreachable,
+                };
+                self.exprs.append(self.alloc, node_expr) catch oom();
+            } else {
+                const operands = self.arena().alloc(usize, expr.literal.value.array.len) catch oom();
+                for (expr.literal.value.array, 0..) |item, i| {
+                    operands[i] = self.traverseExpr(item);
+                }
+                const item_type = self.exprs.items[operands[0]].type;
+                self.exprs.append(self.alloc, .{ .op = .array, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order + 1 } }) catch oom();
+            }
         },
         .binary => |binary| {
             const operands = self.arena().alloc(usize, 2) catch oom();

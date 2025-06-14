@@ -127,6 +127,14 @@ fn runWhileSwitch(self: *VM) void {
             .add_f, .sub_f, .mul_f, .div_f, .mod_f => self.arithmeticFloat(op),
             .concat => self.concat(),
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
+            .array => {
+                const len = self.byte();
+                const arr = self.gc.alloc(FlowValue, len) catch oom();
+                for (0..len) |i| {
+                    arr[len - 1 - i] = self.pop();
+                }
+                self.push(.{ .array = arr });
+            },
             .constant => {
                 const constant = self.constants[self.byte()];
                 self.push(constant);
