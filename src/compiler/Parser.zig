@@ -299,20 +299,13 @@ fn expression(self: *Parser) ParserError!*Expr {
 }
 
 fn assignment(self: *Parser) ParserError!*Expr {
-    if (self.isAssignment()) {
-        const identifier = self.match(.identifier).?;
-        const op = self.advance();
-
-        var expr = try self.expression();
-        if (op.type != .@"=") {
-            const identifier_expr = Expr.createVariable(self.arena, identifier);
-            expr = Expr.createBinary(self.arena, identifier_expr, op, expr);
-        }
-
-        return Expr.createAssignment(self.arena, identifier, expr);
+    const lhs = try self.concat();
+    if (self.match(.@"=")) |_| {
+        const expr = try self.expression();
+        return Expr.createAssignment(self.arena, lhs, expr);
     }
 
-    return self.concat();
+    return lhs;
 }
 
 fn concat(self: *Parser) ParserError!*Expr {

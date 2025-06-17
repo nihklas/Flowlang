@@ -83,6 +83,8 @@ fn compile(gpa: Allocator, cli_opts: cli.Options) !?[]const u8 {
     const bytecode = compiler.compile();
 
     if (cli_opts.dump_bc) {
+        defer gpa.free(bytecode);
+
         var buf: std.ArrayListUnmanaged(u8) = .empty;
         defer buf.deinit(gpa);
 

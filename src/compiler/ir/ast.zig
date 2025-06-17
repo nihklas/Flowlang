@@ -20,7 +20,7 @@ pub const Expr = union(enum) {
     unary: struct { op: Token, expr: *Expr },
     binary: struct { lhs: *Expr, op: Token, rhs: *Expr },
     logical: struct { lhs: *Expr, op: Token, rhs: *Expr },
-    assignment: struct { name: Token, value: *Expr },
+    assignment: struct { variable: *Expr, value: *Expr },
     variable: struct { name: Token },
     call: struct { expr: *Expr, args: []*Expr },
     index: struct { expr: *Expr, bracket: Token, index: *Expr },
@@ -65,10 +65,10 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
-    pub fn createAssignment(alloc: Allocator, name: Token, expr: *Expr) *Expr {
+    pub fn createAssignment(alloc: Allocator, variable: *Expr, expr: *Expr) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
-            .assignment = .{ .name = name, .value = expr },
+            .assignment = .{ .variable = variable, .value = expr },
         };
         return new_expr;
     }
@@ -108,7 +108,7 @@ pub const Expr = union(enum) {
             .unary => self.unary.op,
             .binary => self.binary.op,
             .logical => self.logical.op,
-            .assignment => self.assignment.name,
+            .assignment => self.assignment.variable.getToken(),
             .variable => self.variable.name,
             .call => self.call.expr.getToken(),
             .index => self.index.bracket,

@@ -1,11 +1,5 @@
-const hallo = 2;
+var test = [0, 1, 2, 3];
 
-var test = [hallo, 1, 4, 5];
-
-const other = [2, 1, 4, 5];
-
-print(test == other);
+test[0] = 4;
 
 print(test[0]);
-
-print(test);

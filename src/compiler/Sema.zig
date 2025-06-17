@@ -281,18 +281,45 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
         .assignment => |assignment| {
             self.analyseExpr(assignment.value);
 
-            if (self.findVariable(assignment.name)) |existing_variable| {
-                if (!existing_variable.type.equals(&self.getType(assignment.value).?)) {
-                    self.pushError(
-                        TypeError.UnexpectedType,
-                        assignment.value.getToken(),
-                        .{ existing_variable.type, self.getType(assignment.value).? },
-                    );
-                } else if (existing_variable.constant) {
-                    self.pushError(VariableError.ConstantMutation, assignment.name, .{assignment.name.lexeme});
-                }
-            } else {
-                self.pushError(VariableError.UnknownVariable, assignment.name, .{assignment.name.lexeme});
+            var order_diff: u8 = 0;
+            outer: switch (assignment.variable.*) {
+                .variable => |variable| {
+                    if (self.findVariable(variable.name)) |existing_variable| {
+                        const value_type = self.getType(assignment.value).?;
+                        const expected_type: FlowType = .{ .type = existing_variable.type.type, .order = existing_variable.type.order - order_diff };
+                        if (!value_type.equals(&expected_type)) {
+                            self.pushError(
+                                TypeError.UnexpectedType,
+                                assignment.value.getToken(),
+                                .{ expected_type, value_type },
+                            );
+                        } else if (existing_variable.constant) {
+                            self.pushError(VariableError.ConstantMutation, variable.name, .{variable.name.lexeme});
+                        }
+                    } else {
+                        self.pushError(VariableError.UnknownVariable, variable.name, .{variable.name.lexeme});
+                    }
+                },
+                .index => |index| {
+                    order_diff = 1;
+                    self.analyseExpr(assignment.variable);
+                    var current_index_expr = index.expr;
+                    inner: switch (current_index_expr.*) {
+                        .variable => continue :outer current_index_expr.*,
+                        .index => {
+                            order_diff += 1;
+                            current_index_expr = index.expr.index.expr;
+                            continue :inner current_index_expr.*;
+                        },
+                        // NOTE: this case will be checked by the call to analyseExpr(assignment.variable)
+                        else => {},
+                    }
+                },
+                else => self.pushError(
+                    TypeError.NotAssignable,
+                    expr.getToken(),
+                    .{ assignment.variable.getToken().lexeme, @tagName(assignment.variable.*) },
+                ),
             }
 
             self.putType(expr, self.getType(assignment.value).?);
@@ -396,6 +423,7 @@ fn pushError(self: *Sema, comptime err: SemaError, token: Token, args: anytype) 
         TypeError.ArithmeticWithUnequalTypes => "Operands of Arithmetic Operations have to be of the same numeric type, got '{}' and '{}'",
         TypeError.NegateWithNonNumeric => "Operand of Negate Operations has to be either int or float, got '{}'",
         TypeError.NotACallable => "'{s}' is not a callable",
+        TypeError.NotAssignable => "'{s}' is not assignable. Can only assign to Variables, got '{s}'",
         TypeError.UnexpectedType => "Unexpected type, expected '{}', got '{}'",
 
         VariableError.UnresolvableType => "Type of Variable could not be resolved. Consider adding an explicit Typehint",
@@ -513,6 +541,7 @@ const TypeError = error{
     ArithmeticWithUnequalTypes,
     NegateWithNonNumeric,
     NotACallable,
+    NotAssignable,
     UnexpectedType,
 };
 const VariableError = error{
