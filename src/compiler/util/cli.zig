@@ -1,9 +1,11 @@
 pub const Options = struct {
     source: []const u8,
     output: []const u8,
+    check: bool = false,
     dump_bc: bool = false,
     dump_ast: bool = false,
     dump_fir: bool = false,
+    run: bool = false,
 };
 
 pub fn parse() Options {
@@ -40,6 +42,10 @@ pub fn parse() Options {
             options.dump_ast = true;
         } else if (std.mem.eql(u8, argument, "--dump-fir")) {
             options.dump_fir = true;
+        } else if (std.mem.eql(u8, argument, "--check")) {
+            options.check = true;
+        } else if (std.mem.eql(u8, argument, "--run")) {
+            options.run = true;
         } else if (std.mem.eql(u8, argument, "--help")) {
             printHelpAndQuit(0);
         }
@@ -66,6 +72,8 @@ pub fn printHelpAndQuit(exit_code: u8) noreturn {
         \\                            instead of building an executable
         \\        --dump-fir          Dump the resulting FIR (Flowlang Intermediate Representation)
         \\                            to the output File instead of building an executable
+        \\        --check             Go through Semantic Analysis and quit
+        \\        --run               Run the compiled code directly
         \\        --help              Print this message
         \\
         \\    Arguments

@@ -1,3 +1,13 @@
+pub fn run(gpa: Allocator, code: []const u8) !void {
+    var gc: GC = .init(gpa);
+    defer gc.deinit();
+
+    var vm: VM = .init(gpa, gc.allocator(), code);
+    defer vm.deinit();
+
+    vm.run();
+}
+
 pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const gpa, const is_debug = switch (@import("builtin").mode) {
@@ -11,13 +21,7 @@ pub fn main() !void {
     const code = try readByteCode(gpa);
     defer gpa.free(code);
 
-    var gc: GC = .init(gpa);
-    defer gc.deinit();
-
-    var vm: VM = .init(gpa, gc.allocator(), code);
-    defer vm.deinit();
-
-    vm.run();
+    try run(gpa, code);
 }
 
 fn readByteCode(alloc: std.mem.Allocator) ![]const u8 {
@@ -53,3 +57,4 @@ fn readByteCode(alloc: std.mem.Allocator) ![]const u8 {
 const std = @import("std");
 const VM = @import("VM.zig");
 const GC = @import("GC.zig");
+const Allocator = std.mem.Allocator;

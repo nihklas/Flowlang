@@ -8,11 +8,30 @@ pub fn main() !void {
         _ = debug_allocator.deinit();
     };
 
+    const cli_opts = cli.parse();
+    const code = try compile(gpa, cli_opts) orelse return;
+    defer gpa.free(code);
+
+    if (cli_opts.run) {
+        return runtime.run(gpa, code);
+    }
+
+    const file = try std.fs.cwd().createFile(cli_opts.output, .{});
+    defer file.close();
+
+    try file.chmod(0o755);
+
+    try file.writeAll(vm);
+    try file.writeAll(code);
+
+    const bytecode_len: [8]u8 = @bitCast(code.len);
+    try file.writeAll(&bytecode_len);
+}
+
+fn compile(gpa: Allocator, cli_opts: cli.Options) !?[]const u8 {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-
-    const cli_opts = cli.parse();
 
     const flow_source = try readFile(gpa, cli_opts.source);
     defer gpa.free(flow_source);
@@ -30,12 +49,16 @@ pub fn main() !void {
         try writer.writeByte('\n');
 
         try dump(buf.items);
-        return;
+        return null;
     }
 
     var sema: Sema = .init(gpa, ast);
     defer sema.deinit();
     try sema.analyse();
+
+    if (cli_opts.check) {
+        return null;
+    }
 
     // TODO: Optimisatios
     // - Dead Code Elimination
@@ -53,12 +76,11 @@ pub fn main() !void {
         try writer.writeByte('\n');
 
         try dump(buf.items);
-        return;
+        return null;
     }
 
     var compiler: Compiler = .init(gpa, &fir);
     const bytecode = compiler.compile();
-    defer gpa.free(bytecode);
 
     if (cli_opts.dump_bc) {
         var buf: std.ArrayListUnmanaged(u8) = .empty;
@@ -68,19 +90,10 @@ pub fn main() !void {
         BytecodeDumper.dump(writer.any(), bytecode);
 
         try dump(buf.items);
-        return;
+        return null;
     }
 
-    const file = try std.fs.cwd().createFile(cli_opts.output, .{});
-    defer file.close();
-
-    try file.chmod(0o755);
-
-    try file.writeAll(vm);
-    try file.writeAll(bytecode);
-
-    const bytecode_len: [8]u8 = @bitCast(bytecode.len);
-    try file.writeAll(&bytecode_len);
+    return bytecode;
 }
 
 fn dump(output: []const u8) !void {
@@ -105,7 +118,9 @@ const FIR = @import("ir/FIR.zig");
 
 const cli = @import("util/cli.zig");
 
-const vm = @embedFile("runtime");
+const vm = @embedFile("runtime_bin");
+
+const runtime = @import("runtime");
 
 const ASTDumper = @import("debug/ASTDumper.zig");
 const FIRDumper = @import("debug/FIRDumper.zig");

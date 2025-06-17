@@ -104,27 +104,24 @@ pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerO
         .root_source_file = flow_builder.path("src/runtime/main.zig"),
         .target = compile_options.target,
         .optimize = compile_options.optimize,
-        .imports = &.{
-            .{ .name = "debug_options", .module = debug_options.createModule() },
-        },
     });
+    runtime_mod.addImport("debug_options", debug_options.createModule());
+
     const runtime = flow_builder.addExecutable(.{
         .name = "runtime",
         .root_module = runtime_mod,
     });
-    // NOTE: This seems to be needed to enable the .getEmittedBin() call
-    flow_builder.installArtifact(runtime);
 
     // Compiler
     const compiler_mod = flow_builder.addModule("compiler", .{
         .root_source_file = flow_builder.path("src/compiler/main.zig"),
         .target = compile_options.target,
         .optimize = compile_options.optimize,
-        .imports = &.{
-            .{ .name = "debug_options", .module = debug_options.createModule() },
-        },
     });
-    compiler_mod.addAnonymousImport("runtime", .{ .root_source_file = runtime.getEmittedBin() });
+    compiler_mod.addAnonymousImport("runtime_bin", .{ .root_source_file = runtime.getEmittedBin() });
+    compiler_mod.addImport("debug_options", debug_options.createModule());
+    compiler_mod.addImport("runtime", runtime_mod);
+
     const compiler = flow_builder.addExecutable(.{
         .name = "compiler",
         .root_module = compiler_mod,
