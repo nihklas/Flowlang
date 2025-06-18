@@ -103,3 +103,21 @@ func addAndPrint(a: int, b: int) {
     const result = a + b;
     print(result);
 }
+
+var test: []int;
+
+for var i = 0; i < 10; i += 1 {
+    test[] = i;
+}
+
+for var i = 0; i < len(test); i += 1 {
+    print(test[i]);
+}
+
+test = [1, 2, 3];
+print(test);
+
+// Even an array type can be inferred
+const anotherOne = [true, false, true];
+print(anotherOne);
+

@@ -10,9 +10,7 @@ fn _print(_: Allocator, args: []FlowValue) FlowValue {
 }
 
 pub const readline: BuiltinFunction = .{
-    .arg_types = &.{
-        .{ .type = .string, .order = 0 },
-    },
+    .arg_types = &.{.primitive(.string)},
     .ret_type = .{ .type = .string, .order = 0 },
     .function = &_readline,
 };
@@ -28,9 +26,7 @@ fn _readline(gc_alloc: Allocator, args: []FlowValue) FlowValue {
 }
 
 pub const readfile: BuiltinFunction = .{
-    .arg_types = &.{
-        .{ .type = .string, .order = 0 },
-    },
+    .arg_types = &.{.primitive(.string)},
     .ret_type = .{ .type = .string, .order = 0 },
     .function = &_readfile,
 };
@@ -49,10 +45,7 @@ fn _readfile(gc_alloc: Allocator, args: []FlowValue) FlowValue {
 }
 
 pub const writefile: BuiltinFunction = .{
-    .arg_types = &.{
-        .{ .type = .string, .order = 0 },
-        .{ .type = .string, .order = 0 },
-    },
+    .arg_types = &.{ .primitive(.string), .primitive(.string) },
     .ret_type = .null,
     .function = &_writefile,
 };
@@ -79,6 +72,21 @@ pub const time: BuiltinFunction = .{
 
 fn _time(_: Allocator, _: []FlowValue) FlowValue {
     return .{ .int = std.time.milliTimestamp() };
+}
+
+pub const len: BuiltinFunction = .{
+    .arg_types = &.{.null},
+    .ret_type = .{ .type = .int, .order = 0 },
+    .function = &_len,
+};
+
+fn _len(_: Allocator, args: []FlowValue) FlowValue {
+    std.debug.assert(args.len == 1);
+    return switch (args[0]) {
+        .array => |array| .{ .int = @intCast(array.len) },
+        .string => |string| .{ .int = @intCast(string.len) },
+        else => panic("Invalid argument type passed to len(), expected string or array, got '{s}'", .{@tagName(args[0])}),
+    };
 }
 
 const BuiltinFunction = @import("shared").definitions.BuiltinFunction;

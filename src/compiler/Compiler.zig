@@ -188,6 +188,9 @@ fn compileGlobal(self: *Compiler, var_idx: usize) void {
         return;
     } else if (global.expr) |expr| {
         self.compileExpression(expr);
+    } else if (global.type.order > 0) {
+        self.emitOpcode(.array);
+        self.emitByte(0);
     } else {
         self.emitOpcode(.null);
     }
@@ -205,6 +208,9 @@ fn compileLocal(self: *Compiler, var_idx: usize) void {
         @panic("Local functions not yet allowed");
     } else if (local.expr) |expr| {
         self.compileExpression(expr);
+    } else if (local.type.order > 0) {
+        self.emitOpcode(.array);
+        self.emitByte(0);
     } else {
         self.emitOpcode(.null);
     }

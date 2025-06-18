@@ -139,6 +139,11 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 .extra_idx = extra_idx,
             };
 
+            if (variable.type.isNull()) {
+                self.pushError(VariableError.UnresolvableType, var_stmt.name, .{});
+                return;
+            }
+
             if (var_stmt.value) |value| {
                 if (!self.getType(value).?.equals(&variable.type)) {
                     self.pushError(TypeError.UnexpectedType, value.getToken(), .{ variable.type, self.getType(value).? });

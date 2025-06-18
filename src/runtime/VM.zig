@@ -158,6 +158,7 @@ fn runWhileSwitch(self: *VM) void {
                     array.array.items[array.array.len] = value;
                     array.array.len += 1;
                 } else {
+                    if (array.array.cap == 0) array.array.cap = 1;
                     const new_values = self.gc.alloc(FlowValue, array.array.cap * 2) catch oom();
                     @memcpy(new_values[0..array.array.len], array.array.items[0..array.array.len]);
                     new_values[array.array.len] = value;
