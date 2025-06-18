@@ -140,6 +140,10 @@ fn runWhileSwitch(self: *VM) void {
                 arr.len = len;
                 self.push(.{ .array = arr });
             },
+            .clone => {
+                const value = self.pop();
+                self.push(value.clone(self.gc));
+            },
             .index => {
                 const index = self.pop().int;
                 const array = self.pop().array;

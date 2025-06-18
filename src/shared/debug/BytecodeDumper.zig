@@ -53,6 +53,7 @@ fn runDump(self: *Dumper) void {
             .jump => self.jumpInstruction("OP_JUMP", true),
             .call => self.printInstruction("OP_CALL", "", .{}),
             .array => self.printInstruction("OP_ARRAY", "", .{}),
+            .clone => self.printInstruction("OP_CLONE", "", .{}),
             .append => self.printInstruction("OP_APPEND", "", .{}),
             .index => self.printInstruction("OP_INDEX", "", .{}),
             .get_builtin => self.variableInstruction("OP_GET_BUILTIN"),

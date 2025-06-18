@@ -188,6 +188,9 @@ fn compileGlobal(self: *Compiler, var_idx: usize) void {
         return;
     } else if (global.expr) |expr| {
         self.compileExpression(expr);
+        if (self.shouldClone(expr)) {
+            self.emitOpcode(.clone);
+        }
     } else if (global.type.order > 0) {
         self.emitOpcode(.array);
         self.emitByte(0);
@@ -208,6 +211,9 @@ fn compileLocal(self: *Compiler, var_idx: usize) void {
         @panic("Local functions not yet allowed");
     } else if (local.expr) |expr| {
         self.compileExpression(expr);
+        if (self.shouldClone(expr)) {
+            self.emitOpcode(.clone);
+        }
     } else if (local.type.order > 0) {
         self.emitOpcode(.array);
         self.emitByte(0);
@@ -249,12 +255,18 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
         },
         .assign_global => {
             self.compileExpression(expr.operands[0]);
+            if (self.shouldClone(expr.operands[0])) {
+                self.emitOpcode(.clone);
+            }
             self.emitOpcode(.set_global);
             self.emitByte(@intCast(expr.operands[1]));
         },
         .assign_local => {
             const local = self.fir.locals.items[expr.operands[1]];
             self.compileExpression(expr.operands[0]);
+            if (self.shouldClone(expr.operands[0])) {
+                self.emitOpcode(.clone);
+            }
             self.emitOpcode(.set_local);
             self.emitByte(@intCast(local.stack_idx));
         },
@@ -417,6 +429,11 @@ fn emitOpcode(self: *Compiler, op: OpCode) void {
 
 fn emitByte(self: *Compiler, byte: u8) void {
     self.byte_code.append(self.alloc, byte) catch oom();
+}
+
+fn shouldClone(self: *Compiler, expr_idx: usize) bool {
+    const expr = self.fir.exprs.items[expr_idx];
+    return (expr.op == .local or expr.op == .global) and expr.type.order > 0;
 }
 
 const Compiler = @This();

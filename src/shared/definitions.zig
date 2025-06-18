@@ -75,45 +75,6 @@ pub const FlowValue = union(enum) {
     function: FlowFunction,
     array: *FlowArray,
 
-    pub fn getType(self: *const FlowValue) FlowType {
-        return switch (self.*) {
-            .null => .null,
-            .bool => .primitive(.bool),
-            .int => .primitive(.int),
-            .float => .primitive(.float),
-            .string => .primitive(.string),
-            .builtin_fn => .primitive(.builtin_fn),
-            .function => .primitive(.function),
-            .array => {
-                if (self.array.len == 0) return .{ .type = .null, .order = 1 };
-                const item_type = self.array.items[0].getType();
-                return .{ .type = item_type.type, .order = item_type.order + 1 };
-            },
-        };
-    }
-
-    pub fn format(self: FlowValue, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        switch (self) {
-            .null => try writer.writeAll("null"),
-            .bool => try writer.print("{}", .{self.bool}),
-            .int => try writer.print("{d}", .{self.int}),
-            .float => try writer.print("{d}", .{self.float}),
-            .string => try writer.print("{s}", .{self.string}),
-            .function => try writer.writeAll("<fn>"),
-            .builtin_fn => try writer.writeAll("<builtin fn>"),
-            .array => {
-                try writer.writeAll("[");
-                for (self.array.items[0..self.array.len], 0..) |item, i| {
-                    try writer.print("{}", .{item});
-                    if (i < self.array.len - 1) {
-                        try writer.writeAll(", ");
-                    }
-                }
-                try writer.writeAll("]");
-            },
-        }
-    }
-
     pub fn equals(self: *const FlowValue, other: *const FlowValue) bool {
         if (std.meta.activeTag(self.*) != std.meta.activeTag(other.*)) return false;
 
@@ -161,6 +122,62 @@ pub const FlowValue = union(enum) {
             .builtin_fn, .function => true,
         };
     }
+
+    pub fn clone(self: *const FlowValue, gc: std.mem.Allocator) FlowValue {
+        return switch (self.*) {
+            .null, .bool, .int, .float, .builtin_fn, .function => self.*,
+            .string => .{ .string = gc.dupe(u8, self.string) catch oom() },
+            .array => {
+                const new_arr = gc.alloc(FlowValue, self.array.cap) catch oom();
+                @memcpy(new_arr[0..self.array.len], self.array.items[0..self.array.len]);
+                const array = gc.create(FlowArray) catch oom();
+                array.cap = self.array.cap;
+                array.len = self.array.len;
+                array.items = new_arr.ptr;
+                return .{ .array = array };
+            },
+        };
+    }
+
+    pub fn getType(self: *const FlowValue) FlowType {
+        return switch (self.*) {
+            .null => .null,
+            .bool => .primitive(.bool),
+            .int => .primitive(.int),
+            .float => .primitive(.float),
+            .string => .primitive(.string),
+            .builtin_fn => .primitive(.builtin_fn),
+            .function => .primitive(.function),
+            .array => {
+                if (self.array.len == 0) return .{ .type = .null, .order = 1 };
+                const item_type = self.array.items[0].getType();
+                return .{ .type = item_type.type, .order = item_type.order + 1 };
+            },
+        };
+    }
+
+    pub fn format(self: FlowValue, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (self) {
+            .null => try writer.writeAll("null"),
+            .bool => try writer.print("{}", .{self.bool}),
+            .int => try writer.print("{d}", .{self.int}),
+            .float => try writer.print("{d}", .{self.float}),
+            .string => try writer.print("{s}", .{self.string}),
+            .function => try writer.writeAll("<fn>"),
+            .builtin_fn => try writer.writeAll("<builtin fn>"),
+            .array => {
+                try writer.writeAll("[");
+                for (self.array.items[0..self.array.len], 0..) |item, i| {
+                    try writer.print("{}", .{item});
+                    if (i < self.array.len - 1) {
+                        try writer.writeAll(", ");
+                    }
+                }
+                try writer.writeAll("]");
+            },
+        }
+    }
 };
 
 const std = @import("std");
+const oom = @import("root.zig").oom;

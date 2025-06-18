@@ -409,6 +409,18 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 return;
             }
 
+            s: switch (append.variable.*) {
+                .variable => |variable| {
+                    // NOTE: findVariable should never return null, because we check for existing
+                    // variable already above
+                    if (self.findVariable(variable.name).?.constant) {
+                        self.pushError(VariableError.ConstantMutation, variable.name, .{variable.name.lexeme});
+                    }
+                },
+                .index => |index| continue :s index.expr.*,
+                else => {},
+            }
+
             // NOTE: value is a non-existent variable
             if (self.getType(append.value) == null) return;
 
@@ -466,7 +478,7 @@ fn pushError(self: *Sema, comptime err: SemaError, token: Token, args: anytype) 
         VariableError.UnresolvableType => "Type of Variable could not be resolved. Consider adding an explicit Typehint",
         VariableError.UnknownVariable => "Variable '{s}' is not defined",
         VariableError.VariableAlreadyExists => "Variable '{s}' already exists",
-        VariableError.ConstantMutation => "Constant '{s}' cannot be re-assigned",
+        VariableError.ConstantMutation => "Constant '{s}' cannot be modified",
         VariableError.ConstantWithoutValue => "Constant '{s}' must have an initial value",
         VariableError.IndexOnNonArray => "Can only index on arrays, got '{}'",
         VariableError.IndexNotAnInt => "Index has to be an integer, got '{}'",
