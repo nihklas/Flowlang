@@ -300,8 +300,11 @@ fn expression(self: *Parser) ParserError!*Expr {
 
 fn assignment(self: *Parser) ParserError!*Expr {
     const lhs = try self.concat();
-    if (self.match(.@"=")) |_| {
-        const expr = try self.expression();
+    if (self.matchOneOf(&.{ .@"=", .@".=", .@"+=", .@"-=", .@"*=", .@"/=", .@"%=" })) |op| {
+        var expr = try self.expression();
+        if (op.type != .@"=") {
+            expr = Expr.createBinary(self.arena, lhs, op, expr);
+        }
         return Expr.createAssignment(self.arena, lhs, expr);
     }
 
@@ -565,16 +568,6 @@ fn check(self: *Parser, expected: Token.Type) bool {
 fn checkNext(self: *Parser, expected: Token.Type) bool {
     if (self.isAtEnd()) return false;
     return self.tokens[self.current + 1].type == expected;
-}
-
-fn isAssignment(self: *Parser) bool {
-    return self.check(.identifier) and (self.checkNext(.@"=") or
-        self.checkNext(.@".=") or
-        self.checkNext(.@"+=") or
-        self.checkNext(.@"-=") or
-        self.checkNext(.@"*=") or
-        self.checkNext(.@"/=") or
-        self.checkNext(.@"%="));
 }
 
 fn advance(self: *Parser) Token {
