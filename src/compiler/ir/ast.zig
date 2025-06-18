@@ -279,7 +279,8 @@ test "Expr.createAssignment" {
     defer testing_arena_state.deinit();
 
     const right = Expr.createLiteral(testing_arena_state.allocator(), .{ .type = .number, .lexeme = "12.34", .line = 1, .column = 1 }, .{ .float = 12.34 });
-    _ = Expr.createAssignment(testing_arena_state.allocator(), .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 }, right);
+    const left = Expr.createVariable(testing_arena_state.allocator(), .{ .type = .identifier, .lexeme = "number", .line = 1, .column = 1 });
+    _ = Expr.createAssignment(testing_arena_state.allocator(), left, right);
 }
 
 test "Expr.createVariable" {

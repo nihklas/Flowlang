@@ -1032,7 +1032,8 @@ test "Expression Statement with Assignment" {
     try testing.expect(program[0].* == .expr);
     try testing.expect(program[0].expr.expr.* == .assignment);
 
-    try testing.expectEqualStrings("name", program[0].expr.expr.assignment.name.lexeme);
+    try testing.expect(program[0].expr.expr.assignment.variable.* == .variable);
+    try testing.expectEqualStrings("name", program[0].expr.expr.assignment.variable.variable.name.lexeme);
     try testing.expect(program[0].expr.expr.assignment.value.* == .literal);
     try testing.expect(program[0].expr.expr.assignment.value.literal.value == .string);
     try testing.expectEqualStrings("Hello", program[0].expr.expr.assignment.value.literal.value.string);
