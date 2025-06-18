@@ -516,7 +516,7 @@ fn primary(self: *Parser) ParserError!*Expr {
 
 fn typeHint(self: *Parser) ?ast.TypeHint {
     var order: u8 = 0;
-    while (self.match(.@"[") != null and self.match(.@"]") != null) {
+    while (self.match(.@"[]") != null) {
         order += 1;
     }
 
