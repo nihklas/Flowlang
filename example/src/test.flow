@@ -1,5 +1,2 @@
-var test = [1, 2, 3];
-const diff = test;
-test[] = 4;
-print(test);
-print(diff);
+const test = [1, "2", 4.0, true];
+

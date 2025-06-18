@@ -216,6 +216,13 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 } else {
                     const first_entry = self.getType(arr[0]).?;
                     self.putType(expr, .{ .order = first_entry.order + 1, .type = first_entry.type });
+
+                    for (1..arr.len) |idx| {
+                        const value_type = self.getType(arr[idx]).?;
+                        if (!first_entry.equals(&value_type)) {
+                            self.pushError(TypeError.UnexpectedType, arr[idx].getToken(), .{ first_entry, value_type });
+                        }
+                    }
                 }
             },
         },
