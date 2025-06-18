@@ -1,5 +1,7 @@
 pub fn main() !void {
-    const alloc = std.heap.smp_allocator;
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const alloc = debug_allocator.allocator();
+    defer _ = debug_allocator.deinit();
 
     var arg_iter = std.process.args();
     _ = arg_iter.skip();
