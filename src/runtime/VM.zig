@@ -129,11 +129,12 @@ fn runWhileSwitch(self: *VM) void {
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .array => {
                 const len = self.byte();
+                // TODO: Alloc with a multiple of 2
                 const arr = self.gc.alloc(FlowValue, len) catch oom();
                 for (0..len) |i| {
                     arr[len - 1 - i] = self.pop();
                 }
-                self.push(.{ .array = arr });
+                self.push(.{ .array = .{ .items = arr.ptr, .len = len, .cap = arr.len } });
             },
             .index => {
                 const index = self.pop().int;
@@ -143,7 +144,7 @@ fn runWhileSwitch(self: *VM) void {
                 } else if (index > array.len) {
                     std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ index, array.len });
                 }
-                self.push(array[@intCast(index)]);
+                self.push(array.items[@intCast(index)]);
             },
             .constant => {
                 const constant = self.constants[self.byte()];
@@ -202,11 +203,11 @@ fn runWhileSwitch(self: *VM) void {
                     } else if (idx > array.array.len) {
                         std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
                     }
-                    array = array.array[@intCast(idx)];
+                    array = array.array.items[@intCast(idx)];
                 }
 
                 const last_idx = self.pop().int;
-                array.array[@intCast(last_idx)] = self.value_stack.at(0);
+                array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
             },
             .get_local => {
                 const idx = self.byte();
@@ -232,11 +233,11 @@ fn runWhileSwitch(self: *VM) void {
                     } else if (idx > array.array.len) {
                         std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
                     }
-                    array = array.array[@intCast(idx)];
+                    array = array.array.items[@intCast(idx)];
                 }
 
                 const last_idx = self.pop().int;
-                array.array[@intCast(last_idx)] = self.value_stack.at(0);
+                array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
             },
             .jump => {
                 // For some reason we cannot inline this

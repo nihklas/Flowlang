@@ -14,6 +14,12 @@ pub const FlowFunction = struct {
     start_ip: usize,
 };
 
+pub const FlowArray = struct {
+    items: [*]FlowValue,
+    cap: usize,
+    len: usize,
+};
+
 pub const FlowPrimitive = enum {
     null,
     bool,
@@ -67,7 +73,7 @@ pub const FlowValue = union(enum) {
     string: []const u8,
     builtin_fn: BuiltinFunction,
     function: FlowFunction,
-    array: []FlowValue,
+    array: FlowArray,
 
     pub fn getType(self: *const FlowValue) FlowType {
         return switch (self.*) {
@@ -80,7 +86,7 @@ pub const FlowValue = union(enum) {
             .function => .primitive(.function),
             .array => {
                 if (self.array.len == 0) return .{ .type = .null, .order = 1 };
-                const item_type = self.array[0].getType();
+                const item_type = self.array.items[0].getType();
                 return .{ .type = item_type.type, .order = item_type.order + 1 };
             },
         };
@@ -97,7 +103,7 @@ pub const FlowValue = union(enum) {
             .builtin_fn => try writer.writeAll("<builtin fn>"),
             .array => {
                 try writer.writeAll("[");
-                for (self.array, 0..) |item, i| {
+                for (self.array.items[0..self.array.len], 0..) |item, i| {
                     try writer.print("{}", .{item});
                     if (i < self.array.len - 1) {
                         try writer.writeAll(", ");
@@ -135,7 +141,7 @@ pub const FlowValue = union(enum) {
 
                 if (a.len != b.len) return false;
 
-                for (a, b) |ia, ib| {
+                for (a.items[0..a.len], b.items[0..b.len]) |ia, ib| {
                     if (!ia.equals(&ib)) return false;
                 }
 

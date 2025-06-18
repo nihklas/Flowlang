@@ -465,6 +465,10 @@ fn primary(self: *Parser) ParserError!*Expr {
         return Expr.createLiteral(self.arena, open_bracket, .{ .array = items });
     }
 
+    if (self.match(.@"[]")) |bracket| {
+        return Expr.createLiteral(self.arena, bracket, .{ .array = &.{} });
+    }
+
     if (self.match(.null)) |token| {
         return Expr.createLiteral(self.arena, token, .null);
     }
