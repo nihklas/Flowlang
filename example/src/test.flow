@@ -1,2 +1,9 @@
-const test = [1, "2", 4.0, true];
+var test = [1];
+
+for var i = 0; i < 100000; i += 1 {
+    var diff = test;
+    diff[] = i;
+}
+
+print(test);
 
