@@ -1,7 +1,9 @@
 const hallo = 1;
 var nested = [
     [1, 2, 3],
+    [4, 5, 6],
 ];
 
 nested[0][hallo] = 100;
+nested[hallo] = [104, 105, 106];
 print(nested);

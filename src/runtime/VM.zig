@@ -188,6 +188,26 @@ fn runWhileSwitch(self: *VM) void {
                 const value = self.value_stack.at(0);
                 self.globals[idx] = value;
             },
+            .set_global_array => {
+                const global_idx = self.byte();
+                const index_amount = self.byte();
+                std.debug.assert(index_amount > 0);
+
+                var array = self.globals[global_idx];
+
+                for (0..index_amount - 1) |_| {
+                    const idx = self.pop().int;
+                    if (idx < 0) {
+                        std.debug.panic("IndexUnderflow: {d}\n", .{idx});
+                    } else if (idx > array.array.len) {
+                        std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
+                    }
+                    array = array.array[@intCast(idx)];
+                }
+
+                const last_idx = self.pop().int;
+                array.array[@intCast(last_idx)] = self.value_stack.at(0);
+            },
             .get_local => {
                 const idx = self.byte();
                 const value = self.getLocal(idx);
@@ -197,6 +217,26 @@ fn runWhileSwitch(self: *VM) void {
                 const idx = self.byte();
                 const value = self.value_stack.at(0);
                 self.setLocal(idx, value);
+            },
+            .set_local_array => {
+                const local_idx = self.byte();
+                const index_amount = self.byte();
+                std.debug.assert(index_amount > 0);
+
+                var array = self.getLocal(local_idx);
+
+                for (0..index_amount - 1) |_| {
+                    const idx = self.pop().int;
+                    if (idx < 0) {
+                        std.debug.panic("IndexUnderflow: {d}\n", .{idx});
+                    } else if (idx > array.array.len) {
+                        std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
+                    }
+                    array = array.array[@intCast(idx)];
+                }
+
+                const last_idx = self.pop().int;
+                array.array[@intCast(last_idx)] = self.value_stack.at(0);
             },
             .jump => {
                 // For some reason we cannot inline this
