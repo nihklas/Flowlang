@@ -159,7 +159,7 @@ fn runWhileSwitch(self: *VM) void {
                     array.array.len += 1;
                 } else {
                     const new_values = self.gc.alloc(FlowValue, array.array.cap * 2) catch oom();
-                    std.mem.copyForwards(FlowValue, new_values, array.array.items[0..array.array.len]);
+                    @memcpy(new_values[0..array.array.len], array.array.items[0..array.array.len]);
                     new_values[array.array.len] = value;
                     array.array.len += 1;
                     array.array.cap *= 2;
