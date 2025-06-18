@@ -1,7 +1,5 @@
 pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const alloc = gpa.allocator();
+    const alloc = std.heap.smp_allocator;
 
     var arg_iter = std.process.args();
     _ = arg_iter.skip();
