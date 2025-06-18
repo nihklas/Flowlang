@@ -190,6 +190,8 @@ fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void
     try writer.print("${d} = ", .{var_idx});
     if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx);
+    } else if (variable.type.order > 0) {
+        try writer.writeAll("[]");
     } else {
         try writer.writeAll("null");
     }
@@ -209,6 +211,8 @@ fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wri
         try writer.writeAll("}");
     } else if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx);
+    } else if (variable.type.order > 0) {
+        try writer.writeAll("[]");
     } else {
         try writer.writeAll("null");
     }
