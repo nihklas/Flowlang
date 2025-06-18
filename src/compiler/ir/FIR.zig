@@ -69,8 +69,10 @@ pub const Node = struct {
             assign_global,
             /// Operands: 2 -> value, index
             assign_local,
-            /// Operands: 2 -> expressions (0 => array, 1 => index)
-            // assign_at_index,
+            /// Operands: n -> value, var_index, ... remaining indices on lhs
+            assign_in_array_local,
+            /// Operands: n -> value, var_index, ... remaining indices on lhs
+            assign_in_array_global,
             /// Operands: 1 -> constants
             literal,
             /// Operands: 1 -> expression
@@ -436,13 +438,68 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             }
         },
         .assignment => |assignment| {
-            _ = assignment;
-            @panic("Temporary unavailable");
-            // const var_idx, const variable_node = self.resolveVariable(assignment.name.lexeme);
-            // const operands = self.arena().alloc(usize, 2) catch oom();
-            // operands[0] = self.traverseExpr(assignment.value);
-            // operands[1] = var_idx;
-            // self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .assign_global else .assign_local, .type = variable_node.type, .operands = operands }) catch oom();
+            if (assignment.variable.* == .variable) {
+                const variable = assignment.variable.variable;
+                const var_idx, const variable_node = self.resolveVariable(variable.name.lexeme);
+                const operands = self.arena().alloc(usize, 2) catch oom();
+                operands[0] = self.traverseExpr(assignment.value);
+                operands[1] = var_idx;
+                self.exprs.append(self.alloc, .{
+                    .op = if (variable_node.scope == 0) .assign_global else .assign_local,
+                    .type = variable_node.type,
+                    .operands = operands,
+                }) catch oom();
+            } else {
+                std.debug.assert(assignment.variable.* == .index);
+                const index = assignment.variable.index;
+                // Gesamtes operands array besser nutzen:
+                // - 0 = value
+                // - 1 = var_idx
+                // - 2.. = all remaining indices of the lhs
+
+                const index_amount = blk: {
+                    var order: u8 = 1;
+                    s: switch (index.expr.*) {
+                        .variable => break :blk order,
+                        .index => |index_expr| {
+                            order += 1;
+                            continue :s index_expr.expr.*;
+                        },
+                        else => unreachable,
+                    }
+                };
+
+                const operands = self.arena().alloc(usize, 2 + index_amount) catch oom();
+                operands[0] = self.traverseExpr(assignment.value);
+                operands[1], const is_global = variable: switch (index.expr.*) {
+                    .index => |index_expr| continue :variable index_expr.expr.*,
+                    .variable => |variable| {
+                        const var_idx, const var_node = self.resolveVariable(variable.name.lexeme);
+                        break :variable .{ var_idx, var_node.scope == 0 };
+                    },
+                    else => unreachable,
+                };
+
+                var op_idx = operands.len - 1;
+                s: switch (assignment.variable.*) {
+                    .index => |index_expr| {
+                        // NOTE: Index Operands start at index 2, so that check ensures that the
+                        // other operands aren't overwritten
+                        std.debug.assert(op_idx >= 2);
+                        operands[op_idx] = self.traverseExpr(index_expr.index);
+                        op_idx -= 1;
+                        continue :s index_expr.expr.*;
+                    },
+                    .variable => {},
+                    else => unreachable,
+                }
+
+                self.exprs.append(self.alloc, .{
+                    .op = if (is_global) .assign_in_array_global else .assign_in_array_local,
+                    .type = self.exprs.items[operands[0]].type,
+                    .operands = operands,
+                }) catch oom();
+            }
         },
         .call => |call| {
             const operands = self.arena().alloc(usize, call.args.len + 1) catch oom();

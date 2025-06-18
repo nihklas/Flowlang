@@ -20,7 +20,10 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
 
         global_counter += 1;
     }
-    try writer.writeAll("\n");
+
+    if (global_counter > 0) {
+        try writer.writeAll("\n");
+    }
 
     if (fir.entry == FIR.uninitialized_entry) return;
 
@@ -83,12 +86,28 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
         },
         .global => try writer.print("${d}", .{expr.operands[0]}),
         .local => try writer.print("%{d}", .{expr.operands[0]}),
-        .assign_global => {
-            try writer.print("${d} = ", .{expr.operands[1]});
+        .assign_global, .assign_local => {
+            if (expr.op == .assign_global) {
+                try writer.print("${d} = ", .{expr.operands[1]});
+            } else {
+                try writer.print("%{d} = ", .{expr.operands[1]});
+            }
+
             try dumpExpr(writer, fir, expr.operands[0]);
         },
-        .assign_local => {
-            try writer.print("%{d} = ", .{expr.operands[1]});
+        .assign_in_array_global, .assign_in_array_local => {
+            if (expr.op == .assign_in_array_global) {
+                try writer.print("${d}", .{expr.operands[1]});
+            } else {
+                try writer.print("%{d}", .{expr.operands[1]});
+            }
+
+            for (2..expr.operands.len) |idx| {
+                try writer.writeAll("[");
+                try dumpExpr(writer, fir, expr.operands[idx]);
+                try writer.writeAll("]");
+            }
+            try writer.writeAll(" = ");
             try dumpExpr(writer, fir, expr.operands[0]);
         },
         .call => {

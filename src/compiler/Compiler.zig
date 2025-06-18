@@ -252,6 +252,8 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitOpcode(.set_local);
             self.emitByte(@intCast(local.stack_idx));
         },
+        .assign_in_array_global => @panic("Not yet supported"),
+        .assign_in_array_local => @panic("Not yet supported"),
         .call => {
             for (1..expr.operands.len) |idx| {
                 self.compileExpression(expr.operands[idx]);
