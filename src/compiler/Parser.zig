@@ -295,7 +295,19 @@ fn expressionStatement(self: *Parser) ParserError!*Stmt {
 }
 
 fn expression(self: *Parser) ParserError!*Expr {
-    return self.assignment();
+    return self.append();
+}
+
+fn append(self: *Parser) ParserError!*Expr {
+    const lhs = try self.assignment();
+
+    if (self.match(.@"[]")) |_| {
+        try self.consume(.@"=", "Expected '=' after '[]'");
+        const expr = try self.expression();
+        return Expr.createAppend(self.arena, lhs, expr);
+    }
+
+    return lhs;
 }
 
 fn assignment(self: *Parser) ParserError!*Expr {

@@ -518,6 +518,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             std.debug.assert(item_type.order > 0);
             self.exprs.append(self.alloc, .{ .op = .index, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order - 1 } }) catch oom();
         },
+        .append => @panic("Not yet implemented"),
     }
     return self.exprs.items.len - 1;
 }

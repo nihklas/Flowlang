@@ -24,6 +24,7 @@ pub const Expr = union(enum) {
     variable: struct { name: Token },
     call: struct { expr: *Expr, args: []*Expr },
     index: struct { expr: *Expr, bracket: Token, index: *Expr },
+    append: struct { variable: *Expr, value: *Expr },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -101,6 +102,14 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
+    pub fn createAppend(alloc: Allocator, variable: *Expr, value: *Expr) *Expr {
+        const new_expr = Expr.create(alloc);
+        new_expr.* = .{
+            .append = .{ .variable = variable, .value = value },
+        };
+        return new_expr;
+    }
+
     pub fn getToken(self: *const Expr) Token {
         return switch (self.*) {
             .literal => self.literal.token,
@@ -112,6 +121,7 @@ pub const Expr = union(enum) {
             .variable => self.variable.name,
             .call => self.call.expr.getToken(),
             .index => self.index.bracket,
+            .append => self.append.variable.getToken(),
         };
     }
 

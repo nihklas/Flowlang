@@ -163,6 +163,11 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
             try dumpExpr(writer, index.expr, depth + 1);
             try dumpExpr(writer, index.index, depth + 1);
         },
+        .append => |append| {
+            try writer.writeAll("(Append Expr)\n");
+            try dumpExpr(writer, append.variable, depth + 1);
+            try dumpExpr(writer, append.value, depth + 1);
+        },
     }
 }
 

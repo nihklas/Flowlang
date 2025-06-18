@@ -38,6 +38,7 @@ pub const Type = enum {
     @"/=",
     @"%=",
     @".=",
+    @"[]",
 
     // Keywords
     @"and",

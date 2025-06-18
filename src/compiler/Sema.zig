@@ -362,7 +362,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             self.analyseExpr(index.expr);
             self.analyseExpr(index.index);
 
-            // expr is a non-existent variable
+            // NOTE: expr is a non-existent variable
             if (self.getType(index.expr) == null) return;
 
             const expr_type = self.getType(index.expr).?;
@@ -372,7 +372,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 return;
             }
 
-            // index is a non-existent variable
+            // NOTE: index is a non-existent variable
             if (self.getType(index.index) == null) return;
 
             const index_type = self.getType(index.index).?;
@@ -383,6 +383,31 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             }
 
             self.putType(expr, .{ .type = expr_type.type, .order = expr_type.order - 1 });
+        },
+        .append => |append| {
+            self.analyseExpr(append.variable);
+            self.analyseExpr(append.value);
+
+            // NOTE: variable is a non-existent variable
+            if (self.getType(append.variable) == null) return;
+
+            const variable_type = self.getType(append.variable).?;
+            if (variable_type.order == 0) {
+                self.pushError(VariableError.AppendOnNonArray, append.variable.getToken(), .{variable_type});
+                return;
+            }
+
+            // NOTE: value is a non-existent variable
+            if (self.getType(append.value) == null) return;
+
+            const value_type = self.getType(append.value).?;
+            const expected_type: FlowType = .{ .type = variable_type.type, .order = variable_type.order - 1 };
+            if (!value_type.equals(&expected_type)) {
+                self.pushError(TypeError.UnexpectedType, append.value.getToken(), .{ expected_type, value_type });
+                return;
+            }
+
+            self.putType(expr, variable_type);
         },
     }
 }
@@ -431,8 +456,9 @@ fn pushError(self: *Sema, comptime err: SemaError, token: Token, args: anytype) 
         VariableError.VariableAlreadyExists => "Variable '{s}' already exists",
         VariableError.ConstantMutation => "Constant '{s}' cannot be re-assigned",
         VariableError.ConstantWithoutValue => "Constant '{s}' must have an initial value",
-        VariableError.IndexOnNonArray => "Can only index on arrays, '{}' given",
-        VariableError.IndexNotAnInt => "Index has to be an integer, '{}' given",
+        VariableError.IndexOnNonArray => "Can only index on arrays, got '{}'",
+        VariableError.IndexNotAnInt => "Index has to be an integer, got '{}'",
+        VariableError.AppendOnNonArray => "Can only append to arrays, got '{}'",
 
         ContextError.NotInALoop => "'{s}' is only allowed inside a loop",
 
@@ -552,6 +578,7 @@ const VariableError = error{
     ConstantWithoutValue,
     IndexOnNonArray,
     IndexNotAnInt,
+    AppendOnNonArray,
 };
 const ContextError = error{
     NotInALoop,
