@@ -51,6 +51,8 @@ pub const OpCode = enum(u8) {
     set_local, // index as 1 byte operand
     set_local_array, // 2 operands: 1 byte index, 1 byte amount if arr_index
 
+    append,
+
     // functions
     function, // operands: 1 byte for constant idx name, 1 byte for arg count, 2 byte for line count
     get_builtin,

@@ -109,6 +109,8 @@ pub const Node = struct {
             @"or",
             /// Operands: 2 -> expressions (first array, second index)
             index,
+            /// Operands: 2 -> array, value
+            append,
             /// Operands: n >= 1 -> 0 = callee, 1..n = arguments
             call,
             /// Operands: 1 -> constant string
@@ -518,7 +520,12 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             std.debug.assert(item_type.order > 0);
             self.exprs.append(self.alloc, .{ .op = .index, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order - 1 } }) catch oom();
         },
-        .append => @panic("Not yet implemented"),
+        .append => |append| {
+            const operands = self.arena().alloc(usize, 2) catch oom();
+            operands[0] = self.traverseExpr(append.variable);
+            operands[1] = self.traverseExpr(append.value);
+            self.exprs.append(self.alloc, .{ .op = .append, .operands = operands, .type = self.exprs.items[operands[0]].type }) catch oom();
+        },
     }
     return self.exprs.items.len - 1;
 }

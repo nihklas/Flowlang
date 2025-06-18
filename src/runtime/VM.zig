@@ -130,11 +130,15 @@ fn runWhileSwitch(self: *VM) void {
             .array => {
                 const len = self.byte();
                 // TODO: Alloc with a multiple of 2
-                const arr = self.gc.alloc(FlowValue, len) catch oom();
+                const items = self.gc.alloc(FlowValue, len) catch oom();
+                const arr = self.gc.create(definitions.FlowArray) catch oom();
                 for (0..len) |i| {
-                    arr[len - 1 - i] = self.pop();
+                    items[len - 1 - i] = self.pop();
                 }
-                self.push(.{ .array = .{ .items = arr.ptr, .len = len, .cap = arr.len } });
+                arr.items = items.ptr;
+                arr.cap = len;
+                arr.len = len;
+                self.push(.{ .array = arr });
             },
             .index => {
                 const index = self.pop().int;
@@ -145,6 +149,22 @@ fn runWhileSwitch(self: *VM) void {
                     std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ index, array.len });
                 }
                 self.push(array.items[@intCast(index)]);
+            },
+            .append => {
+                const value = self.pop();
+                var array = &self.value_stack.stack[self.value_stack.stack_top - 1];
+
+                if (array.array.cap >= array.array.len + 1) {
+                    array.array.items[array.array.len] = value;
+                    array.array.len += 1;
+                } else {
+                    const new_values = self.gc.alloc(FlowValue, array.array.cap * 2) catch oom();
+                    @memcpy(new_values, array.array.items);
+                    new_values[array.array.len] = value;
+                    array.array.len += 1;
+                    array.array.cap *= 2;
+                    array.array.items = new_values.ptr;
+                }
             },
             .constant => {
                 const constant = self.constants[self.byte()];
@@ -431,9 +451,10 @@ const Allocator = std.mem.Allocator;
 const stdout = std.io.getStdOut().writer();
 
 const OpCode = @import("shared").OpCode;
-const Integer = @import("shared").definitions.Integer;
-const Float = @import("shared").definitions.Float;
-const FlowValue = @import("shared").definitions.FlowValue;
+const definitions = @import("shared").definitions;
+const Integer = definitions.Integer;
+const Float = definitions.Float;
+const FlowValue = definitions.FlowValue;
 const builtins = @import("shared").builtins;
 const Stack = @import("shared").Stack;
 const oom = @import("shared").oom;

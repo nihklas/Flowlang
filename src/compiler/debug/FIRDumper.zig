@@ -140,6 +140,11 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize) WriterError!void 
             try dumpExpr(writer, fir, expr.operands[1]);
             try writer.writeAll("]");
         },
+        .append => {
+            try dumpExpr(writer, fir, expr.operands[0]);
+            try writer.writeAll("[] = ");
+            try dumpExpr(writer, fir, expr.operands[1]);
+        },
     }
 }
 

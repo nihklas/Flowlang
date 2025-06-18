@@ -73,7 +73,7 @@ pub const FlowValue = union(enum) {
     string: []const u8,
     builtin_fn: BuiltinFunction,
     function: FlowFunction,
-    array: FlowArray,
+    array: *FlowArray,
 
     pub fn getType(self: *const FlowValue) FlowType {
         return switch (self.*) {
