@@ -9,7 +9,8 @@ test "Compiler" {
 }
 
 test "Runtime" {
-    _ = @import("runtime/GC.zig");
+    _ = @import("runtime/gc/Simple.zig");
+    _ = @import("runtime/gc/MultiThreaded.zig");
     _ = @import("runtime/VM.zig");
     _ = @import("runtime/main.zig");
 }
