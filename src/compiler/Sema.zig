@@ -23,6 +23,7 @@ pub fn deinit(self: *Sema) void {
         self.alloc.free(func.arg_types);
     }
     self.functions.deinit(self.alloc);
+    self.* = undefined;
 }
 
 /// Analyses the ast. Applies the following checks:

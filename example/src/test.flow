@@ -4,7 +4,7 @@ for var i = 0; i < 100000; i += 1 {
     test[] = i;
 }
 
-for var i = 0; i < len(test); i += 1 {
-    print(test[i]);
-}
+// for var i = 0; i < len(test); i += 1 {
+//     print(test[i]);
+// }
 

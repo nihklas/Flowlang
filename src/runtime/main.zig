@@ -1,9 +1,11 @@
 pub fn run(gpa: Allocator, code: []const u8) !void {
-    var gc: GC = .init(gpa);
+    var gc: GC = .pre_init;
     defer gc.deinit();
 
     var vm: VM = .init(gpa, gc.allocator(), code);
     defer vm.deinit();
+
+    gc.init(gpa, &vm);
 
     vm.run();
 }
@@ -56,5 +58,5 @@ fn readByteCode(alloc: std.mem.Allocator) ![]const u8 {
 
 const std = @import("std");
 const VM = @import("VM.zig");
-const GC = @import("GC.zig");
+const GC = @import("gc/Simple.zig");
 const Allocator = std.mem.Allocator;

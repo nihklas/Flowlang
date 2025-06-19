@@ -14,6 +14,7 @@ pub fn build(b: *Build) !void {
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
     const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
+    const stress_gc = b.option(bool, "stress-gc", "Enable Garbage Collection on every Allocation") orelse false;
     const integration_test_case = b.option([]const u8, "case", "Specific integration test case to run");
 
     const extension_options = b.addOptions();
@@ -30,6 +31,7 @@ pub fn build(b: *Build) !void {
             .trace_stack = trace_stack,
             .trace_bytecode = trace_bytecode,
             .trace_memory = trace_memory,
+            .stress_gc = stress_gc,
         },
     });
 
@@ -72,26 +74,22 @@ const CompilerOptions = struct {
     extensions: ?ExtensionOptions = null,
     target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    debug: ?struct {
+    debug: struct {
         trace_stack: bool = false,
         trace_bytecode: bool = false,
         trace_memory: bool = false,
-    } = null,
+        stress_gc: bool = false,
+    } = .{},
 };
 
 pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerOptions) *Compile {
     const shared = buildShared(flow_builder, compile_options);
 
     const debug_options = flow_builder.addOptions();
-    if (compile_options.debug) |debug| {
-        debug_options.addOption(bool, "stack", debug.trace_stack);
-        debug_options.addOption(bool, "bytecode", debug.trace_bytecode);
-        debug_options.addOption(bool, "memory", debug.trace_memory);
-    } else {
-        debug_options.addOption(bool, "stack", false);
-        debug_options.addOption(bool, "bytecode", false);
-        debug_options.addOption(bool, "memory", false);
-    }
+    debug_options.addOption(bool, "stack", compile_options.debug.trace_stack);
+    debug_options.addOption(bool, "bytecode", compile_options.debug.trace_bytecode);
+    debug_options.addOption(bool, "memory", compile_options.debug.trace_memory);
+    debug_options.addOption(bool, "stress_gc", compile_options.debug.stress_gc);
 
     const flow_std = flow_builder.addModule("flow_std", .{
         .root_source_file = flow_builder.path("src/std/stdlib.zig"),

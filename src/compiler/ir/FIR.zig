@@ -201,6 +201,7 @@ pub fn deinit(self: *FIR) void {
     self.functions.deinit(self.alloc);
     self.locals.deinit(self.alloc);
     self.locals_stack.deinit(self.alloc);
+    self.* = undefined;
 }
 
 pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {

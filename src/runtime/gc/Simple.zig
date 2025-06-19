@@ -1,22 +1,35 @@
 child_alloc: Allocator,
 vtable: std.mem.Allocator.VTable,
 managed_objects: std.AutoHashMapUnmanaged(usize, ManagedObject),
+vm: *VM,
+initialized: bool,
 
-pub fn init(child_alloc: Allocator) GC {
-    return .{
-        .child_alloc = child_alloc,
-        .managed_objects = .empty,
-        .vtable = .{
-            .alloc = alloc,
-            .resize = resize,
-            .remap = remap,
-            .free = free,
-        },
-    };
+pub const pre_init: GC = .{
+    .managed_objects = .empty,
+    .vm = undefined,
+    .initialized = false,
+    .child_alloc = undefined,
+    .vtable = .{
+        .alloc = alloc,
+        .resize = resize,
+        .remap = remap,
+        .free = free,
+    },
+};
+
+pub fn init(self: *GC, child_alloc: Allocator, vm: *VM) void {
+    self.child_alloc = child_alloc;
+    self.vm = vm;
+    self.initialized = true;
+    // TODO: add compiler option to start managed_objects with initialCapacity
 }
 
 /// Frees all still managed objects
 pub fn deinit(self: *GC) void {
+    if (!self.initialized) {
+        @panic("GC was never initialized");
+    }
+
     if (comptime trace) {
         std.debug.print("[DEBUG] Deinit GC, freeing all managed objects\n", .{});
     }
@@ -33,8 +46,11 @@ pub fn deinit(self: *GC) void {
             std.debug.print("[DEBUG] freed {d} bytes at {*}\n", .{ obj.len, buf });
         }
     }
+
+    self.* = undefined;
 }
 
+/// Make sure to call gc.init() before any allocations
 pub fn allocator(self: *GC) Allocator {
     return .{
         .ptr = self,
@@ -44,11 +60,12 @@ pub fn allocator(self: *GC) Allocator {
 
 pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize) ?[*]u8 {
     const self: *GC = @ptrCast(@alignCast(ctx));
+    std.debug.assert(self.initialized);
 
     const bytes = self.child_alloc.rawAlloc(len, ptr_align, ret_addr);
 
     if (bytes) |alloced_bytes| {
-        self.managed_objects.put(self.child_alloc, @intFromPtr(alloced_bytes), .{ .alignment = ptr_align, .len = len }) catch {
+        self.managed_objects.put(self.child_alloc, @intFromPtr(alloced_bytes), .{ .alignment = ptr_align, .len = len, .alive = true }) catch {
             self.child_alloc.free(alloced_bytes[0..len]);
             return null;
         };
@@ -63,6 +80,7 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize)
 
 pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, ret_addr: usize) bool {
     const self: *GC = @ptrCast(@alignCast(ctx));
+    std.debug.assert(self.initialized);
 
     const old_len = buf.len;
 
@@ -86,6 +104,7 @@ pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, 
 
 pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
     const self: *GC = @ptrCast(@alignCast(ctx));
+    std.debug.assert(self.initialized);
 
     const old_len = buf.len;
 
@@ -98,13 +117,13 @@ pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, r
         }
 
         _ = self.managed_objects.remove(old_key);
-        self.managed_objects.put(self.child_alloc, @intFromPtr(new_mem), .{ .alignment = alignment, .len = new_len }) catch {
+        self.managed_objects.put(self.child_alloc, @intFromPtr(new_mem), .{ .alignment = alignment, .len = new_len, .alive = true }) catch {
             self.child_alloc.free(new_mem[0..new_len]);
             return null;
         };
 
         if (comptime trace) {
-            std.debug.print("[DEBUG] resized from {d} to {d} at {*}\n", .{ old_len, new_len, buf.ptr });
+            std.debug.print("[DEBUG] remapped from {d} to {d} at {*}\n", .{ old_len, new_len, buf.ptr });
         }
     }
 
@@ -113,6 +132,7 @@ pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, r
 
 pub fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) void {
     const self: *GC = @ptrCast(@alignCast(ctx));
+    std.debug.assert(self.initialized);
 
     if (comptime trace) {
         std.debug.print("[DEBUG] free {d} bytes at {*}\n", .{ buf.len, buf.ptr });
@@ -122,9 +142,23 @@ pub fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) v
     _ = self.managed_objects.remove(@intFromPtr(buf.ptr));
 }
 
+fn gc(self: *GC) void {
+    _ = self; // autofix
+}
+
+fn mark(self: *GC) void {
+    _ = self; // autofix
+
+}
+
+fn sweep(self: *GC) void {
+    _ = self; // autofix
+}
+
 const ManagedObject = struct {
     len: usize,
     alignment: Alignment,
+    alive: bool,
 };
 
 const GC = @This();
@@ -132,3 +166,4 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
 const trace = @import("debug_options").memory;
+const VM = @import("../VM.zig");
