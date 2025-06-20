@@ -64,7 +64,7 @@ fn makeTest(
     expected: []const u8,
     integration_tests: *Step,
 ) void {
-    const compiler = build.buildCompiler(b, b, .{
+    const compiler = build.buildCompiler(b, .{
         .target = b.resolveTargetQuery(.{}),
         .optimize = .Debug,
         .debug = .{ .stress_gc = true },

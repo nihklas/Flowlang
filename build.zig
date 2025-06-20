@@ -17,7 +17,7 @@ pub fn build(b: *Build) !void {
     const initial_gc_threshold = b.option(usize, "gc-thresh", "Initial Threshold on which the GC kicks in (bytes)") orelse 1024 * 1024;
     const gc_growth_factor = b.option(u8, "gc-growth", "Factor by which the threshold is determined") orelse 2;
 
-    const compiler = buildCompiler(b, b, .{
+    const compiler = buildCompiler(b, .{
         .target = target,
         .optimize = optimize,
         .debug = .{
@@ -31,6 +31,7 @@ pub fn build(b: *Build) !void {
             .gc_growth_factor = gc_growth_factor,
         },
     });
+    b.installArtifact(compiler);
 
     const exe_unit_tests = buildUnitTests(b, target, optimize);
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
@@ -75,7 +76,7 @@ const CompilerOptions = struct {
     } = .{},
 };
 
-pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerOptions) *Compile {
+pub fn buildCompiler(flow_builder: *Build, compile_options: CompilerOptions) *Compile {
     const shared = buildShared(flow_builder, compile_options);
 
     const debug_options = flow_builder.addOptions();
@@ -123,7 +124,6 @@ pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerO
         .root_module = compiler_mod,
     });
 
-    b.installArtifact(compiler);
     compiler.step.dependOn(&runtime.step);
 
     flow_std.addImport("shared", shared);
