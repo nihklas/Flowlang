@@ -178,7 +178,11 @@ fn gc(self: *GC) void {
 
         self.mark();
         self.sweep();
+
         self.next_gc = self.bytes_allocated * gc_growth_factor;
+        if (self.bytes_allocated == 0) {
+            self.next_gc = initial_gc_theshold;
+        }
 
         if (comptime trace) {
             std.debug.print("[DEBUG] collected {d} bytes\n", .{before - self.bytes_allocated});
@@ -225,6 +229,7 @@ fn sweep(self: *GC) void {
 
         const buf = @as([*]u8, @ptrFromInt(entry.key_ptr.*));
         self.allocator().rawFree(buf[0..obj.len], obj.alignment, @returnAddress());
+        _ = self.managed_objects.remove(entry.key_ptr.*);
     }
 }
 

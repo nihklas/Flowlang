@@ -1,10 +1,8 @@
-var test: []int;
+var test = [1];
 
-for var i = 0; i < 10000; i += 1 {
-    test[] = i;
+for var i=0;i < 1000;i+=1 {
+        var diff = test;
+        diff[] = i;
 }
 
-// for var i = 0; i < len(test); i += 1 {
-//     print(test[i]);
-// }
-
+print(test);

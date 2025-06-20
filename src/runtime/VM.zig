@@ -131,13 +131,14 @@ fn runWhileSwitch(self: *VM) void {
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .array => {
                 const len = self.byte();
-                const items = self.gc.alloc(FlowValue, len) catch oom();
+                const cap = std.math.ceilPowerOfTwoAssert(usize, if (len == 0) 1 else len);
+                const items = self.gc.alloc(FlowValue, cap) catch oom();
                 const arr = self.gc.create(definitions.FlowArray) catch oom();
                 for (0..len) |i| {
                     items[len - 1 - i] = self.pop();
                 }
                 arr.items = items.ptr;
-                arr.cap = len;
+                arr.cap = cap;
                 arr.len = len;
                 self.push(.{ .array = arr });
             },
@@ -215,8 +216,8 @@ fn runWhileSwitch(self: *VM) void {
                 const value = self.value_stack.at(0);
                 self.globals[idx] = value;
 
-                if (self.globals_count < idx) {
-                    self.globals_count = idx;
+                if (self.globals_count <= idx) {
+                    self.globals_count = idx + 1;
                 }
             },
             .set_global_array => {
