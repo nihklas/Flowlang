@@ -22,7 +22,10 @@ Non-exhaustive list of some of the biggest and most important features planned:
 
 ## Try it out!
 
-The file `example/src/main.flow` shows the current possible things that the flow compiler supports.
+Take a look at the `example/` directory. There you can find `src/main.flow` as a
+basic starting point to get familiar with the syntax of flow. Additionally, you
+can look at the different test cases in `tests/cases/` to get a feel of how some
+of the stuff behaves.
 
 If you are using `nix`, you can start an ad-hoc shell environment including
 `flowc` with this command:
@@ -106,9 +109,9 @@ array.
 - int
 - float
 - string
-- channel
+- array 
 - struct (later)
-- array (later)
+- channel (later)
 
 ### Literals
 
@@ -179,6 +182,12 @@ Loops:
 
 ```
 for initializer;condition;continue-expr block
+
+// shorthand for just a condition
+for condition block
+
+// infinite loop
+for block
 ```
 
 Functions:
@@ -250,3 +259,4 @@ Byte code is split into 3 simple sections:
 - constants
 - top-level functions
 - main code
+
