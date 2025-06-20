@@ -193,10 +193,12 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             for (function.body) |inner_stmt| {
                 self.analyseStmt(inner_stmt);
             }
+
+            self.checkReturnTypes(stmt);
         },
         .@"return" => |return_stmt| {
-            if (return_stmt.value) |value| {
-                self.analyseExpr(value);
+            if (self.current_scope == 0) {
+                self.pushError(ContextError.NotInAFunction, return_stmt.token, .{"return"});
             }
         },
     }
@@ -458,6 +460,52 @@ fn validateFunction(self: *Sema, function: anytype, call: anytype, expr: *const 
     self.putType(expr, function.ret_type);
 }
 
+fn checkReturnTypes(self: *Sema, function: *const Stmt) void {
+    std.debug.assert(function.* == .function);
+    const func = function.function;
+
+    for (func.body) |stmt| {
+        self.checkReturnType(stmt, func.ret_type.type);
+    }
+}
+
+fn checkReturnType(self: *Sema, stmt: *const Stmt, expected: FlowType) void {
+    switch (stmt.*) {
+        .@"return" => |return_stmt| {
+            if (return_stmt.value == null) {
+                if (!expected.isNull()) {
+                    self.pushError(TypeError.UnexpectedType, return_stmt.token, .{ expected, FlowType.null });
+                }
+                return;
+            }
+
+            const value = return_stmt.value.?;
+            self.analyseExpr(value);
+            const value_type = self.getType(value).?;
+            if (!expected.equals(&value_type) or expected.isNull()) {
+                self.pushError(TypeError.UnexpectedType, return_stmt.token, .{ expected, value_type });
+            }
+        },
+        .block => |block| {
+            for (block.stmts) |s| {
+                self.checkReturnType(s, expected);
+            }
+        },
+        .loop => |loop| {
+            for (loop.body) |s| {
+                self.checkReturnType(s, expected);
+            }
+        },
+        .@"if" => |if_stmt| {
+            self.checkReturnType(if_stmt.true_branch, expected);
+            if (if_stmt.false_branch) |false_branch| {
+                self.checkReturnType(false_branch, expected);
+            }
+        },
+        .expr, .@"break", .@"continue", .function, .variable => {},
+    }
+}
+
 fn putType(self: *Sema, expr: *const Expr, t: FlowType) void {
     self.types.put(self.alloc, expr, t) catch oom();
 }
@@ -486,6 +534,7 @@ fn pushError(self: *Sema, comptime err: SemaError, token: Token, args: anytype) 
         VariableError.AppendOnNonArray => "Can only append to arrays, got '{}'",
 
         ContextError.NotInALoop => "'{s}' is only allowed inside a loop",
+        ContextError.NotInAFunction => "'{s}' is only allowed inside a function",
 
         FunctionError.ArgumentTypeMismatch => "Unexpected argument type, expected '{}', got '{}'",
         FunctionError.ArgumentCountMismatch => "Argument count mismatch, found {d} but expected {d}",
@@ -607,6 +656,7 @@ const VariableError = error{
 };
 const ContextError = error{
     NotInALoop,
+    NotInAFunction,
 };
 const FunctionError = error{
     ArgumentCountMismatch,
