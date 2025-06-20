@@ -28,7 +28,7 @@ If you are using `nix`, you can start an ad-hoc shell environment including
 `flowc` with this command:
 
 ```bash
-nix shell nixpkgs#gitlab:flowlang/flowlang
+nix shell gitlab:flowlang/flowlang
 ```
 
 Otherwise, you need to install Flow from source, by cloning this Repository and
