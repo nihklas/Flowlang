@@ -9,7 +9,6 @@ pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
     const run_with_debug = b.option(bool, "debug", "Enable all trace and debugging options for the Runtime") orelse false;
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
@@ -17,13 +16,6 @@ pub fn build(b: *Build) !void {
     const stress_gc = b.option(bool, "gc-stress", "Enable Garbage Collection on every Allocation") orelse false;
     const initial_gc_threshold = b.option(usize, "gc-thresh", "Initial Threshold on which the GC kicks in (bytes)") orelse 1024 * 1024;
     const gc_growth_factor = b.option(u8, "gc-growth", "Factor by which the threshold is determined") orelse 2;
-
-    const extension_options = b.addOptions();
-    extension_options.addOption(bool, "enabled", false);
-
-    // Option to output compiler errors in tests
-    const test_options = b.addOptions();
-    test_options.addOption(bool, "use_stderr", use_stderr);
 
     const compiler = buildCompiler(b, b, .{
         .target = target,
@@ -40,17 +32,8 @@ pub fn build(b: *Build) !void {
         },
     });
 
-    // Unit tests in compiler and runtime
-    const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/testing.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    exe_unit_tests.root_module.addImport("shared", buildShared(b, .{ .target = target, .optimize = optimize }));
-    exe_unit_tests.root_module.addOptions("testing_options", test_options);
+    const exe_unit_tests = buildUnitTests(b, target, optimize);
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
-
-    // Step to run tests
     const test_step = b.step("unit-test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
 
@@ -60,6 +43,7 @@ pub fn build(b: *Build) !void {
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
     check_step.dependOn(&compiler.step);
+    check_step.dependOn(&exe_unit_tests.step);
 
     const run_compiler = b.addRunArtifact(compiler);
     const compile_step = b.step("compile", "Run the compiler, pass --help to get more information");
@@ -116,8 +100,8 @@ pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerO
         .target = compile_options.target,
         .optimize = compile_options.optimize,
     });
-    runtime_mod.addImport("debug_options", debug_options.createModule());
-    runtime_mod.addImport("vm_options", vm_options.createModule());
+    runtime_mod.addOptions("debug_options", debug_options);
+    runtime_mod.addOptions("vm_options", vm_options);
 
     const runtime = flow_builder.addExecutable(.{
         .name = "runtime",
@@ -131,7 +115,7 @@ pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerO
         .optimize = compile_options.optimize,
     });
     compiler_mod.addAnonymousImport("runtime_bin", .{ .root_source_file = runtime.getEmittedBin() });
-    compiler_mod.addImport("debug_options", debug_options.createModule());
+    compiler_mod.addOptions("debug_options", debug_options);
     compiler_mod.addImport("runtime", runtime_mod);
 
     const compiler = flow_builder.addExecutable(.{
@@ -177,4 +161,27 @@ fn buildShared(b: *Build, compile_options: CompilerOptions) *Module {
 
     shared.addOptions("extensions", ext_opts);
     return shared;
+}
+
+fn buildUnitTests(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *Compile {
+    // Option to output compiler errors in tests
+    const use_stderr = b.option(bool, "stderr", "Output custom errors to StdErr instead of NullWriter (Only used in tests)") orelse false;
+
+    const test_options = b.addOptions();
+    test_options.addOption(bool, "use_stderr", use_stderr);
+
+    const vm_options = b.addOptions();
+    vm_options.addOption(usize, "initial_gc_threshold", 1024 * 1024);
+    vm_options.addOption(usize, "gc_growth_factor", 2);
+
+    // Unit tests in compiler and runtime
+    const exe_unit_tests = b.addTest(.{
+        .root_source_file = b.path("src/testing.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe_unit_tests.root_module.addImport("shared", buildShared(b, .{ .target = target, .optimize = optimize }));
+    exe_unit_tests.root_module.addOptions("testing_options", test_options);
+    exe_unit_tests.root_module.addOptions("vm_options", vm_options);
+    return exe_unit_tests;
 }
