@@ -71,6 +71,13 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize)
     const bytes = self.child_alloc.rawAlloc(len, ptr_align, ret_addr);
 
     if (bytes) |alloced_bytes| {
+        if (len == 0) {
+            if (comptime trace) {
+                std.debug.print("[DEBUG] allocation of 0 bytes will not be tracked, address: {*}\n", .{alloced_bytes});
+            }
+            return bytes;
+        }
+
         self.managed_objects.put(self.child_alloc, @intFromPtr(alloced_bytes), .{ .alignment = ptr_align, .len = len, .alive = true }) catch {
             self.child_alloc.free(alloced_bytes[0..len]);
             return null;
@@ -163,10 +170,21 @@ pub fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) v
 }
 
 fn gc(self: *GC) void {
-    if ((comptime stress_gc) or self.bytes_allocated >= self.next_gc) {
+    if (stress_gc or self.bytes_allocated >= self.next_gc) {
+        if (comptime trace) {
+            std.debug.print("[DEBUG] -- gc start\n", .{});
+        }
+        const before = self.bytes_allocated;
+
         self.mark();
         self.sweep();
         self.next_gc = self.bytes_allocated * gc_growth_factor;
+
+        if (comptime trace) {
+            std.debug.print("[DEBUG] collected {d} bytes\n", .{before - self.bytes_allocated});
+            std.debug.print("[DEBUG] next collection is at {d} bytes\n", .{self.next_gc});
+            std.debug.print("[DEBUG] -- gc end\n", .{});
+        }
     }
 }
 
@@ -181,11 +199,17 @@ fn markFlowValue(self: *GC, value: FlowValue) void {
         .function => return,
         .builtin_fn => return,
         .string => |str| {
-            self.managed_objects.getPtr(@intFromPtr(str.ptr)).?.alive = true;
+            if (self.managed_objects.getPtr(@intFromPtr(str.ptr))) |obj| {
+                obj.alive = true;
+            }
         },
         .array => |arr| {
-            self.managed_objects.getPtr(@intFromPtr(arr)).?.alive = true;
-            self.managed_objects.getPtr(@intFromPtr(arr.items)).?.alive = true;
+            if (self.managed_objects.getPtr(@intFromPtr(arr))) |obj| {
+                obj.alive = true;
+            }
+            if (self.managed_objects.getPtr(@intFromPtr(arr.items))) |mem| {
+                mem.alive = true;
+            }
         },
     }
 }

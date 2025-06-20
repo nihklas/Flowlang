@@ -131,7 +131,6 @@ fn runWhileSwitch(self: *VM) void {
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .array => {
                 const len = self.byte();
-                // TODO: Alloc with a multiple of 2
                 const items = self.gc.alloc(FlowValue, len) catch oom();
                 const arr = self.gc.create(definitions.FlowArray) catch oom();
                 for (0..len) |i| {
