@@ -236,7 +236,13 @@ fn returnStatement(self: *Parser) ParserError!*Stmt {
 }
 
 fn forStatement(self: *Parser) ParserError!*Stmt {
-    const maybe_initializer: ?*Stmt = blk: {
+    if (self.match(.@"{")) |t| {
+        const cond = Expr.createLiteral(self.arena, t, .{ .bool = true });
+        const body = try self.block();
+        return Stmt.createLoop(self.arena, cond, body);
+    }
+
+    const first_expr: ?*Stmt = blk: {
         if (self.match(.@";")) |_| {
             break :blk null;
         }
@@ -245,8 +251,18 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
             break :blk try self.varDeclaration();
         }
 
-        break :blk try self.expressionStatement();
+        const expr = try self.expression();
+        break :blk Stmt.createExpr(self.arena, expr);
     };
+
+    if (first_expr != null and first_expr.?.* == .expr) {
+        if (self.match(.@"{") != null) {
+            const body = try self.block();
+            return Stmt.createLoop(self.arena, first_expr.?.expr.expr, body);
+        }
+
+        try self.consume(.@";", "Expected ';' after loop initializer");
+    }
 
     const condition: *Expr = blk: {
         if (self.match(.@";")) |t| {
@@ -271,7 +287,7 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
 
     var outer_scope: std.ArrayList(*Stmt) = .init(self.arena);
 
-    if (maybe_initializer) |initializer| {
+    if (first_expr) |initializer| {
         outer_scope.append(initializer) catch oom();
     }
 

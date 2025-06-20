@@ -1,8 +1,7 @@
-var test = [1];
+var i = 0;
 
-for var i=0;i < 1000;i+=1 {
-        var diff = test;
-        diff[] = i;
+for i < 5 {
+    print("Simpler Looooop!");
+
+    i += 1;
 }
-
-print(test);

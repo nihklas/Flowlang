@@ -66,7 +66,7 @@ fn makeTest(
 ) void {
     const compiler = build.buildCompiler(b, b, .{
         .target = b.resolveTargetQuery(.{}),
-        .optimize = .ReleaseSafe,
+        .optimize = .Debug,
         .debug = .{ .stress_gc = true },
     });
     const compile_step = b.addRunArtifact(compiler);
