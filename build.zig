@@ -16,8 +16,7 @@ pub fn build(b: *Build) !void {
     const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
     const stress_gc = b.option(bool, "gc-stress", "Enable Garbage Collection on every Allocation") orelse false;
     const initial_gc_threshold = b.option(usize, "gc-thresh", "Initial Threshold on which the GC kicks in (bytes)") orelse 1024 * 1024;
-    const gc_growth_factor = b.option(usize, "gc-growth", "Factor by which the threshold is determined") orelse 2;
-    const integration_test_case = b.option([]const u8, "case", "Specific integration test case to run");
+    const gc_growth_factor = b.option(u8, "gc-growth", "Factor by which the threshold is determined") orelse 2;
 
     const extension_options = b.addOptions();
     extension_options.addOption(bool, "enabled", false);
@@ -56,7 +55,7 @@ pub fn build(b: *Build) !void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     // Integration tests
-    try @import("tests/integration.zig").addIntegrationTest(b, compiler, integration_test_case);
+    try @import("tests/integration.zig").addIntegrationTest(b);
 
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
@@ -101,6 +100,10 @@ pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerO
     debug_options.addOption(bool, "memory", compile_options.debug.trace_memory);
     debug_options.addOption(bool, "stress_gc", compile_options.debug.stress_gc);
 
+    const vm_options = flow_builder.addOptions();
+    vm_options.addOption(usize, "initial_gc_threshold", compile_options.vm.initial_gc_threshold);
+    vm_options.addOption(usize, "gc_growth_factor", compile_options.vm.gc_growth_factor);
+
     const flow_std = flow_builder.addModule("flow_std", .{
         .root_source_file = flow_builder.path("src/std/stdlib.zig"),
         .target = compile_options.target,
@@ -114,6 +117,7 @@ pub fn buildCompiler(b: *Build, flow_builder: *Build, compile_options: CompilerO
         .optimize = compile_options.optimize,
     });
     runtime_mod.addImport("debug_options", debug_options.createModule());
+    runtime_mod.addImport("vm_options", vm_options.createModule());
 
     const runtime = flow_builder.addExecutable(.{
         .name = "runtime",

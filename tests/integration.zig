@@ -1,24 +1,25 @@
 const cases_dir = "tests/cases";
 const split_marker = "=====";
 
-pub fn addIntegrationTest(b: *std.Build, compiler: *Compile, specific_case: ?[]const u8) !void {
+pub fn addIntegrationTest(b: *std.Build) !void {
+    const case = b.option([]const u8, "case", "Specific integration test case to run");
     const integration_tests = b.step("integration-test", "Run integration tests");
 
-    if (specific_case) |case_name| {
-        try runSingle(b, compiler, integration_tests, case_name);
+    if (case) |case_name| {
+        try runSingle(b, integration_tests, case_name);
     } else {
-        try runAll(b, compiler, integration_tests);
+        try runAll(b, integration_tests);
     }
 }
 
-fn runSingle(b: *std.Build, compiler: *Compile, integration_tests: *Step, case_name: []const u8) !void {
+fn runSingle(b: *std.Build, integration_tests: *Step, case_name: []const u8) !void {
     const file_name = b.fmt("{s}/{s}.flow", .{ cases_dir, case_name });
     var test_file = try b.build_root.handle.openFile(file_name, .{});
     defer test_file.close();
-    try buildTest(b, compiler, case_name, test_file, integration_tests);
+    try buildTest(b, case_name, test_file, integration_tests);
 }
 
-fn runAll(b: *std.Build, compiler: *Compile, integration_tests: *Step) !void {
+fn runAll(b: *std.Build, integration_tests: *Step) !void {
     var test_cases = try b.build_root.handle.openDir(cases_dir, .{ .iterate = true });
     defer test_cases.close();
 
@@ -29,13 +30,12 @@ fn runAll(b: *std.Build, compiler: *Compile, integration_tests: *Step) !void {
 
         var test_file = try test_cases.openFile(case.name, .{});
         defer test_file.close();
-        try buildTest(b, compiler, case.name, test_file, integration_tests);
+        try buildTest(b, case.name, test_file, integration_tests);
     }
 }
 
 fn buildTest(
     b: *std.Build,
-    compiler: *Compile,
     case_name: []const u8,
     test_file: File,
     integration_tests: *Step,
@@ -54,17 +54,21 @@ fn buildTest(
     const write_file = b.addWriteFiles();
     const src_path = write_file.add("code.flow", flow_src);
 
-    makeTest(b, compiler, case_name, src_path, expected, integration_tests);
+    makeTest(b, case_name, src_path, expected, integration_tests);
 }
 
 fn makeTest(
     b: *std.Build,
-    compiler: *Compile,
     case_name: []const u8,
     src_path: std.Build.LazyPath,
     expected: []const u8,
     integration_tests: *Step,
 ) void {
+    const compiler = build.buildCompiler(b, b, .{
+        .target = b.resolveTargetQuery(.{}),
+        .optimize = .ReleaseSafe,
+        .debug = .{ .stress_gc = true },
+    });
     const compile_step = b.addRunArtifact(compiler);
     compile_step.addFileArg(src_path);
     const final_exe = compile_step.addOutputFileArg(case_name);
@@ -92,3 +96,4 @@ const File = std.fs.File;
 const Step = std.Build.Step;
 const Module = std.Build.Module;
 const Compile = Step.Compile;
+const build = @import("../build.zig");

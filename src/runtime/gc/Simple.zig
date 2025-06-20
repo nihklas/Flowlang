@@ -38,7 +38,6 @@ pub fn deinit(self: *GC) void {
         std.debug.print("[DEBUG] Deinit GC, freeing all managed objects\n", .{});
     }
 
-    defer self.managed_objects.deinit(self.child_alloc);
     var iter = self.managed_objects.iterator();
     while (iter.next()) |entry| {
         const buf = @as([*]u8, @ptrFromInt(entry.key_ptr.*));
@@ -51,6 +50,7 @@ pub fn deinit(self: *GC) void {
         }
     }
 
+    self.managed_objects.deinit(self.child_alloc);
     self.* = undefined;
 }
 
@@ -166,6 +166,7 @@ fn gc(self: *GC) void {
     if ((comptime stress_gc) or self.bytes_allocated >= self.next_gc) {
         self.mark();
         self.sweep();
+        self.next_gc = self.bytes_allocated * gc_growth_factor;
     }
 }
 
@@ -199,7 +200,7 @@ fn sweep(self: *GC) void {
         }
 
         const buf = @as([*]u8, @ptrFromInt(entry.key_ptr.*));
-        self.allocator().free(buf[0..obj.len]);
+        self.allocator().rawFree(buf[0..obj.len], obj.alignment, @returnAddress());
     }
 }
 
@@ -213,9 +214,16 @@ const GC = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
-const trace = @import("debug_options").memory;
-const stress_gc = @import("debug_options").stress_gc;
-const initial_gc_theshold = @import("debug_options").initial_gc_threshold;
-const gc_growth_factor = @import("debug_options").gc_growth_factor;
 const VM = @import("../VM.zig");
 const FlowValue = @import("shared").definitions.FlowValue;
+
+const trace = @import("debug_options").memory;
+const stress_gc = @import("debug_options").stress_gc;
+const initial_gc_theshold = @import("vm_options").initial_gc_threshold;
+const gc_growth_factor = @import("vm_options").gc_growth_factor;
+
+comptime {
+    if (gc_growth_factor == 0) {
+        @compileError("gc_growth_factor must be greater than 0");
+    }
+}
