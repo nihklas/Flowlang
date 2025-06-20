@@ -8,6 +8,7 @@ value_stack: Stack(FlowValue),
 call_stack: Stack(CallFrame),
 constants: [256]FlowValue,
 globals: [256]FlowValue,
+globals_count: u8,
 
 pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) VM {
     return .{
@@ -19,6 +20,7 @@ pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) VM {
         .call_stack = .init(gpa.alloc(CallFrame, STACK_SIZE) catch oom()),
         .constants = undefined,
         .globals = undefined,
+        .globals_count = 0,
     };
 }
 
@@ -213,6 +215,10 @@ fn runWhileSwitch(self: *VM) void {
                 const idx = self.byte();
                 const value = self.value_stack.at(0);
                 self.globals[idx] = value;
+
+                if (self.globals_count < idx) {
+                    self.globals_count = idx;
+                }
             },
             .set_global_array => {
                 const global_idx = self.byte();

@@ -14,7 +14,9 @@ pub fn build(b: *Build) !void {
     const trace_stack = b.option(bool, "trace-stack", "Trace the Stack on running") orelse run_with_debug;
     const trace_bytecode = b.option(bool, "trace-bytecode", "Trace the Bytecode on running") orelse run_with_debug;
     const trace_memory = b.option(bool, "trace-memory", "Trace the Memory allocations and frees") orelse run_with_debug;
-    const stress_gc = b.option(bool, "stress-gc", "Enable Garbage Collection on every Allocation") orelse false;
+    const stress_gc = b.option(bool, "gc-stress", "Enable Garbage Collection on every Allocation") orelse false;
+    const initial_gc_threshold = b.option(usize, "gc-thresh", "Initial Threshold on which the GC kicks in (bytes)") orelse 1024 * 1024;
+    const gc_growth_factor = b.option(usize, "gc-growth", "Factor by which the threshold is determined") orelse 2;
     const integration_test_case = b.option([]const u8, "case", "Specific integration test case to run");
 
     const extension_options = b.addOptions();
@@ -32,6 +34,10 @@ pub fn build(b: *Build) !void {
             .trace_bytecode = trace_bytecode,
             .trace_memory = trace_memory,
             .stress_gc = stress_gc,
+        },
+        .vm = .{
+            .initial_gc_threshold = initial_gc_threshold,
+            .gc_growth_factor = gc_growth_factor,
         },
     });
 
@@ -79,6 +85,10 @@ const CompilerOptions = struct {
         trace_bytecode: bool = false,
         trace_memory: bool = false,
         stress_gc: bool = false,
+    } = .{},
+    vm: struct {
+        initial_gc_threshold: usize = 1024 * 1024,
+        gc_growth_factor: u8 = 2,
     } = .{},
 };
 

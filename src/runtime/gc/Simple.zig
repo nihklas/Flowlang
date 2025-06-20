@@ -3,12 +3,16 @@ vtable: std.mem.Allocator.VTable,
 managed_objects: std.AutoHashMapUnmanaged(usize, ManagedObject),
 vm: *VM,
 initialized: bool,
+next_gc: usize,
+bytes_allocated: usize,
 
 pub const pre_init: GC = .{
     .managed_objects = .empty,
     .vm = undefined,
     .initialized = false,
     .child_alloc = undefined,
+    .bytes_allocated = 0,
+    .next_gc = initial_gc_theshold,
     .vtable = .{
         .alloc = alloc,
         .resize = resize,
@@ -62,6 +66,8 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize)
     const self: *GC = @ptrCast(@alignCast(ctx));
     std.debug.assert(self.initialized);
 
+    self.gc();
+
     const bytes = self.child_alloc.rawAlloc(len, ptr_align, ret_addr);
 
     if (bytes) |alloced_bytes| {
@@ -69,6 +75,7 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize)
             self.child_alloc.free(alloced_bytes[0..len]);
             return null;
         };
+        self.bytes_allocated += len;
 
         if (comptime trace) {
             std.debug.print("[DEBUG] alloc {d} bytes at {*}\n", .{ len, alloced_bytes });
@@ -84,12 +91,18 @@ pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, 
 
     const old_len = buf.len;
 
+    if (new_len > old_len) {
+        // NOTE: only gc on allocation
+        self.gc();
+    }
+
     const success = self.child_alloc.rawResize(buf, buf_align, new_len, ret_addr);
 
     if (success) {
         const key: usize = @intFromPtr(buf.ptr);
         if (self.managed_objects.getPtr(key)) |entry| {
             entry.len = new_len;
+            self.bytes_allocated += new_len - old_len;
         } else {
             @panic("What just happened? You resized, but I don't know that object yet");
         }
@@ -108,6 +121,11 @@ pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, r
 
     const old_len = buf.len;
 
+    if (new_len > old_len) {
+        // NOTE: only gc on allocation
+        self.gc();
+    }
+
     const maybe_new_mem = self.child_alloc.rawRemap(buf, alignment, new_len, ret_addr);
 
     if (maybe_new_mem) |new_mem| {
@@ -121,6 +139,7 @@ pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, r
             self.child_alloc.free(new_mem[0..new_len]);
             return null;
         };
+        self.bytes_allocated += new_len - old_len;
 
         if (comptime trace) {
             std.debug.print("[DEBUG] remapped from {d} to {d} at {*}\n", .{ old_len, new_len, buf.ptr });
@@ -140,19 +159,48 @@ pub fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) v
 
     self.child_alloc.rawFree(buf, buf_align, ret_addr);
     _ = self.managed_objects.remove(@intFromPtr(buf.ptr));
+    self.bytes_allocated -= buf.len;
 }
 
 fn gc(self: *GC) void {
-    _ = self; // autofix
+    if ((comptime stress_gc) or self.bytes_allocated >= self.next_gc) {
+        self.mark();
+        self.sweep();
+    }
 }
 
 fn mark(self: *GC) void {
-    _ = self; // autofix
+    for (self.vm.globals[0..self.vm.globals_count]) |global| self.markFlowValue(global);
+    for (self.vm.value_stack.stack[0..self.vm.value_stack.stack_top]) |value| self.markFlowValue(value);
+}
 
+fn markFlowValue(self: *GC, value: FlowValue) void {
+    switch (value) {
+        .null, .bool, .int, .float => return,
+        .function => return,
+        .builtin_fn => return,
+        .string => |str| {
+            self.managed_objects.getPtr(@intFromPtr(str.ptr)).?.alive = true;
+        },
+        .array => |arr| {
+            self.managed_objects.getPtr(@intFromPtr(arr)).?.alive = true;
+            self.managed_objects.getPtr(@intFromPtr(arr.items)).?.alive = true;
+        },
+    }
 }
 
 fn sweep(self: *GC) void {
-    _ = self; // autofix
+    var iter = self.managed_objects.iterator();
+    while (iter.next()) |entry| {
+        const obj = entry.value_ptr;
+        if (obj.alive) {
+            obj.alive = false;
+            continue;
+        }
+
+        const buf = @as([*]u8, @ptrFromInt(entry.key_ptr.*));
+        self.allocator().free(buf[0..obj.len]);
+    }
 }
 
 const ManagedObject = struct {
@@ -166,4 +214,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
 const trace = @import("debug_options").memory;
+const stress_gc = @import("debug_options").stress_gc;
+const initial_gc_theshold = @import("debug_options").initial_gc_threshold;
+const gc_growth_factor = @import("debug_options").gc_growth_factor;
 const VM = @import("../VM.zig");
+const FlowValue = @import("shared").definitions.FlowValue;
