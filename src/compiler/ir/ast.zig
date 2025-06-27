@@ -10,8 +10,6 @@ pub const Expr = union(enum) {
         int: Integer,
         float: Float,
         string: []const u8,
-        builtin_fn: void,
-        function: void,
         array: []*Expr,
     };
 

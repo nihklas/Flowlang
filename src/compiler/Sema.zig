@@ -212,8 +212,6 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             .int => self.putType(expr, .primitive(.int)),
             .float => self.putType(expr, .primitive(.float)),
             .string => self.putType(expr, .primitive(.string)),
-            .builtin_fn => self.putType(expr, .primitive(.builtin_fn)),
-            .function => self.putType(expr, .primitive(.function)),
             .array => |arr| {
                 for (arr) |value| {
                     self.analyseExpr(value);

@@ -553,7 +553,7 @@ fn resolveFlowValue(expr: *const ast.Expr) FlowValue {
         .bool => |boolean| .{ .bool = boolean },
         .string => |string| .{ .string = string },
         .null => .null,
-        .function, .builtin_fn, .array => unreachable,
+        .array => unreachable,
     };
 }
 
