@@ -40,6 +40,11 @@ pub fn build(b: *Build) !void {
 
     // Integration tests
     try @import("tests/integration.zig").addIntegrationTest(b);
+    @import("tests/run_integration_tests.zig").addIntegrationTests(b, .{
+        .target = target,
+        .optimize = optimize,
+        .compiler = compiler,
+    });
 
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");

@@ -2,14 +2,14 @@ const cases_dir = "tests/cases";
 const split_marker = "=====";
 
 pub fn addIntegrationTest(b: *std.Build) !void {
-    const case = b.option([]const u8, "case", "Specific integration test case to run");
+    // const case = b.option([]const u8, "case", "Specific integration test case to run");
     const integration_tests = b.step("integration-test", "Run integration tests");
 
-    if (case) |case_name| {
-        try runSingle(b, integration_tests, case_name);
-    } else {
-        try runAll(b, integration_tests);
-    }
+    // if (case) |case_name| {
+    //     try runSingle(b, integration_tests, case_name);
+    // } else {
+    try runAll(b, integration_tests);
+    // }
 }
 
 fn runSingle(b: *std.Build, integration_tests: *Step, case_name: []const u8) !void {

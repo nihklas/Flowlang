@@ -1,4 +1,10 @@
-pub fn main() !void {
+pub fn main() u8 {
+    // TODO: more meaningful return codes?
+    run() catch return 1;
+    return 0;
+}
+
+fn run() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const gpa, const is_debug = switch (@import("builtin").mode) {
         .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
@@ -9,7 +15,11 @@ pub fn main() !void {
     };
 
     const cli_opts = cli.parse();
-    const code = try compile(gpa, cli_opts) orelse return;
+
+    const flow_source = try readFile(gpa, cli_opts.source);
+    defer gpa.free(flow_source);
+
+    const code = try compile(gpa, flow_source, cli_opts) orelse return;
     defer gpa.free(code);
 
     if (cli_opts.run) {
@@ -28,13 +38,10 @@ pub fn main() !void {
     try file.writeAll(&bytecode_len);
 }
 
-fn compile(gpa: Allocator, cli_opts: cli.Options) !?[]const u8 {
+pub fn compile(gpa: Allocator, flow_source: []const u8, cli_opts: cli.Options) !?[]const u8 {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-
-    const flow_source = try readFile(gpa, cli_opts.source);
-    defer gpa.free(flow_source);
 
     const tokens = try Scanner.scan(gpa, flow_source);
     defer gpa.free(tokens);
@@ -109,6 +116,8 @@ fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {
     return try file.readToEndAlloc(alloc, 1 * 1024 * 1024); // 1 MB
 }
 
+pub const runtime = @import("runtime");
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Token = @import("ir/Token.zig");
@@ -121,8 +130,6 @@ const FIR = @import("ir/FIR.zig");
 const cli = @import("util/cli.zig");
 
 const vm = @embedFile("runtime_bin");
-
-const runtime = @import("runtime");
 
 const ASTDumper = @import("debug/ASTDumper.zig");
 const FIRDumper = @import("debug/FIRDumper.zig");

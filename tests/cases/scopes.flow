@@ -19,7 +19,6 @@ print(b);
 print(c);
 
 =====
-
 inner a
 outer b
 global c
