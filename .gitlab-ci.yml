@@ -6,7 +6,7 @@ tests:
   script:
     - nix develop .#pipeline --command bash -c "zig build check --summary all"
     - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
-    - nix develop .#pipeline --command bash -c "zig build integration-test --summary all"
+    - nix develop .#pipeline --command bash -c "zig build integration"
   tags:
     - nix
 
