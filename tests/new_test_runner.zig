@@ -9,10 +9,27 @@ comptime {
     if (SPLIT_MARKER_STDERR.len != SPLIT_MARKER_LEN) @compileError("Split Marker for STDERR has a wrong length");
 }
 
+const ResultState = enum {
+    success,
+    failure,
+    crash,
+};
+
+const Results = struct {
+    results_mutex: std.Thread.Mutex,
+    print_mutex: std.Thread.Mutex,
+    alloc: std.mem.Allocator,
+    results: std.StringHashMapUnmanaged(ResultState),
+};
+
 pub fn main() u8 {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    var debug_allocator: std.heap.DebugAllocator(.{ .thread_safe = true }) = .init;
     const gpa = debug_allocator.allocator();
     defer _ = debug_allocator.deinit();
+
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+    _ = stderr; // autofix
 
     var args = std.process.args();
     _ = args.skip(); // skip own program name
@@ -48,8 +65,89 @@ pub fn main() u8 {
 
         runTestCase(gpa, compiler, test_case) catch return 1;
     } else {
-        const root_node = std.Progress.start(.{});
-        _ = root_node;
+        var state: Results = .{
+            .print_mutex = .{},
+            .results_mutex = .{},
+            .alloc = gpa,
+            .results = .empty,
+        };
+        defer state.results.deinit(gpa);
+
+        // Pipeline should look like this:
+        // - Iterate over all test cases, recursively
+        // - Hand work for each file directly over to thread pool
+        // - for each test case:
+        //      - open and read the file
+        //      - look for the split marks and split source code and assertions
+        //      - run source code
+        //      - perform assertions
+        //      - acquire results_mutex and save result in the shared result state
+        //      - on failure, aquire print_mutex and print out the failed assertions
+        // - Print out statistics
+
+        {
+            var pool: std.Thread.Pool = undefined;
+            pool.init(.{
+                .allocator = gpa,
+            }) catch return 1;
+            defer pool.deinit();
+
+            // Dummy
+            state.results.put(gpa, "if", .success) catch return 1;
+            state.results.put(gpa, "else", .failure) catch return 1;
+            state.results.put(gpa, "else4", .failure) catch return 1;
+            state.results.put(gpa, "else3", .failure) catch return 1;
+            state.results.put(gpa, "switch", .crash) catch return 1;
+            state.results.put(gpa, "switch1", .crash) catch return 1;
+            state.results.put(gpa, "switch2", .crash) catch return 1;
+            state.results.put(gpa, "if1", .success) catch return 1;
+            state.results.put(gpa, "else2", .failure) catch return 1;
+            state.results.put(gpa, "switch3", .crash) catch return 1;
+            state.results.put(gpa, "if2", .success) catch return 1;
+            state.results.put(gpa, "switch4", .crash) catch return 1;
+            state.results.put(gpa, "else1", .failure) catch return 1;
+            state.results.put(gpa, "if3", .success) catch return 1;
+            state.results.put(gpa, "switch5", .crash) catch return 1;
+            state.results.put(gpa, "if4", .success) catch return 1;
+        }
+
+        var stats: std.AutoHashMapUnmanaged(ResultState, u16) = .empty;
+        defer stats.deinit(gpa);
+        stats.ensureTotalCapacity(gpa, 3) catch return 1;
+
+        stats.putAssumeCapacity(.success, 0);
+        stats.putAssumeCapacity(.failure, 0);
+        stats.putAssumeCapacity(.crash, 0);
+
+        var iter = state.results.iterator();
+        while (iter.next()) |entry| {
+            const count = stats.getPtr(entry.value_ptr.*).?;
+            count.* += 1;
+
+            const icon = switch (entry.value_ptr.*) {
+                .success => "✅",
+                .failure => "❌",
+                .crash => "💀",
+            };
+
+            stdout.print("{s} Test Case: {s}\n", .{
+                icon,
+                entry.key_ptr.*,
+            }) catch return 1;
+
+            // stdout.print("{s} ({s}){s} Test Case: {s}\n", .{
+            //     icon,
+            //     @tagName(entry.value_ptr.*),
+            //     if (entry.value_ptr.* == .crash) "  " else "",
+            //     entry.key_ptr.*,
+            // }) catch return 1;
+        }
+
+        stdout.print("\n-----------------------------------\n{d} Tests Succeeded, {d} Tests Failed", .{ stats.get(.success).?, stats.get(.failure).? }) catch return 1;
+        if (stats.get(.crash).? > 0) {
+            stdout.print(", {d} Tests crashed", .{stats.get(.crash).?}) catch return 1;
+        }
+        stdout.writeAll("\n") catch return 1;
     }
 
     return 0;

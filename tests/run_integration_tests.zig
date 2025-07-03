@@ -28,7 +28,7 @@ pub fn addIntegrationTests(b: *std.Build, config: IntegrationConfig) void {
     runner.addCheck(.{ .expect_term = .{ .Exited = 0 } });
 
     // NOTE: this ensures that the tests are actually re-run
-    runner.has_side_effects = true;
+    runner.stdio = .inherit;
 
     integration_step.dependOn(&runner.step);
 }
