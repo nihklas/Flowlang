@@ -51,41 +51,15 @@ pub fn main() u8 {
         .alloc = gpa,
         .results = .empty,
     };
-    defer state.results.deinit(gpa);
-
-    // Pipeline should look like this:
-    // - Iterate over all test cases
-    // - Hand work for each file directly over to thread pool
-    // - for each test case:
-    //      - open and read the file
-    //      - look for the split marks and split source code and assertions
-    //      - run source code
-    //      - perform assertions
-    //      - acquire results_mutex and save result in the shared result state
-    //      - on failure, aquire print_mutex and print out the failed assertions
-    // - Print out statistics
-
-    {
-        var test_dir = std.fs.openDirAbsolute(cases_dir, .{ .iterate = true }) catch return 1;
-        defer test_dir.close();
-
-        var pool: std.Thread.Pool = undefined;
-        pool.init(.{
-            .allocator = gpa,
-        }) catch return 1;
-        defer pool.deinit();
-
-        var dir_iter = test_dir.iterate();
-        while (dir_iter.next() catch return 1) |entry| {
-            if (entry.kind != .file) continue;
-
-            if (std.mem.indexOf(u8, entry.name, file_filter) == null) {
-                continue;
-            }
-
-            pool.spawn(workerFn, .{ test_dir, entry.name, compiler, &state }) catch return 1;
+    defer {
+        var key_iter = state.results.keyIterator();
+        while (key_iter.next()) |key| {
+            state.alloc.free(key.*);
         }
+        state.results.deinit(gpa);
     }
+
+    runTests(gpa, cases_dir, file_filter, compiler, &state) catch return 1;
 
     printStdOut("\n------------------------------\n\n", .{});
 
@@ -109,13 +83,6 @@ pub fn main() u8 {
         };
 
         printStdOut("{s} Test Case: {s}\n", .{ icon, entry.key_ptr.* });
-
-        // stdout.print("{s} ({s}){s} Test Case: {s}\n", .{
-        //     icon,
-        //     @tagName(entry.value_ptr.*),
-        //     if (entry.value_ptr.* == .crash) "  " else "",
-        //     entry.key_ptr.*,
-        // }) catch return 1;
     }
 
     printStdOut("\n-----------------------------------\n{d} Tests Succeeded, {d} Tests Failed", .{ stats.get(.success).?, stats.get(.failure).? });
@@ -131,6 +98,26 @@ pub fn main() u8 {
     return 0;
 }
 
+fn runTests(gpa: std.mem.Allocator, cases_dir: []const u8, file_filter: []const u8, compiler: []const u8, state: *SharedState) !void {
+    var test_dir = try std.fs.openDirAbsolute(cases_dir, .{ .iterate = true });
+    defer test_dir.close();
+
+    var pool: std.Thread.Pool = undefined;
+    try pool.init(.{ .allocator = gpa });
+    defer pool.deinit();
+
+    var dir_iter = test_dir.iterate();
+    while (try dir_iter.next()) |entry| {
+        if (entry.kind != .file) continue;
+
+        if (std.mem.indexOf(u8, entry.name, file_filter) == null) {
+            continue;
+        }
+
+        try pool.spawn(workerFn, .{ test_dir, entry.name, compiler, state });
+    }
+}
+
 // Note: gets file and *state
 fn workerFn(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *SharedState) void {
     doTest(dir, sub_path, compiler, state) catch |err| {
@@ -143,7 +130,7 @@ fn workerFn(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: 
             state.mutex.lock();
             defer state.mutex.unlock();
 
-            state.results.put(state.alloc, sub_path, result) catch return;
+            state.results.put(state.alloc, state.alloc.dupe(u8, sub_path) catch return, result) catch return;
         }
     };
 }
@@ -228,7 +215,7 @@ fn doTest(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *S
         state.mutex.lock();
         defer state.mutex.unlock();
 
-        state.results.put(state.alloc, sub_path, .success) catch return;
+        state.results.put(state.alloc, state.alloc.dupe(u8, sub_path) catch return, .success) catch return;
     }
 }
 
