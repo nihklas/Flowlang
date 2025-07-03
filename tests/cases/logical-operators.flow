@@ -9,7 +9,6 @@ print(false or sideEffectReturn(false));
 print(false and sideEffectReturn(true));
 
 =====
-
 true
 Sideeffect!
 false

@@ -21,7 +21,6 @@ str .= "World!";
 print(str);
 
 =====
-
 2
 3
 2

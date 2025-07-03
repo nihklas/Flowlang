@@ -27,7 +27,6 @@ print(nullable == null);
 print(nullable != null);
 
 =====
-
 true
 true
 true
