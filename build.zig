@@ -39,8 +39,7 @@ pub fn build(b: *Build) !void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     // Integration tests
-    try @import("tests/integration.zig").addIntegrationTest(b);
-    @import("tests/run_integration_tests.zig").addIntegrationTests(b, .{
+    @import("tests/integration_tests.zig").addIntegrationTests(b, .{
         .target = target,
         .optimize = optimize,
         .compiler = compiler,

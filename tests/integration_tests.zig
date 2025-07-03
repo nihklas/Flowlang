@@ -11,7 +11,7 @@ pub fn addIntegrationTests(b: *std.Build, config: IntegrationConfig) void {
     const integration_step = b.step("integration", "Run the integration tests");
 
     const runner_mod = b.addModule("integration_test", .{
-        .root_source_file = b.path("tests/new_test_runner.zig"),
+        .root_source_file = b.path("tests/test_runner.zig"),
         .target = config.target,
         .optimize = config.optimize,
     });
