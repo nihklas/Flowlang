@@ -46,6 +46,8 @@ pub fn parse() Options {
             options.check = true;
         } else if (std.mem.eql(u8, argument, "--run")) {
             options.run = true;
+        } else if (std.mem.eql(u8, argument, "--no-color")) {
+            @import("error_reporter.zig").colored_output = false;
         } else if (std.mem.eql(u8, argument, "--help")) {
             printHelpAndQuit(0);
         }
@@ -74,6 +76,8 @@ pub fn printHelpAndQuit(exit_code: u8) noreturn {
         \\                            to the output File instead of building an executable
         \\        --check             Go through Semantic Analysis and quit
         \\        --run               Run the compiled code directly
+        \\        --no-color          Turns off colored error messages, useful for testing or 
+        \\                            running in terminals that display the error messages wrongly
         \\        --help              Print this message
         \\
         \\    Arguments

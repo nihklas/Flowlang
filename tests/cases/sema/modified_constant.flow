@@ -1,0 +1,8 @@
+const one = 1;
+one = 2;
+
++++++
+error: Constant 'one' cannot be modified at 2:1
+   2 | one = 2;
+       ^~~~~ Here
+

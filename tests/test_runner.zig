@@ -29,7 +29,7 @@ const SharedState = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        self.results.put(self.alloc, self.alloc.dupe(u8, case) catch unreachable, result) catch unreachable;
+        self.results.put(self.alloc, case, result) catch unreachable;
     }
 };
 
@@ -106,22 +106,58 @@ pub fn main() u8 {
 }
 
 fn runTests(gpa: std.mem.Allocator, cases_dir: []const u8, file_filter: []const u8, compiler: []const u8, state: *SharedState) !void {
-    var test_dir = try std.fs.openDirAbsolute(cases_dir, .{ .iterate = true });
-    defer test_dir.close();
+    const DirEntry = struct {
+        dir: std.fs.Dir,
+        path: []const u8,
+    };
+
+    var all_dirs: std.ArrayListUnmanaged(DirEntry) = .empty;
+    defer {
+        for (all_dirs.items) |*entry| {
+            gpa.free(entry.path);
+            entry.dir.close();
+        }
+        all_dirs.deinit(gpa);
+    }
+
+    var walking: std.ArrayListUnmanaged(usize) = .empty;
+    defer walking.deinit(gpa);
+
+    const root_dir = try std.fs.openDirAbsolute(cases_dir, .{ .iterate = true });
+
+    try all_dirs.append(gpa, .{ .dir = root_dir, .path = try gpa.dupe(u8, cases_dir) });
+    try walking.append(gpa, all_dirs.items.len - 1);
 
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = gpa });
     defer pool.deinit();
 
-    var dir_iter = test_dir.iterate();
-    while (try dir_iter.next()) |entry| {
-        if (entry.kind != .file) continue;
+    while (walking.items.len > 0) {
+        const idx = walking.pop().?;
+        const entry = all_dirs.items[idx];
 
-        if (std.mem.indexOf(u8, entry.name, file_filter) == null) {
-            continue;
+        var iter = entry.dir.iterate();
+        while (try iter.next()) |child| {
+            const full_path = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ entry.path, child.name });
+            defer gpa.free(full_path);
+
+            switch (child.kind) {
+                .file => {
+                    if (std.mem.indexOf(u8, full_path, file_filter) == null) {
+                        continue;
+                    }
+
+                    const rel = try std.fs.path.relative(gpa, cases_dir, full_path);
+                    try pool.spawn(workerFn, .{ root_dir, rel, compiler, state });
+                },
+                .directory => {
+                    const dir = try entry.dir.openDir(child.name, .{ .iterate = true });
+                    try all_dirs.append(gpa, .{ .dir = dir, .path = try gpa.dupe(u8, full_path) });
+                    try walking.append(gpa, all_dirs.items.len - 1);
+                },
+                else => {},
+            }
         }
-
-        try pool.spawn(workerFn, .{ test_dir, entry.name, compiler, state });
     }
 }
 
@@ -143,6 +179,9 @@ fn workerFn(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: 
         });
         printStdErr("\n======================================\n", .{});
         printStdErr("{s}\n", .{error_buf.items});
+        if (result == .crash) {
+            printStdErr("{s}\n", .{@errorName(err)});
+        }
 
         state.setResult(sub_path, result);
     };
@@ -155,8 +194,8 @@ const TestError = error{
     ExecutionInterrupted,
 };
 
-fn doTest(error_writer: anytype, dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *SharedState) !void {
-    var file = try dir.openFile(sub_path, .{});
+fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compiler: []const u8, state: *SharedState) !void {
+    var file = try dir.openFile(case_name, .{});
     defer file.close();
 
     const content = try file.readToEndAlloc(state.alloc, MAX_TEST_CASE_SIZE);
@@ -166,7 +205,7 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, sub_path: []const u8, compiler
     const maybe_stderr = std.mem.indexOf(u8, content, SPLIT_MARKER_STDERR);
 
     if (maybe_stdout != null and maybe_stderr != null) {
-        printTo(error_writer, "In test case {s} there are both stdout and stderr assertions. Only one at a time can be applied.\n", .{sub_path});
+        printTo(error_writer, "In test case {s} there are both stdout and stderr assertions. Only one at a time can be applied.\n", .{case_name});
         return TestError.WrongAssertion;
     }
 
@@ -178,15 +217,28 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, sub_path: []const u8, compiler
             break :blk .{ stderr, .stderr };
         }
 
-        printTo(error_writer, "In test case {s} are no assertions.\n", .{sub_path});
+        printTo(error_writer, "In test case {s} are no assertions.\n", .{case_name});
         return TestError.MissingAssertion;
     };
 
     const source = std.mem.trim(u8, content[0..assertions_start], " \n");
     const assertion = content[assertions_start + SPLIT_MARKER_LEN ..];
 
-    const tmp_file_path = try std.fmt.allocPrint(state.alloc, "/tmp/{s}", .{sub_path});
+    const tmp_file_path = try std.fmt.allocPrint(state.alloc, "/tmp/{s}", .{case_name});
     defer state.alloc.free(tmp_file_path);
+
+    {
+        if (std.fs.path.dirname(tmp_file_path)) |dir_name| {
+            if (!std.mem.eql(u8, dir_name, "/tmp")) {
+                state.mutex.lock();
+                defer state.mutex.unlock();
+
+                var tmp_dir = std.fs.openDirAbsolute("/tmp", .{}) catch unreachable;
+                defer tmp_dir.close();
+                try tmp_dir.makePath(dir_name);
+            }
+        }
+    }
 
     {
         const source_file = try std.fs.createFileAbsolute(tmp_file_path, .{});
@@ -194,7 +246,7 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, sub_path: []const u8, compiler
         try source_file.writeAll(source);
     }
 
-    var child = std.process.Child.init(&.{ compiler, "--run", tmp_file_path }, state.alloc);
+    var child = std.process.Child.init(&.{ compiler, "--no-color", "--run", tmp_file_path }, state.alloc);
     child.stderr_behavior = .Pipe;
     child.stdout_behavior = .Pipe;
 
@@ -209,27 +261,27 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, sub_path: []const u8, compiler
     const term = try child.wait();
 
     if (term != .Exited) {
-        printTo(error_writer, "Test Case {s} got interrupted\n", .{sub_path});
+        printTo(error_writer, "Test Case {s} got interrupted\n", .{case_name});
         return TestError.ExecutionInterrupted;
     }
 
     if (term.Exited != 0) {
         if (output != .stderr) {
-            printTo(error_writer, "Expected the test program to succeed, but it failed. TestCase: {s}\n", .{sub_path});
-            printTo(error_writer, "Error Output:\n{s}\n\n", .{stderr.items});
+            printTo(error_writer, "Expected the test program to succeed, but it failed. TestCase: {s}\n", .{case_name});
+            printTo(error_writer, "Error Output:\n\n{s}", .{stderr.items});
             return TestError.TestFailed;
         }
         try expectEqualStrings(error_writer, assertion, stderr.items);
     } else {
         if (output != .stdout) {
-            printTo(error_writer, "Expected the test program to fail, but it succeeded. TestCase: {s}\n", .{sub_path});
-            printTo(error_writer, "Succesfull Output:\n{s}\n\n", .{stdout.items});
+            printTo(error_writer, "Expected the test program to fail, but it succeeded. TestCase: {s}\n", .{case_name});
+            printTo(error_writer, "Succesfull Output:\n\n{s}", .{stdout.items});
             return TestError.TestFailed;
         }
         try expectEqualStrings(error_writer, assertion, stdout.items);
     }
 
-    state.setResult(sub_path, .success);
+    state.setResult(case_name, .success);
 }
 
 fn printStdOut(comptime fmt: []const u8, args: anytype) void {
