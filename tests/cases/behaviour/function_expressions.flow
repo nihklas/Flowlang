@@ -1,0 +1,32 @@
+func makeDoubler() func(int) int {
+    const doubler = func(a: int) int {
+        return a + a;
+    }
+    return doubler;
+}
+
+func makePrinter() func(string, int) {
+    return func(s: string, count: int) {
+        for var i = 0; i < count; i += 1 {
+            print(s);
+        }
+    };
+}
+
+const doubler = makeDoubler();
+print(doubler(3));
+
+const printer: func(string, int) = makePrinter();
+printer("This is something", 3);
+
+func(a: int) {
+    print("Anonymous times " . a);
+}(2);
+
+=====
+6
+This is something
+This is something
+This is something
+Anonymous times 2
+Anonymous times 2
