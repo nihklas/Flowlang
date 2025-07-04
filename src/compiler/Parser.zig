@@ -54,7 +54,7 @@ fn varDeclaration(self: *Parser) ParserError!*Stmt {
 
     const type_hint = blk: {
         if (self.match(.@":")) |colon| {
-            const result = self.typeHint();
+            const result = try self.typeHint();
 
             if (result == null) {
                 error_reporter.reportError(colon, "Expected typehint after ':'", .{});
@@ -103,7 +103,7 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
             };
         }
 
-        const result = self.typeHint();
+        const result = try self.typeHint();
         if (result == null) {
             error_reporter.reportError(self.peek(), "Unexpected Token, expected either typehint or '{{'", .{});
             return error.UnexpectedToken;
@@ -143,7 +143,7 @@ fn param(self: *Parser) ?*Stmt {
             self.has_error = true;
             return null;
         };
-        const type_hint = self.typeHint();
+        const type_hint = self.typeHint() catch null;
         if (type_hint == null) {
             error_reporter.reportError(name, "Expected type hint after parameter name", .{});
             self.has_error = true;
@@ -530,7 +530,7 @@ fn primary(self: *Parser) ParserError!*Expr {
     return ParserError.UnexpectedToken;
 }
 
-fn typeHint(self: *Parser) ?ast.TypeHint {
+fn typeHint(self: *Parser) !?ast.TypeHint {
     var order: u8 = 0;
     while (self.match(.@"[]") != null) {
         order += 1;
@@ -549,6 +549,37 @@ fn typeHint(self: *Parser) ?ast.TypeHint {
                 .order = order,
             },
             .token = token,
+        };
+    }
+
+    if (self.match(.func)) |func| {
+        try self.consume(.@"(", "Expected '(' after 'func'");
+
+        const params: []const definitions.FlowType = blk: {
+            var params_list: std.ArrayList(definitions.FlowType) = .init(self.arena);
+            defer params_list.deinit();
+
+            while (!self.check(.@")") and !self.isAtEnd()) {
+                const hint = (try self.typeHint()) orelse {
+                    error_reporter.reportError(self.peek(), "Expected typehint, got {}", .{self.peek()});
+                    return error.SyntaxError;
+                };
+                params_list.append(hint.type) catch oom();
+
+                if (self.match(.@",") == null) break;
+            }
+
+            break :blk params_list.toOwnedSlice() catch oom();
+        };
+        try self.consume(.@")", "Expected ')' after parameter types");
+
+        const ret_type: ast.TypeHint = (try self.typeHint()) orelse .{ .type = .null, .token = self.previous() };
+
+        const function = definitions.FlowType.function(self.arena, ret_type.type, params) catch oom();
+
+        return .{
+            .type = function,
+            .token = func,
         };
     }
 

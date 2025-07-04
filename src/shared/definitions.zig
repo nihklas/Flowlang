@@ -13,6 +13,10 @@ pub const FlowFunction = struct {
     arg_count: u8,
     start_ip: usize,
 };
+pub const FlowFunctionType = struct {
+    arg_types: []const FlowType,
+    ret_type: FlowType,
+};
 
 pub const FlowArray = struct {
     items: [*]FlowValue,
@@ -33,33 +37,86 @@ pub const FlowPrimitive = enum {
 pub const FlowType = struct {
     order: u8,
     type: FlowPrimitive,
+    function_type: ?*FlowFunctionType = null,
 
     pub const @"null": FlowType = .{ .type = .null, .order = 0 };
 
+    /// Only available for actual primitive values, asserts that the parameter is not a function
+    /// type
+    /// To create a Function Type, use `.function()`
     pub fn primitive(primitive_type: FlowPrimitive) FlowType {
+        std.debug.assert(primitive_type != .function and primitive_type != .builtin_fn);
+
         return .{ .type = primitive_type, .order = 0 };
+    }
+
+    pub fn function(alloc: std.mem.Allocator, ret_type: FlowType, arg_types: []const FlowType) !FlowType {
+        const func = try alloc.create(FlowFunctionType);
+        func.ret_type = ret_type;
+        func.arg_types = arg_types;
+        return .{ .order = 0, .type = .function, .function_type = func };
     }
 
     pub fn isNull(self: *const FlowType) bool {
         return self.type == .null;
     }
 
+    /// Asserts primitive_type is not a function type
     pub fn isPrimitive(self: *const FlowType, primitive_type: FlowPrimitive) bool {
+        // Functions are not primitives
+        std.debug.assert(primitive_type != .function and primitive_type != .builtin_fn);
+        if (self.type == .function or self.type == .builtin_fn) return false;
+
         return self.type == primitive_type and self.order == 0;
     }
 
     pub fn equals(self: *const FlowType, other: *const FlowType) bool {
-        // a null primitive is "equal" to any other type in the sense of type checking
+        // NOTE: null is "equal" to any other type in the sense of type checking
         if (self.isPrimitive(.null)) return true;
         if (other.isPrimitive(.null)) return true;
 
         if (self.order != other.order) return false;
-        return self.type == .null or other.type == .null or self.type == other.type;
+        if (self.type != other.type) return false;
+
+        if (self.type == .function) {
+            std.debug.assert(self.function_type != null);
+            std.debug.assert(other.function_type != null);
+
+            const self_func = self.function_type.?;
+            const other_func = other.function_type.?;
+
+            if (!self_func.ret_type.equals(&other_func.ret_type)) return false;
+            if (self_func.arg_types.len != other_func.arg_types.len) return false;
+
+            for (self_func.arg_types, other_func.arg_types) |a, b| {
+                if (!a.equals(&b)) return false;
+            }
+        }
+
+        return true;
     }
 
     pub fn format(self: FlowType, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         for (0..self.order) |_| {
             try writer.writeAll("[]");
+        }
+        if (self.type == .function) {
+            std.debug.assert(self.function_type != null);
+
+            try writer.writeAll("func(");
+            for (self.function_type.?.arg_types, 0..) |arg, i| {
+                if (i > 0) {
+                    try writer.writeAll(", ");
+                }
+                try writer.print("{}", .{arg});
+            }
+            try writer.writeAll(")");
+
+            if (!self.function_type.?.ret_type.isNull()) {
+                try writer.print(" {}", .{self.function_type.?.ret_type});
+            }
+
+            return;
         }
         try writer.print("{s}", .{@tagName(self.type)});
     }
