@@ -24,6 +24,13 @@ const SharedState = struct {
     mutex: std.Thread.Mutex,
     alloc: std.mem.Allocator,
     results: std.StringHashMapUnmanaged(Result),
+
+    fn setResult(self: *SharedState, case: []const u8, result: Result) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        self.results.put(self.alloc, self.alloc.dupe(u8, case) catch unreachable, result) catch unreachable;
+    }
 };
 
 pub fn main() u8 {
@@ -61,7 +68,7 @@ pub fn main() u8 {
 
     runTests(gpa, cases_dir, file_filter, compiler, &state) catch return 1;
 
-    printStdOut("\n------------------------------\n\n", .{});
+    printStdErr("\n======================================\n\n", .{});
 
     var stats: std.AutoHashMapUnmanaged(Result, u16) = .empty;
     defer stats.deinit(gpa);
@@ -85,7 +92,7 @@ pub fn main() u8 {
         printStdOut("{s} Test Case: {s}\n", .{ icon, entry.key_ptr.* });
     }
 
-    printStdOut("\n-----------------------------------\n{d} Tests Succeeded, {d} Tests Failed", .{ stats.get(.success).?, stats.get(.failure).? });
+    printStdOut("\n{d} Tests Succeeded, {d} Tests Failed", .{ stats.get(.success).?, stats.get(.failure).? });
     if (stats.get(.crash).? > 0) {
         printStdOut(", {d} Tests crashed", .{stats.get(.crash).?});
     }
@@ -118,24 +125,37 @@ fn runTests(gpa: std.mem.Allocator, cases_dir: []const u8, file_filter: []const 
     }
 }
 
-// Note: gets file and *state
 fn workerFn(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *SharedState) void {
-    doTest(dir, sub_path, compiler, state) catch |err| {
+    var error_buf: std.ArrayListUnmanaged(u8) = .empty;
+    defer error_buf.deinit(state.alloc);
+    const error_writer = error_buf.writer(state.alloc);
+
+    doTest(error_writer, dir, sub_path, compiler, state) catch |err| {
         const result: Result = switch (err) {
-            error.TestFailed => .failure,
+            TestError.TestFailed => .failure,
             else => .crash,
         };
 
-        {
-            state.mutex.lock();
-            defer state.mutex.unlock();
+        printStdErr("\n======================================\n", .{});
+        printStdErr("Test Case {s} {s}:", .{
+            sub_path,
+            if (result == .failure) "failed" else "crashed",
+        });
+        printStdErr("\n======================================\n", .{});
+        printStdErr("{s}\n", .{error_buf.items});
 
-            state.results.put(state.alloc, state.alloc.dupe(u8, sub_path) catch return, result) catch return;
-        }
+        state.setResult(sub_path, result);
     };
 }
 
-fn doTest(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *SharedState) !void {
+const TestError = error{
+    TestFailed,
+    WrongAssertion,
+    MissingAssertion,
+    ExecutionInterrupted,
+};
+
+fn doTest(error_writer: anytype, dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *SharedState) !void {
     var file = try dir.openFile(sub_path, .{});
     defer file.close();
 
@@ -146,8 +166,8 @@ fn doTest(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *S
     const maybe_stderr = std.mem.indexOf(u8, content, SPLIT_MARKER_STDERR);
 
     if (maybe_stdout != null and maybe_stderr != null) {
-        printStdErr("In test case {s} there are both stdout and stderr assertions. Only one at a time can be applied.\n", .{sub_path});
-        return error.WrongAssertions;
+        printTo(error_writer, "In test case {s} there are both stdout and stderr assertions. Only one at a time can be applied.\n", .{sub_path});
+        return TestError.WrongAssertion;
     }
 
     const assertions_start, const output: OutputPipe = blk: {
@@ -158,8 +178,8 @@ fn doTest(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *S
             break :blk .{ stderr, .stderr };
         }
 
-        printStdErr("In test case {s} are no assertions.\n", .{sub_path});
-        return error.MissingAssertions;
+        printTo(error_writer, "In test case {s} are no assertions.\n", .{sub_path});
+        return TestError.MissingAssertion;
     };
 
     const source = std.mem.trim(u8, content[0..assertions_start], " \n");
@@ -189,75 +209,66 @@ fn doTest(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *S
     const term = try child.wait();
 
     if (term != .Exited) {
-        printStdErr("Test Case got interrupted\n", .{});
-        return error.ExecutionInterrupted;
+        printTo(error_writer, "Test Case {s} got interrupted\n", .{sub_path});
+        return TestError.ExecutionInterrupted;
     }
 
     if (term.Exited != 0) {
         if (output != .stderr) {
-            printStdErr("Expected the test program to succeed, but it failed. TestCase: {s}\n", .{sub_path});
-            printStdErr("Error Output:\n{s}\n", .{stderr.items});
-            printStdErr("======================\n", .{});
-            return error.TestFailed;
+            printTo(error_writer, "Expected the test program to succeed, but it failed. TestCase: {s}\n", .{sub_path});
+            printTo(error_writer, "Error Output:\n{s}\n\n", .{stderr.items});
+            return TestError.TestFailed;
         }
-        try expectEqualStrings(assertion, stderr.items);
+        try expectEqualStrings(error_writer, assertion, stderr.items);
     } else {
         if (output != .stdout) {
-            printStdErr("Expected the test program to fail, but it succeeded. TestCase: {s}\n", .{sub_path});
-            printStdErr("Succesfull Output:\n{s}\n", .{stdout.items});
-            printStdErr("======================\n", .{});
-            return error.TestFailed;
+            printTo(error_writer, "Expected the test program to fail, but it succeeded. TestCase: {s}\n", .{sub_path});
+            printTo(error_writer, "Succesfull Output:\n{s}\n\n", .{stdout.items});
+            return TestError.TestFailed;
         }
-        try expectEqualStrings(assertion, stdout.items);
+        try expectEqualStrings(error_writer, assertion, stdout.items);
     }
 
-    {
-        state.mutex.lock();
-        defer state.mutex.unlock();
-
-        state.results.put(state.alloc, state.alloc.dupe(u8, sub_path) catch return, .success) catch return;
-    }
+    state.setResult(sub_path, .success);
 }
 
 fn printStdOut(comptime fmt: []const u8, args: anytype) void {
-    print_mutex.lock();
-    defer print_mutex.unlock();
-
     stdout_writer.print(fmt, args) catch unreachable;
 }
 
 fn printStdErr(comptime fmt: []const u8, args: anytype) void {
-    print_mutex.lock();
-    defer print_mutex.unlock();
-
     stderr_writer.print(fmt, args) catch unreachable;
 }
 
-fn expectEqualStrings(expected: []const u8, actual: []const u8) !void {
+fn printTo(writer: anytype, comptime fmt: []const u8, args: anytype) void {
+    writer.print(fmt, args) catch unreachable;
+}
+
+fn expectEqualStrings(writer: anytype, expected: []const u8, actual: []const u8) TestError!void {
     if (std.mem.indexOfDiff(u8, actual, expected)) |diff_index| {
-        printStdErr("\n====== expected this output: =========\n", .{});
-        printWithVisibleNewlines(expected);
-        printStdErr("\n======== instead found this: =========\n", .{});
-        printWithVisibleNewlines(actual);
-        printStdErr("\n======================================\n", .{});
+        printTo(writer, "\n------ expected this output: ---------\n", .{});
+        printWithVisibleNewlines(writer, expected);
+        printTo(writer, "\n-------- instead found this: ---------\n", .{});
+        printWithVisibleNewlines(writer, actual);
+        printTo(writer, "\n--------------------------------------\n", .{});
 
         var diff_line_number: usize = 1;
         for (expected[0..diff_index]) |value| {
             if (value == '\n') diff_line_number += 1;
         }
-        printStdErr("First difference occurs on line {d}:\n", .{diff_line_number});
+        printTo(writer, "First difference occurs on line {d}:\n", .{diff_line_number});
 
-        printStdErr("expected:\n", .{});
-        printIndicatorLine(expected, diff_index);
+        printTo(writer, "expected:\n", .{});
+        printIndicatorLine(writer, expected, diff_index);
 
-        printStdErr("found:\n", .{});
-        printIndicatorLine(actual, diff_index);
+        printTo(writer, "found:\n", .{});
+        printIndicatorLine(writer, actual, diff_index);
 
-        return error.TestFailed;
+        return TestError.TestFailed;
     }
 }
 
-fn printIndicatorLine(source: []const u8, indicator_index: usize) void {
+fn printIndicatorLine(writer: anytype, source: []const u8, indicator_index: usize) void {
     const line_begin_index = if (std.mem.lastIndexOfScalar(u8, source[0..indicator_index], '\n')) |line_begin|
         line_begin + 1
     else
@@ -267,29 +278,29 @@ fn printIndicatorLine(source: []const u8, indicator_index: usize) void {
     else
         source.len;
 
-    printLine(source[line_begin_index..line_end_index]);
+    printLine(writer, source[line_begin_index..line_end_index]);
     for (line_begin_index..indicator_index) |_|
-        printStdErr(" ", .{});
+        printTo(writer, " ", .{});
     if (indicator_index >= source.len)
-        printStdErr("^ (end of string)\n", .{})
+        printTo(writer, "^ (end of string)\n", .{})
     else
-        printStdErr("^ ('\\x{x:0>2}')\n", .{source[indicator_index]});
+        printTo(writer, "^ ('\\x{x:0>2}')\n", .{source[indicator_index]});
 }
 
-fn printWithVisibleNewlines(source: []const u8) void {
+fn printWithVisibleNewlines(writer: anytype, source: []const u8) void {
     var i: usize = 0;
     while (std.mem.indexOfScalar(u8, source[i..], '\n')) |nl| : (i += nl + 1) {
-        printLine(source[i..][0..nl]);
+        printLine(writer, source[i..][0..nl]);
     }
-    printStdErr("{s}␃\n", .{source[i..]}); // End of Text symbol (ETX)
+    printTo(writer, "{s}␃\n", .{source[i..]}); // End of Text symbol (ETX)
 }
 
-fn printLine(line: []const u8) void {
+fn printLine(writer: anytype, line: []const u8) void {
     if (line.len != 0) switch (line[line.len - 1]) {
-        ' ', '\t' => return printStdErr("{s}⏎\n", .{line}), // Return symbol
+        ' ', '\t' => return printTo(writer, "{s}⏎\n", .{line}), // Return symbol
         else => {},
     };
-    printStdErr("{s}\n", .{line});
+    printTo(writer, "{s}\n", .{line});
 }
 
 var print_mutex: std.Thread.Mutex = .{};
