@@ -531,56 +531,57 @@ fn primary(self: *Parser) ParserError!*Expr {
 }
 
 fn typeHint(self: *Parser) !?ast.TypeHint {
+    const hint_type = self.typeHintType() orelse return null;
+    return .{ .token = hint_type[0], .type = hint_type[1] };
+}
+
+fn typeHintType(self: *Parser) ?struct { Token, definitions.FlowType } {
     var order: u8 = 0;
     while (self.match(.@"[]") != null) {
         order += 1;
     }
 
     if (self.matchOneOf(&.{ .string, .int, .float, .bool })) |token| {
-        return .{
-            .type = .{
-                .type = switch (token.type) {
-                    .string => .string,
-                    .int => .int,
-                    .float => .float,
-                    .bool => .bool,
-                    else => unreachable,
-                },
-                .order = order,
+        return .{ token, .{
+            .type = switch (token.type) {
+                .string => .string,
+                .int => .int,
+                .float => .float,
+                .bool => .bool,
+                else => unreachable,
             },
-            .token = token,
-        };
+            .order = order,
+        } };
     }
 
     if (self.match(.func)) |func| {
-        try self.consume(.@"(", "Expected '(' after 'func'");
+        self.consume(.@"(", "Expected '(' after 'func'") catch return null;
 
         const params: []const definitions.FlowType = blk: {
             var params_list: std.ArrayList(definitions.FlowType) = .init(self.arena);
             defer params_list.deinit();
 
             while (!self.check(.@")") and !self.isAtEnd()) {
-                const hint = (try self.typeHint()) orelse {
+                if (self.typeHintType()) |hint_type| {
+                    params_list.append(hint_type[1]) catch oom();
+                } else {
                     error_reporter.reportError(self.peek(), "Expected typehint, got {}", .{self.peek()});
-                    return error.SyntaxError;
-                };
-                params_list.append(hint.type) catch oom();
+                    self.has_error = true;
+                    return null;
+                }
 
                 if (self.match(.@",") == null) break;
             }
 
             break :blk params_list.toOwnedSlice() catch oom();
         };
-        try self.consume(.@")", "Expected ')' after parameter types");
+        self.consume(.@")", "Expected ')' after parameter types") catch return null;
 
-        const ret_type: ast.TypeHint = (try self.typeHint()) orelse .{ .type = .null, .token = self.previous() };
+        const ret_type: definitions.FlowType = if (self.typeHintType()) |hint_type| hint_type[1] else .null;
 
-        const function = definitions.FlowType.function(self.arena, ret_type.type, params) catch oom();
+        const function = definitions.FlowType.function(self.arena, ret_type, params) catch oom();
 
-        return .{
-            .type = function,
-            .token = func,
-        };
+        return .{ func, function };
     }
 
     return null;

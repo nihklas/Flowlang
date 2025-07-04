@@ -672,7 +672,7 @@ const Variable = struct {
 
 const Function = struct {
     ret_type: FlowType,
-    arg_types: []FlowType,
+    arg_types: []const FlowType,
 };
 
 const Sema = @This();
