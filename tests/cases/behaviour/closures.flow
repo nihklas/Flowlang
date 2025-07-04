@@ -1,0 +1,43 @@
+func genAdderAnon() func(int) int {
+    const anon = func(a: int, b: int) int {
+        print("Anon Adder");
+        return a + b;
+    }
+    return anon;
+}
+
+func genAdderClosure(base: int) func(int) int {
+    const anon_clos = func(a: int) use (base) int {
+        print("Closure Adder with Base " . base);
+        return a + base;
+    }
+    return anon_clos;
+}
+
+func genAdderInner(base: int) func(int) int {
+    func adder(a: int) use (base) int {
+        print("Inner Adder with Base " . base);
+        return base + a;
+    }
+    return adder;
+}
+
+func useAdder(adder: func(int) int) int {
+    return adder(1);
+}
+
+const adder1: func(int) int = genAdderClosure(1);
+const adder2 = genAdderInner(2);
+const adder3: func(int, int) int = genAdderAnon();
+
+print(useAdder(adder1));
+print(adder2(5));
+print(adder3(1, 4));
+
+=====
+Closure Adder with Base 1
+2
+Inner Adder with Base 2
+7
+Anon Adder
+5

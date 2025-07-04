@@ -1,0 +1,10 @@
+// function without params and return type
+const func1: func() = null;
+// function with params but without return type
+const func2: func(int) = null;
+// function with multiple params
+const func3: func(int, int, float) = null;
+// function without params but with return type
+const func4: func() int = null;
+// function with params and return type
+const func5: func(int) int = null;
