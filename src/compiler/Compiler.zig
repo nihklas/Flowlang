@@ -158,7 +158,7 @@ fn compileLoop(self: *Compiler, loop_idx: usize) void {
         .breaks = .empty,
         .inc = loop.inc,
     }) catch oom();
-    defer std.debug.assert(self.loop_levels.pop() != null);
+    defer assert(self.loop_levels.pop() != null);
     defer {
         var breaks = &self.loop_levels.items[self.loop_levels.items.len - 1].breaks;
         defer breaks.deinit(self.alloc);
@@ -229,13 +229,13 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
     switch (expr.op) {
         .builtin_fn => {
             const literal = self.fir.constants.items[expr.operands[0]];
-            std.debug.assert(literal == .string);
+            assert(literal == .string);
             self.emitConstant(expr.operands[0]);
             self.emitOpcode(.get_builtin);
         },
         .literal => {
             const literal = self.fir.constants.items[expr.operands[0]];
-            std.debug.assert(literal == .int or literal == .float or literal == .string);
+            assert(literal == .int or literal == .float or literal == .string);
             self.emitConstant(expr.operands[0]);
         },
         .true => self.emitOpcode(.true),
@@ -319,14 +319,14 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
 }
 
 fn compileUnary(self: *Compiler, expr: FIR.Node.Expr) void {
-    std.debug.assert(expr.operands.len == 1);
+    assert(expr.operands.len == 1);
 
     self.compileExpression(expr.operands[0]);
 
     switch (expr.op) {
         .not => self.emitOpcode(.not),
         .negate => {
-            std.debug.assert(expr.type.order == 0);
+            assert(expr.type.order == 0);
             self.emitOpcode(if (expr.type.isPrimitive(.int)) .negate_i else .negate_f);
         },
         else => unreachable,
@@ -334,13 +334,13 @@ fn compileUnary(self: *Compiler, expr: FIR.Node.Expr) void {
 }
 
 fn compileBinary(self: *Compiler, expr: FIR.Node.Expr) void {
-    std.debug.assert(expr.operands.len == 2);
+    assert(expr.operands.len == 2);
 
     self.compileExpression(expr.operands[0]);
     self.compileExpression(expr.operands[1]);
 
     switch (expr.op) {
-        .add, .sub, .div, .mul, .mod => std.debug.assert(expr.type.order == 0),
+        .add, .sub, .div, .mul, .mod => assert(expr.type.order == 0),
         else => {},
     }
 
@@ -362,7 +362,7 @@ fn compileBinary(self: *Compiler, expr: FIR.Node.Expr) void {
 }
 
 fn compileLogical(self: *Compiler, expr: FIR.Node.Expr) void {
-    std.debug.assert(expr.operands.len == 2);
+    assert(expr.operands.len == 2);
 
     self.compileExpression(expr.operands[0]);
 
@@ -447,3 +447,4 @@ const panic = std.debug.panic;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;

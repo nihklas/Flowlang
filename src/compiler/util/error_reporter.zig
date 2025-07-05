@@ -22,7 +22,7 @@ fn reportErrorFailingColored(token: Token, comptime fmt: []const u8, args: anyty
     try stderr.print("\x1b[34m{d: >4} |\x1b[0m {s}\n", .{ token.line, line_text });
     try stderr.writeAll("       ");
 
-    std.debug.assert(token.column > 0);
+    assert(token.column > 0);
     for (0..token.column - 1) |_| {
         try stderr.writeByte(' ');
     }
@@ -39,7 +39,7 @@ fn reportErrorFailingBasic(token: Token, comptime fmt: []const u8, args: anytype
     try stderr.print("{d: >4} | {s}\n", .{ token.line, line_text });
     try stderr.writeAll("       ");
 
-    std.debug.assert(token.column > 0);
+    assert(token.column > 0);
     for (0..token.column - 1) |_| {
         try stderr.writeByte(' ');
     }
@@ -56,6 +56,7 @@ fn getLineAt(line_num: usize) ?[]const u8 {
 }
 
 const std = @import("std");
+const assert = std.debug.assert;
 const builtin = @import("builtin");
 const testing_options = @import("testing_options");
 const stderr = if (builtin.is_test and !testing_options.use_stderr) std.io.null_writer else std.io.getStdErr().writer();

@@ -223,7 +223,7 @@ fn runWhileSwitch(self: *VM) void {
             .set_global_array => {
                 const global_idx = self.byte();
                 const index_amount = self.byte();
-                std.debug.assert(index_amount > 0);
+                assert(index_amount > 0);
 
                 var array = self.globals[global_idx];
 
@@ -253,7 +253,7 @@ fn runWhileSwitch(self: *VM) void {
             .set_local_array => {
                 const local_idx = self.byte();
                 const index_amount = self.byte();
-                std.debug.assert(index_amount > 0);
+                assert(index_amount > 0);
 
                 var array = self.getLocal(local_idx);
 
@@ -458,6 +458,7 @@ const VM = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
 
 const stdout = std.io.getStdOut().writer();
 

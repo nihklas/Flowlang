@@ -41,20 +41,61 @@ pub const FlowType = struct {
 
     pub const @"null": FlowType = .{ .type = .null, .order = 0 };
 
+    pub fn deinit(self: *const FlowType, alloc: std.mem.Allocator) void {
+        switch (self.type) {
+            .null, .bool, .int, .float, .string, .builtin_fn => {},
+            .function => {
+                assert(self.function_type != null);
+                alloc.free(self.function_type.?.arg_types);
+                self.function_type.?.ret_type.deinit(alloc);
+                alloc.destroy(self.function_type.?);
+            },
+        }
+    }
+
+    /// Clones the FlowType using a Deep Clone
+    pub fn clone(self: *const FlowType, alloc: std.mem.Allocator) FlowType {
+        switch (self.type) {
+            .null, .bool, .int, .float, .string, .builtin_fn => return self.*,
+            .function => {
+                assert(self.function_type != null);
+                const new_func = alloc.create(FlowFunctionType) catch oom();
+                new_func.ret_type = self.function_type.?.ret_type.clone(alloc);
+
+                const new_args = alloc.alloc(FlowType, self.function_type.?.arg_types.len) catch oom();
+                for (new_args, self.function_type.?.arg_types) |*new_arg, old_arg| {
+                    new_arg.* = old_arg.clone(alloc);
+                }
+                new_func.arg_types = new_args;
+                return .{
+                    .order = self.order,
+                    .type = .function,
+                    .function_type = new_func,
+                };
+            },
+        }
+    }
+
     /// Only available for actual primitive values, asserts that the parameter is not a function
     /// type
     /// To create a Function Type, use `.function()`
+    /// To create a Builtin Function Type, use `.builtinFn()`
     pub fn primitive(primitive_type: FlowPrimitive) FlowType {
-        std.debug.assert(primitive_type != .function and primitive_type != .builtin_fn);
+        assert(primitive_type != .function and primitive_type != .builtin_fn);
 
         return .{ .type = primitive_type, .order = 0 };
     }
 
+    /// Return FlowType owns the memory of arg_types
     pub fn function(alloc: std.mem.Allocator, ret_type: FlowType, arg_types: []const FlowType) !FlowType {
         const func = try alloc.create(FlowFunctionType);
         func.ret_type = ret_type;
         func.arg_types = arg_types;
         return .{ .order = 0, .type = .function, .function_type = func };
+    }
+
+    pub fn builtinFn() FlowType {
+        return .{ .type = .builtin_fn, .order = 0 };
     }
 
     pub fn isNull(self: *const FlowType) bool {
@@ -64,10 +105,18 @@ pub const FlowType = struct {
     /// Asserts primitive_type is not a function type
     pub fn isPrimitive(self: *const FlowType, primitive_type: FlowPrimitive) bool {
         // Functions are not primitives
-        std.debug.assert(primitive_type != .function and primitive_type != .builtin_fn);
+        assert(primitive_type != .function and primitive_type != .builtin_fn);
         if (self.type == .function or self.type == .builtin_fn) return false;
 
         return self.type == primitive_type and self.order == 0;
+    }
+
+    pub fn isFunction(self: *const FlowType) bool {
+        return self.type == .function;
+    }
+
+    pub fn isArray(self: *const FlowType) bool {
+        return self.order > 0;
     }
 
     pub fn equals(self: *const FlowType, other: *const FlowType) bool {
@@ -79,8 +128,8 @@ pub const FlowType = struct {
         if (self.type != other.type) return false;
 
         if (self.type == .function) {
-            std.debug.assert(self.function_type != null);
-            std.debug.assert(other.function_type != null);
+            assert(self.function_type != null);
+            assert(other.function_type != null);
 
             const self_func = self.function_type.?;
             const other_func = other.function_type.?;
@@ -101,7 +150,7 @@ pub const FlowType = struct {
             try writer.writeAll("[]");
         }
         if (self.type == .function) {
-            std.debug.assert(self.function_type != null);
+            assert(self.function_type != null);
 
             try writer.writeAll("func(");
             for (self.function_type.?.arg_types, 0..) |arg, i| {
@@ -237,4 +286,5 @@ pub const FlowValue = union(enum) {
 };
 
 const std = @import("std");
+const assert = std.debug.assert;
 const oom = @import("root.zig").oom;

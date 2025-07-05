@@ -64,7 +64,7 @@ pub fn allocator(self: *GC) Allocator {
 
 pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize) ?[*]u8 {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    std.debug.assert(self.initialized);
+    assert(self.initialized);
 
     self.gc();
 
@@ -94,7 +94,7 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize)
 
 pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, ret_addr: usize) bool {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    std.debug.assert(self.initialized);
+    assert(self.initialized);
 
     const old_len = buf.len;
 
@@ -124,7 +124,7 @@ pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, 
 
 pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    std.debug.assert(self.initialized);
+    assert(self.initialized);
 
     const old_len = buf.len;
 
@@ -158,7 +158,7 @@ pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, r
 
 pub fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) void {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    std.debug.assert(self.initialized);
+    assert(self.initialized);
 
     if (comptime trace) {
         std.debug.print("[DEBUG] free {d} bytes at {*}\n", .{ buf.len, buf.ptr });
@@ -241,6 +241,7 @@ const ManagedObject = struct {
 
 const GC = @This();
 const std = @import("std");
+const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
 const VM = @import("../VM.zig");

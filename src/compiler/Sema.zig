@@ -3,7 +3,6 @@ program: []const *Stmt,
 errors: std.ArrayListUnmanaged(ErrorInfo) = .empty,
 types: std.AutoHashMapUnmanaged(*const Expr, FlowType) = .empty,
 variables: std.ArrayListUnmanaged(Variable) = .empty,
-functions: std.ArrayListUnmanaged(Function) = .empty,
 current_scope: u8 = 0,
 loop_level: u8 = 0,
 
@@ -17,12 +16,12 @@ pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
 pub fn deinit(self: *Sema) void {
     self.errors.deinit(self.alloc);
     self.types.deinit(self.alloc);
-    self.variables.deinit(self.alloc);
 
-    for (self.functions.items) |func| {
-        self.alloc.free(func.arg_types);
+    for (self.variables.items) |variable| {
+        variable.type.deinit(self.alloc);
     }
-    self.functions.deinit(self.alloc);
+
+    self.variables.deinit(self.alloc);
     self.* = undefined;
 }
 
@@ -53,16 +52,13 @@ fn registerTopLevelFunctions(self: *Sema) void {
         const function = stmt.function;
         const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
         for (function.params, 0..) |param, i| {
-            std.debug.assert(param.* == .variable);
-            std.debug.assert(param.variable.type_hint != null);
+            assert(param.* == .variable);
+            assert(param.variable.type_hint != null);
 
             arg_types[i] = param.variable.type_hint.?.type;
         }
 
-        self.putFunction(function.name, .{
-            .ret_type = function.ret_type.type,
-            .arg_types = arg_types,
-        });
+        self.putFunction(function.name, function.ret_type.type, arg_types);
     }
 }
 
@@ -119,25 +115,11 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.analyseExpr(value);
             }
 
-            const extra_idx = blk: {
-                if (var_stmt.value) |value| {
-                    if (value.* == .variable) {
-                        if (self.findVariable(value.variable.name)) |existing_variable| {
-                            if (existing_variable.type.isPrimitive(.function)) {
-                                break :blk existing_variable.extra_idx;
-                            }
-                        }
-                    }
-                }
-                break :blk 0;
-            };
-
             const variable: Variable = .{
                 .name = var_stmt.name,
                 .constant = var_stmt.constant,
                 .type = self.typeFromVariable(stmt),
                 .scope = self.current_scope,
-                .extra_idx = extra_idx,
             };
 
             if (variable.type.isNull()) {
@@ -164,29 +146,25 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
             if (self.current_scope > 0) {
                 const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
                 for (function.params, 0..) |param, i| {
-                    std.debug.assert(param.* == .variable);
+                    assert(param.* == .variable);
                     arg_types[i] = self.typeFromVariable(param);
                 }
 
-                self.putFunction(function.name, .{
-                    .ret_type = function.ret_type.type,
-                    .arg_types = arg_types,
-                });
+                self.putFunction(function.name, function.ret_type.type, arg_types);
             }
 
             self.scopeIncr();
             defer self.scopeDecr();
 
             for (function.params) |param| {
-                std.debug.assert(param.* == .variable);
-                std.debug.assert(param.variable.type_hint != null);
+                assert(param.* == .variable);
+                assert(param.variable.type_hint != null);
 
                 self.putVariable(.{
                     .constant = true,
                     .name = param.variable.name,
                     .type = param.variable.type_hint.?.type,
                     .scope = self.current_scope,
-                    .extra_idx = 0,
                 });
             }
 
@@ -350,21 +328,22 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 self.analyseExpr(arg_expr);
             }
 
-            std.debug.assert(call.expr.* == .variable);
+            assert(call.expr.* == .variable);
             if (self.getType(call.expr)) |callee_type| {
                 switch (callee_type.type) {
                     .builtin_fn => {
                         // NOTE: builtin functions cannot be aliased
-                        std.debug.assert(builtins.get(call.expr.variable.name.lexeme) != null);
+                        assert(builtins.get(call.expr.variable.name.lexeme) != null);
 
                         const builtin = builtins.get(call.expr.variable.name.lexeme).?;
                         self.validateFunction(builtin, call, expr);
                     },
                     .function => {
                         const variable = self.findVariable(call.expr.variable.name) orelse return;
-                        std.debug.assert(variable.type.isPrimitive(.function));
+                        assert(variable.type.isFunction());
+                        assert(variable.type.function_type != null);
 
-                        const function = self.functions.items[variable.extra_idx];
+                        const function = variable.type.function_type.?;
                         self.validateFunction(function, call, expr);
                     },
                     else => self.pushError(TypeError.NotACallable, call.expr.getToken(), .{call.expr.getToken().lexeme}),
@@ -459,7 +438,7 @@ fn validateFunction(self: *Sema, function: anytype, call: anytype, expr: *const 
 }
 
 fn checkReturnTypes(self: *Sema, function: *const Stmt) void {
-    std.debug.assert(function.* == .function);
+    assert(function.* == .function);
     const func = function.function;
 
     for (func.body) |stmt| {
@@ -549,14 +528,13 @@ fn putVariable(self: *Sema, variable: Variable) void {
     self.variables.append(self.alloc, variable) catch oom();
 }
 
-fn putFunction(self: *Sema, name: Token, function: Function) void {
-    self.functions.append(self.alloc, function) catch oom();
+fn putFunction(self: *Sema, name: Token, ret_type: FlowType, arg_types: []const FlowType) void {
+    const function = FlowType.function(self.alloc, ret_type, arg_types) catch oom();
     self.putVariable(.{
         .name = name,
         .constant = true,
-        .type = .primitive(.function),
+        .type = function,
         .scope = self.current_scope,
-        .extra_idx = self.functions.items.len - 1,
     });
 }
 
@@ -572,9 +550,8 @@ fn findVariable(self: *Sema, name: Token) ?Variable {
         return .{
             .name = name,
             .constant = true,
-            .type = .primitive(.builtin_fn),
+            .type = .builtinFn(),
             .scope = 0,
-            .extra_idx = 0,
         };
     }
 
@@ -601,20 +578,15 @@ fn scopeDecr(self: *Sema) void {
 }
 
 fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
-    std.debug.assert(stmt.* == .variable);
+    assert(stmt.* == .variable);
     const variable = stmt.variable;
 
     const t = variable.type_hint orelse return self.getType(variable.value.?).?;
-    return t.type;
+    return t.type.clone(self.alloc);
 }
 
 fn formatNumber(self: *Sema, num: anytype) []const u8 {
-    if (num > 1_0000_00000_00000_00000) @panic("Number too large");
-    const number_buffer = self.alloc.alloc(u8, 20) catch oom();
-    defer self.alloc.free(number_buffer);
-
-    const result = std.fmt.bufPrint(number_buffer, "{d}", .{num}) catch @panic("How can this NOT work?");
-    return self.alloc.dupe(u8, result) catch oom();
+    return std.fmt.allocPrint(self.alloc, "{d}", .{num}) catch oom();
 }
 
 fn printError(self: *Sema) void {
@@ -666,19 +638,13 @@ const Variable = struct {
     constant: bool,
     type: FlowType,
     scope: u8,
-    /// Only used for type == .function for indexing into the function collection
-    extra_idx: usize,
-};
-
-const Function = struct {
-    ret_type: FlowType,
-    arg_types: []const FlowType,
 };
 
 const Sema = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
 
 const ast = @import("ir/ast.zig");
 const Stmt = ast.Stmt;

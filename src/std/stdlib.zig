@@ -81,7 +81,7 @@ pub const len: BuiltinFunction = .{
 };
 
 fn _len(_: Allocator, args: []FlowValue) FlowValue {
-    std.debug.assert(args.len == 1);
+    assert(args.len == 1);
     return switch (args[0]) {
         .array => |array| .{ .int = @intCast(array.len) },
         .string => |string| .{ .int = @intCast(string.len) },
@@ -97,5 +97,6 @@ const stdout = std.io.getStdOut().writer();
 const stdin = std.io.getStdIn().reader();
 
 const std = @import("std");
+const assert = std.debug.assert;
 const panic = std.debug.panic;
 const Allocator = std.mem.Allocator;

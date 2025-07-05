@@ -331,7 +331,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             self.scopeDecr();
 
             _, const variable = self.resolveVariable(function.name.lexeme);
-            std.debug.assert(variable.type.isPrimitive(.function));
+            assert(variable.type.isPrimitive(.function));
             self.functions.items[variable.extra_idx].body = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
 
             if (self.scope == 0) return null;
@@ -453,7 +453,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                     .operands = operands,
                 }) catch oom();
             } else {
-                std.debug.assert(assignment.variable.* == .index);
+                assert(assignment.variable.* == .index);
                 const index = assignment.variable.index;
                 // Gesamtes operands array besser nutzen:
                 // - 0 = value
@@ -488,7 +488,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                     .index => |index_expr| {
                         // NOTE: Index Operands start at index 2, so that check ensures that the
                         // other operands aren't overwritten
-                        std.debug.assert(op_idx >= 2);
+                        assert(op_idx >= 2);
                         operands[op_idx] = self.traverseExpr(index_expr.index);
                         op_idx -= 1;
                         continue :s index_expr.expr.*;
@@ -518,7 +518,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[0] = self.traverseExpr(index.expr);
             operands[1] = self.traverseExpr(index.index);
             const item_type = self.exprs.items[operands[0]].type;
-            std.debug.assert(item_type.order > 0);
+            assert(item_type.order > 0);
             self.exprs.append(self.alloc, .{ .op = .index, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order - 1 } }) catch oom();
         },
         .append => |append| {
@@ -532,12 +532,12 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
 }
 
 fn startOfBlock(self: *FIR, idx: usize) usize {
-    std.debug.assert(idx < self.nodes.items.len);
+    assert(idx < self.nodes.items.len);
 
     var node = self.nodes.items[idx];
     var node_idx = idx;
     while (node.before) |before| {
-        std.debug.assert(before < self.nodes.items.len);
+        assert(before < self.nodes.items.len);
 
         node = self.nodes.items[before];
         node_idx = before;
@@ -546,7 +546,7 @@ fn startOfBlock(self: *FIR, idx: usize) usize {
 }
 
 fn resolveFlowValue(expr: *const ast.Expr) FlowValue {
-    std.debug.assert(expr.* == .literal);
+    assert(expr.* == .literal);
     return switch (expr.literal.value) {
         .int => |int| .{ .int = int },
         .float => |float| .{ .float = float },
@@ -597,19 +597,19 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
 
 fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *const ast.Expr) FlowType {
     const callee_expr = self.exprs.items[callee];
-    std.debug.assert(callee_expr.type.isPrimitive(.function) or callee_expr.type.isPrimitive(.builtin_fn));
-    std.debug.assert(original_callee_expr.* == .variable);
+    assert(callee_expr.type.isPrimitive(.function) or callee_expr.type.isPrimitive(.builtin_fn));
+    assert(original_callee_expr.* == .variable);
 
     switch (callee_expr.type.type) {
         .builtin_fn => {
-            std.debug.assert(builtins.get(original_callee_expr.variable.name.lexeme) != null);
+            assert(builtins.get(original_callee_expr.variable.name.lexeme) != null);
 
             const builtin = builtins.get(original_callee_expr.variable.name.lexeme).?;
             return builtin.ret_type;
         },
         .function => {
             _, const variable = self.resolveVariable(original_callee_expr.variable.name.lexeme);
-            std.debug.assert(variable.type.isPrimitive(.function));
+            assert(variable.type.isPrimitive(.function));
 
             return self.functions.items[variable.extra_idx].ret_type;
         },
@@ -623,7 +623,7 @@ fn scopeIncr(self: *FIR) void {
 
 fn scopeDecr(self: *FIR) void {
     // NOTE: We cannot go lower than global scope
-    std.debug.assert(self.scope > 0);
+    assert(self.scope > 0);
 
     self.scope -= 1;
 
@@ -636,7 +636,7 @@ fn scopeDecr(self: *FIR) void {
     const pop_count = prev_len - new_len;
     // NOTE: In order to pop something of the stack, there need to be AT LEAST as many nodes before
     // that to create the stack in the first place
-    std.debug.assert(self.nodes.items.len >= pop_count);
+    assert(self.nodes.items.len >= pop_count);
     for (0..pop_count) |_| {
         const before = self.nodes.items.len - 1;
         self.nodes.append(self.alloc, .{ .kind = .pop, .index = 0, .before = before }) catch oom();
@@ -692,6 +692,7 @@ const FIR = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
 
 const ast = @import("ast.zig");
 
