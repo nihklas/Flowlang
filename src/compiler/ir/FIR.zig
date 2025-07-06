@@ -152,6 +152,9 @@ pub const Node = struct {
         /// index for additional purpose
         /// - index into the functions collection in case `.type == .function`
         extra_idx: usize,
+        /// Whether this variable should be hoisted up to the beginning of the scope
+        /// For Example, this is applied for function declarations in global scope
+        hoist: bool,
     };
 
     pub fn format(self: Node, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
@@ -214,16 +217,18 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
         const function = stmt.function.expr.function;
 
         const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+        defer self.alloc.free(param_types);
         for (function.params, param_types) |param, *param_type| {
             assert(param.* == .variable);
             assert(param.variable.type_hint != null);
-            param_type.* = param.variable.type_hint.?.type.clone(self.alloc);
+            param_type.* = param.variable.type_hint.?.type;
         }
 
         self.putVariable(
             function.token.lexeme,
             null,
             .function(self.alloc, function.ret_type.type, param_types),
+            true,
         );
     }
 }
@@ -309,7 +314,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             const initializer = if (variable.value) |value| self.traverseExpr(value) else null;
             const typehint = if (variable.type_hint) |typehint| typehint.type else self.exprs.getLast().type;
 
-            self.putVariable(variable.name.lexeme, initializer, typehint.clone(self.alloc));
+            self.putVariable(variable.name.lexeme, initializer, typehint.clone(self.alloc), false);
         },
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
@@ -327,13 +332,14 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                     function.token.lexeme,
                     null,
                     .function(self.alloc, function.ret_type.type, param_types),
+                    false,
                 );
             }
 
             self.scopeIncr();
 
             for (function.params) |param| {
-                self.putVariable(param.variable.name.lexeme, null, param.variable.type_hint.?.type);
+                self.putVariable(param.variable.name.lexeme, null, param.variable.type_hint.?.type, false);
             }
 
             const maybe_body = self.traverseBlock(function.body);
@@ -590,6 +596,7 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
             .expr = null,
             .stack_idx = 0,
             .extra_idx = 0,
+            .hoist = false,
         } };
     }
 
@@ -669,7 +676,7 @@ fn scopeDecr(self: *FIR) void {
     self.locals_stack.shrinkRetainingCapacity(new_len);
 }
 
-fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
+fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType, hoist: bool) void {
     const variable: Node.Variable = .{
         .name = name,
         .expr = expr,
@@ -677,6 +684,7 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) v
         .scope = self.scope,
         .stack_idx = self.locals.items.len,
         .extra_idx = uninitialized_entry,
+        .hoist = hoist,
     };
 
     if (self.scope == 0) {

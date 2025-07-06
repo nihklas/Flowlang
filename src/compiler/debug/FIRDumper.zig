@@ -8,15 +8,9 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
 
     var global_counter: usize = 0;
     for (fir.globals.items) |global| {
-        if (!global.type.isFunction() or global.expr != null) continue;
+        if (!global.hoist) continue;
 
-        try writer.print("${d} = func ({d}) {{\n", .{ global_counter, global.type.function_type.arg_types.len });
-        if (global.extra_idx != FIR.uninitialized_entry) {
-            try dumpBlock(writer, fir, global.extra_idx, 1);
-        }
-        try writer.writeAll("}");
-        try writer.writeAll("\n");
-
+        try dumpGlobal(writer, fir, global_counter);
         global_counter += 1;
     }
 
@@ -185,7 +179,11 @@ fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize) WriterError!void
     const variable = fir.globals.items[var_idx];
 
     try writer.print("${d} = ", .{var_idx});
-    if (variable.expr) |expr_idx| {
+    if (variable.type.isFunction()) {
+        try writer.print("func ({d}) {{\n", .{variable.type.function_type.arg_types.len});
+        try dumpBlock(writer, fir, variable.extra_idx, 1);
+        try writer.writeAll("}");
+    } else if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx);
     } else if (variable.type.order > 0) {
         try writer.writeAll("[]");
