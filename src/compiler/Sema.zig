@@ -60,7 +60,7 @@ fn registerTopLevelFunctions(self: *Sema) void {
             assert(param.* == .variable);
             assert(param.variable.type_hint != null);
 
-            arg_types[i] = param.variable.type_hint.?.type;
+            arg_types[i] = param.variable.type_hint.?.type.clone(self.alloc);
         }
 
         self.putFunction(function.token, function.ret_type.type, arg_types);
@@ -516,7 +516,7 @@ fn checkReturnType(self: *Sema, stmt: *const Stmt, expected: FlowType) void {
 }
 
 fn putType(self: *Sema, expr: *const Expr, t: FlowType) void {
-    self.types.put(self.alloc, expr, t) catch oom();
+    self.types.put(self.alloc, expr, t.clone(self.alloc)) catch oom();
 }
 
 fn getType(self: *Sema, expr: *const Expr) ?FlowType {
