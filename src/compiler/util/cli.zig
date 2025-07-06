@@ -50,6 +50,9 @@ pub fn parse() Options {
             @import("error_reporter.zig").colored_output = false;
         } else if (std.mem.eql(u8, argument, "--help")) {
             printHelpAndQuit(0);
+        } else {
+            std.io.getStdErr().writer().print("Unrecognized option: {s}\n\n", .{argument}) catch {};
+            printHelpAndQuit(1);
         }
     }
 
