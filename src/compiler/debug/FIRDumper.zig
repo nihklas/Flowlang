@@ -9,9 +9,8 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
     var global_counter: usize = 0;
     for (fir.globals.items) |global| {
         if (!global.type.isFunction() or global.expr != null) continue;
-        assert(global.type.function_type != null);
 
-        try writer.print("${d} = func ({d}) {{\n", .{ global_counter, global.type.function_type.?.arg_types.len });
+        try writer.print("${d} = func ({d}) {{\n", .{ global_counter, global.type.function_type.arg_types.len });
         if (global.extra_idx != FIR.uninitialized_entry) {
             try dumpBlock(writer, fir, global.extra_idx, 1);
         }
@@ -202,8 +201,7 @@ fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wri
     try writer.print("%{d} = ", .{variable.stack_idx});
 
     if (variable.type.isFunction()) {
-        assert(variable.type.function_type != null);
-        try writer.print("func ({d}) {{\n", .{variable.type.function_type.?.arg_types.len});
+        try writer.print("func ({d}) {{\n", .{variable.type.function_type.arg_types.len});
         try dumpBlock(writer, fir, variable.extra_idx, depth + 1);
         try printDepth(writer, depth);
         try writer.writeAll("}");

@@ -633,9 +633,8 @@ fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *c
         .function => {
             _, const variable = self.resolveVariable(original_callee_expr.variable.name.lexeme);
             assert(variable.type.isFunction());
-            assert(variable.type.function_type != null);
 
-            return variable.type.function_type.?.ret_type;
+            return variable.type.function_type.ret_type;
         },
         else => unreachable,
     }

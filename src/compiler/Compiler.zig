@@ -35,8 +35,7 @@ pub fn compile(self: *Compiler) []const u8 {
 fn compileFunctions(self: *Compiler) void {
     for (self.fir.globals.items) |global| {
         if (!global.type.isFunction() or global.expr != null) continue;
-        assert(global.type.function_type != null);
-        const func_type = global.type.function_type.?;
+        const func_type = global.type.function_type;
 
         self.emitOpcode(.function);
         self.emitByte(@intCast(func_type.arg_types.len));

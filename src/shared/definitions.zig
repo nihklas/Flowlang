@@ -37,7 +37,8 @@ pub const FlowPrimitive = enum {
 pub const FlowType = struct {
     order: u8,
     type: FlowPrimitive,
-    function_type: ?*FlowFunctionType = null,
+    /// Only valid if type == .function
+    function_type: *FlowFunctionType = undefined,
 
     pub const @"null": FlowType = .{ .type = .null, .order = 0 };
 
@@ -45,10 +46,9 @@ pub const FlowType = struct {
         switch (self.type) {
             .null, .bool, .int, .float, .string, .builtin_fn => {},
             .function => {
-                assert(self.function_type != null);
-                alloc.free(self.function_type.?.arg_types);
-                self.function_type.?.ret_type.deinit(alloc);
-                alloc.destroy(self.function_type.?);
+                alloc.free(self.function_type.arg_types);
+                self.function_type.ret_type.deinit(alloc);
+                alloc.destroy(self.function_type);
             },
         }
     }
@@ -58,12 +58,11 @@ pub const FlowType = struct {
         switch (self.type) {
             .null, .bool, .int, .float, .string, .builtin_fn => return self.*,
             .function => {
-                assert(self.function_type != null);
                 const new_func = alloc.create(FlowFunctionType) catch oom();
-                new_func.ret_type = self.function_type.?.ret_type.clone(alloc);
+                new_func.ret_type = self.function_type.ret_type.clone(alloc);
 
-                const new_args = alloc.alloc(FlowType, self.function_type.?.arg_types.len) catch oom();
-                for (new_args, self.function_type.?.arg_types) |*new_arg, old_arg| {
+                const new_args = alloc.alloc(FlowType, self.function_type.arg_types.len) catch oom();
+                for (new_args, self.function_type.arg_types) |*new_arg, old_arg| {
                     new_arg.* = old_arg.clone(alloc);
                 }
                 new_func.arg_types = new_args;
@@ -132,11 +131,8 @@ pub const FlowType = struct {
         if (self.type != other.type) return false;
 
         if (self.type == .function) {
-            assert(self.function_type != null);
-            assert(other.function_type != null);
-
-            const self_func = self.function_type.?;
-            const other_func = other.function_type.?;
+            const self_func = self.function_type;
+            const other_func = other.function_type;
 
             if (!self_func.ret_type.equals(&other_func.ret_type)) return false;
             if (self_func.arg_types.len != other_func.arg_types.len) return false;
@@ -154,10 +150,8 @@ pub const FlowType = struct {
             try writer.writeAll("[]");
         }
         if (self.type == .function) {
-            assert(self.function_type != null);
-
             try writer.writeAll("func(");
-            for (self.function_type.?.arg_types, 0..) |arg, i| {
+            for (self.function_type.arg_types, 0..) |arg, i| {
                 if (i > 0) {
                     try writer.writeAll(", ");
                 }
@@ -165,8 +159,8 @@ pub const FlowType = struct {
             }
             try writer.writeAll(")");
 
-            if (!self.function_type.?.ret_type.isNull()) {
-                try writer.print(" {}", .{self.function_type.?.ret_type});
+            if (!self.function_type.ret_type.isNull()) {
+                try writer.print(" {}", .{self.function_type.ret_type});
             }
 
             return;

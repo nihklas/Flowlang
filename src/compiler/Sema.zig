@@ -347,9 +347,8 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                     .function => {
                         const variable = self.findVariable(call.expr.variable.name) orelse return;
                         assert(variable.type.isFunction());
-                        assert(variable.type.function_type != null);
 
-                        const function = variable.type.function_type.?;
+                        const function = variable.type.function_type;
                         self.validateFunction(function, call, expr);
                     },
                     else => self.pushError(TypeError.NotACallable, call.expr.getToken(), .{call.expr.getToken().lexeme}),
