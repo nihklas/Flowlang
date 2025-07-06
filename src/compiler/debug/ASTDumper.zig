@@ -4,7 +4,7 @@ pub fn dump(writer: anytype, program: []const *ast.Stmt) !void {
     }
 }
 
-fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
+fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) WriterError!void {
     if (stmt.* != .block) {
         try writeIndent(writer, depth);
     }
@@ -100,7 +100,7 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) !void {
     }
 }
 
-fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
+fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) WriterError!void {
     try writeIndent(writer, depth);
     switch (expr.*) {
         .literal => |literal| {
@@ -161,10 +161,25 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) !void {
             try dumpExpr(writer, append.variable, depth + 1);
             try dumpExpr(writer, append.value, depth + 1);
         },
+        .function => |function| {
+            try writer.print("(Function Expr '{}')\n", .{function.ret_type.type});
+
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Parameters)\n");
+            for (function.params) |param| {
+                try dumpStmt(writer, param, depth + 2);
+            }
+
+            try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Body)\n");
+            for (function.body) |body_stmt| {
+                try dumpStmt(writer, body_stmt, depth + 2);
+            }
+        },
     }
 }
 
-fn writeIndent(writer: anytype, depth: usize) !void {
+fn writeIndent(writer: anytype, depth: usize) WriterError!void {
     if (depth == 0) return;
     for (0..depth * DEPTH_DISTANCE) |i| {
         if (i % DEPTH_DISTANCE == 0) {
@@ -174,6 +189,8 @@ fn writeIndent(writer: anytype, depth: usize) !void {
         }
     }
 }
+
+const WriterError = std.io.AnyWriter.Error;
 
 const DEPTH_DISTANCE = 2;
 const std = @import("std");

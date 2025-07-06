@@ -538,6 +538,9 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[1] = self.traverseExpr(append.value);
             self.exprs.append(self.alloc, .{ .op = .append, .operands = operands, .type = self.exprs.items[operands[0]].type }) catch oom();
         },
+        .function => {
+            @panic("Not yet implemented");
+        },
     }
     return self.exprs.items.len - 1;
 }

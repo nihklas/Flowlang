@@ -15,6 +15,11 @@ pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
 
 pub fn deinit(self: *Sema) void {
     self.errors.deinit(self.alloc);
+
+    var type_iter = self.types.valueIterator();
+    while (type_iter.next()) |t| {
+        t.deinit(self.alloc);
+    }
     self.types.deinit(self.alloc);
 
     for (self.variables.items) |variable| {
@@ -413,6 +418,33 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
 
             self.putType(expr, variable_type);
         },
+        .function => |function| {
+            self.scopeIncr();
+            defer self.scopeDecr();
+
+            const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+            for (function.params, param_types) |param, *param_type| {
+                assert(param.* == .variable);
+                assert(param.variable.type_hint != null);
+
+                self.putVariable(.{
+                    .constant = true,
+                    .name = param.variable.name,
+                    .type = param.variable.type_hint.?.type,
+                    .scope = self.current_scope,
+                });
+
+                param_type.* = param.variable.type_hint.?.type.clone(self.alloc);
+            }
+
+            for (function.body) |inner_stmt| {
+                self.analyseStmt(inner_stmt);
+            }
+
+            self.checkReturnTypes(expr);
+
+            self.putType(expr, FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom());
+        },
     }
 }
 
@@ -437,7 +469,7 @@ fn validateFunction(self: *Sema, function: anytype, call: anytype, expr: *const 
     self.putType(expr, function.ret_type);
 }
 
-fn checkReturnTypes(self: *Sema, function: *const Stmt) void {
+fn checkReturnTypes(self: *Sema, function: anytype) void {
     assert(function.* == .function);
     const func = function.function;
 

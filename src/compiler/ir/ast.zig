@@ -23,6 +23,7 @@ pub const Expr = union(enum) {
     call: struct { expr: *Expr, args: []*Expr },
     index: struct { expr: *Expr, bracket: Token, index: *Expr },
     append: struct { variable: *Expr, value: *Expr },
+    function: struct { token: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -108,6 +109,14 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
+    pub fn createFunction(alloc: Allocator, token: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt) *Expr {
+        const new_expr = Expr.create(alloc);
+        new_expr.* = .{
+            .function = .{ .token = token, .ret_type = ret_type, .params = params, .body = body },
+        };
+        return new_expr;
+    }
+
     pub fn getToken(self: *const Expr) Token {
         return switch (self.*) {
             .literal => self.literal.token,
@@ -120,6 +129,7 @@ pub const Expr = union(enum) {
             .call => self.call.expr.getToken(),
             .index => self.index.bracket,
             .append => self.append.variable.getToken(),
+            .function => self.function.token,
         };
     }
 

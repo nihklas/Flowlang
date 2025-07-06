@@ -83,39 +83,9 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
     try self.consume(.identifier, "Expected identifier after 'func'");
     const name = self.previous();
 
-    try self.consume(.@"(", "Expected '(' after function name");
+    const func = try self.parseFunction();
 
-    const params = try self.parameters();
-
-    try self.consume(.@")", "Expected ')' after function parameters");
-    const close_paren = self.previous();
-
-    const type_hint: ast.TypeHint = blk: {
-        if (self.check(.@"{")) {
-            break :blk .{
-                .token = .{
-                    .type = .null,
-                    .line = close_paren.line,
-                    .column = close_paren.column,
-                    .lexeme = "null",
-                },
-                .type = .null,
-            };
-        }
-
-        const result = try self.typeHint();
-        if (result == null) {
-            error_reporter.reportError(self.peek(), "Unexpected Token, expected either typehint or '{{'", .{});
-            return error.UnexpectedToken;
-        }
-        break :blk result.?;
-    };
-
-    try self.consume(.@"{", "Expected '{' before function body");
-
-    const body = try self.block();
-
-    return Stmt.createFunction(self.arena, name, type_hint, params, body);
+    return Stmt.createFunction(self.arena, name, func.type_hint, func.params, func.body);
 }
 
 fn parameters(self: *Parser) ParserError![]*Stmt {
@@ -463,6 +433,11 @@ fn index(self: *Parser) ParserError!*Expr {
 }
 
 fn primary(self: *Parser) ParserError!*Expr {
+    if (self.match(.func)) |token| {
+        const func = try self.parseFunction();
+        return Expr.createFunction(self.arena, token, func.type_hint, func.params, func.body);
+    }
+
     if (self.match(.@"[")) |open_bracket| {
         const items: []*Expr = blk: {
             var items_list: std.ArrayList(*Expr) = .init(self.arena);
@@ -585,6 +560,50 @@ fn typeHintType(self: *Parser) ?struct { Token, definitions.FlowType } {
     }
 
     return null;
+}
+
+fn parseFunction(self: *Parser) ParserError!struct {
+    type_hint: ast.TypeHint,
+    params: []*Stmt,
+    body: []*Stmt,
+} {
+    try self.consume(.@"(", "Expected '(' after function name");
+
+    const params = try self.parameters();
+
+    try self.consume(.@")", "Expected ')' after function parameters");
+    const close_paren = self.previous();
+
+    const type_hint: ast.TypeHint = blk: {
+        if (self.check(.@"{")) {
+            break :blk .{
+                .token = .{
+                    .type = .null,
+                    .line = close_paren.line,
+                    .column = close_paren.column,
+                    .lexeme = "null",
+                },
+                .type = .null,
+            };
+        }
+
+        const result = try self.typeHint();
+        if (result == null) {
+            error_reporter.reportError(self.peek(), "Unexpected Token, expected either typehint or '{{'", .{});
+            return error.UnexpectedToken;
+        }
+        break :blk result.?;
+    };
+
+    try self.consume(.@"{", "Expected '{' before function body");
+
+    const body = try self.block();
+
+    return .{
+        .type_hint = type_hint,
+        .params = params,
+        .body = body,
+    };
 }
 
 fn recover(self: *Parser) void {
