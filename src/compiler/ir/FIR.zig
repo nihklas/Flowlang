@@ -211,7 +211,7 @@ pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
 fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
     for (program) |stmt| {
         if (stmt.* != .function) continue;
-        const function = stmt.function;
+        const function = stmt.function.expr.function;
 
         const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
         for (function.params, param_types) |param, *param_type| {
@@ -221,7 +221,7 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
         }
 
         self.putVariable(
-            function.name.lexeme,
+            function.token.lexeme,
             null,
             FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom(),
         );
@@ -313,7 +313,8 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         },
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
-        .function => |function| {
+        .function => |function_decl| {
+            const function = function_decl.expr.function;
             if (self.scope > 0) {
                 const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
                 for (function.params, param_types) |param, *param_type| {
@@ -323,7 +324,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 }
 
                 self.putVariable(
-                    function.name.lexeme,
+                    function.token.lexeme,
                     null,
                     FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom(),
                 );
@@ -339,7 +340,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
 
             self.scopeDecr();
 
-            const var_idx, const variable = self.resolveVariable(function.name.lexeme);
+            const var_idx, const variable = self.resolveVariable(function.token.lexeme);
             assert(variable.type.isFunction());
             if (maybe_body) |body| {
                 self.refVariable(var_idx, variable.scope).extra_idx = self.startOfBlock(body);

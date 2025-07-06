@@ -76,20 +76,8 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) WriterError!vo
             }
         },
         .function => |function| {
-            try writer.print("[Function Declaration '{s}' ", .{function.name.lexeme});
-            try writer.print("'{}']\n", .{function.ret_type.type});
-
-            try writeIndent(writer, depth + 1);
-            try writer.writeAll("(Parameters)\n");
-            for (function.params) |param| {
-                try dumpStmt(writer, param, depth + 2);
-            }
-
-            try writeIndent(writer, depth + 1);
-            try writer.writeAll("(Body)\n");
-            for (function.body) |body_stmt| {
-                try dumpStmt(writer, body_stmt, depth + 2);
-            }
+            try writer.print("[Function Declaration '{s}']\n", .{function.expr.function.token.lexeme});
+            try dumpExpr(writer, function.expr, depth + 1);
         },
         .@"return" => {
             try writer.writeAll("[Return Stmt]\n");

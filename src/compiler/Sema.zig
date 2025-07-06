@@ -54,7 +54,7 @@ pub fn analyse(self: *Sema) !void {
 fn registerTopLevelFunctions(self: *Sema) void {
     for (self.program) |stmt| {
         if (stmt.* != .function) continue;
-        const function = stmt.function;
+        const function = stmt.function.expr.function;
         const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
         for (function.params, 0..) |param, i| {
             assert(param.* == .variable);
@@ -63,7 +63,7 @@ fn registerTopLevelFunctions(self: *Sema) void {
             arg_types[i] = param.variable.type_hint.?.type;
         }
 
-        self.putFunction(function.name, function.ret_type.type, arg_types);
+        self.putFunction(function.token, function.ret_type.type, arg_types);
     }
 }
 
@@ -147,7 +147,8 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
 
             self.putVariable(variable);
         },
-        .function => |function| {
+        .function => |function_decl| {
+            const function = function_decl.expr.function;
             if (self.current_scope > 0) {
                 const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
                 for (function.params, 0..) |param, i| {
@@ -155,7 +156,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                     arg_types[i] = self.typeFromVariable(param);
                 }
 
-                self.putFunction(function.name, function.ret_type.type, arg_types);
+                self.putFunction(function.token, function.ret_type.type, arg_types);
             }
 
             self.scopeIncr();
@@ -177,7 +178,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.analyseStmt(inner_stmt);
             }
 
-            self.checkReturnTypes(stmt);
+            self.checkReturnTypes(stmt.function.expr);
         },
         .@"return" => |return_stmt| {
             if (self.current_scope == 0) {
@@ -469,7 +470,7 @@ fn validateFunction(self: *Sema, function: anytype, call: anytype, expr: *const 
     self.putType(expr, function.ret_type);
 }
 
-fn checkReturnTypes(self: *Sema, function: anytype) void {
+fn checkReturnTypes(self: *Sema, function: *const Expr) void {
     assert(function.* == .function);
     const func = function.function;
 

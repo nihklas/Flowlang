@@ -156,7 +156,10 @@ pub const Stmt = union(enum) {
         type_hint: ?TypeHint,
     },
 
-    function: struct { name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt },
+    /// This is a simple Wrapper around a function expression, to differentiate between a function
+    /// expression and declaration. Because they share almost all code, a function declaration does
+    /// only refer to its function-expression equivalent
+    function: struct { expr: *Expr },
     @"return": struct { token: Token, value: ?*Expr },
 
     pub fn createExpr(alloc: Allocator, expr: *Expr) *Stmt {
@@ -223,7 +226,7 @@ pub const Stmt = union(enum) {
     pub fn createFunction(alloc: Allocator, name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
-            .function = .{ .name = name, .ret_type = ret_type, .params = params, .body = body },
+            .function = .{ .expr = Expr.createFunction(alloc, name, ret_type, params, body) },
         };
         return stmt;
     }
