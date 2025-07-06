@@ -34,17 +34,18 @@ pub fn compile(self: *Compiler) []const u8 {
 
 fn compileFunctions(self: *Compiler) void {
     for (self.fir.globals.items) |global| {
-        if (!global.type.isPrimitive(.function)) continue;
-        const func = self.fir.functions.items[global.extra_idx];
+        if (!global.type.isFunction() or global.expr != null) continue;
+        assert(global.type.function_type != null);
+        const func_type = global.type.function_type.?;
 
         self.emitOpcode(.function);
-        self.emitByte(@intCast(func.param_count));
+        self.emitByte(@intCast(func_type.arg_types.len));
         self.emitByte(0x00);
         self.emitByte(0x00);
         const op_idx = self.byte_code.items.len;
 
-        self.compileBlock(func.body);
-        if (func.ret_type.isNull()) {
+        self.compileBlock(global.extra_idx);
+        if (func_type.ret_type.isNull()) {
             self.emitOpcode(.null);
             self.emitOpcode(.@"return");
         }
@@ -184,9 +185,7 @@ fn compileLoop(self: *Compiler, loop_idx: usize) void {
 fn compileGlobal(self: *Compiler, var_idx: usize) void {
     const global = self.fir.globals.items[var_idx];
 
-    if (global.type.isPrimitive(.function)) {
-        return;
-    } else if (global.expr) |expr| {
+    if (global.expr) |expr| {
         self.compileExpression(expr);
         if (self.shouldClone(expr)) {
             self.emitOpcode(.clone);
@@ -207,9 +206,7 @@ fn compileGlobal(self: *Compiler, var_idx: usize) void {
 fn compileLocal(self: *Compiler, var_idx: usize) void {
     const local = self.fir.locals.items[var_idx];
 
-    if (local.type.isPrimitive(.function)) {
-        @panic("Local functions not yet allowed");
-    } else if (local.expr) |expr| {
+    if (local.expr) |expr| {
         self.compileExpression(expr);
         if (self.shouldClone(expr)) {
             self.emitOpcode(.clone);

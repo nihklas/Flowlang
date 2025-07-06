@@ -115,6 +115,10 @@ pub const FlowType = struct {
         return self.type == .function;
     }
 
+    pub fn isBuiltinFn(self: *const FlowType) bool {
+        return self.type == .builtin_fn;
+    }
+
     pub fn isArray(self: *const FlowType) bool {
         return self.order > 0;
     }

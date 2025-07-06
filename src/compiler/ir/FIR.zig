@@ -18,7 +18,6 @@ exprs: std.ArrayListUnmanaged(Node.Expr),
 conds: std.ArrayListUnmanaged(Node.Cond),
 loops: std.ArrayListUnmanaged(Node.Loop),
 globals: std.ArrayListUnmanaged(Node.Variable),
-functions: std.ArrayListUnmanaged(Node.Function),
 locals: std.ArrayListUnmanaged(Node.Variable),
 locals_stack: std.ArrayListUnmanaged(usize),
 scope: usize,
@@ -155,13 +154,6 @@ pub const Node = struct {
         extra_idx: usize,
     };
 
-    pub const Function = struct {
-        name: []const u8,
-        ret_type: FlowType,
-        param_count: usize,
-        body: usize,
-    };
-
     pub fn format(self: Node, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         try writer.writeAll("Node{ ");
         try writer.print("kind: {s}, ", .{@tagName(self.kind)});
@@ -182,7 +174,6 @@ pub fn init(alloc: Allocator) FIR {
         .conds = .empty,
         .loops = .empty,
         .globals = .empty,
-        .functions = .empty,
         .locals = .empty,
         .locals_stack = .empty,
         .entry = uninitialized_entry,
@@ -191,6 +182,13 @@ pub fn init(alloc: Allocator) FIR {
 }
 
 pub fn deinit(self: *FIR) void {
+    for (self.globals.items) |global| {
+        global.type.deinit(self.alloc);
+    }
+    for (self.locals.items) |local| {
+        local.type.deinit(self.alloc);
+    }
+
     self.arena_state.deinit();
     self.constants.deinit(self.alloc);
     self.nodes.deinit(self.alloc);
@@ -198,7 +196,6 @@ pub fn deinit(self: *FIR) void {
     self.conds.deinit(self.alloc);
     self.loops.deinit(self.alloc);
     self.globals.deinit(self.alloc);
-    self.functions.deinit(self.alloc);
     self.locals.deinit(self.alloc);
     self.locals_stack.deinit(self.alloc);
     self.* = undefined;
@@ -216,12 +213,18 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
         if (stmt.* != .function) continue;
         const function = stmt.function;
 
-        self.putFunction(.{
-            .name = function.name.lexeme,
-            .body = 0,
-            .ret_type = function.ret_type.type,
-            .param_count = function.params.len,
-        });
+        const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+        for (function.params, param_types) |param, *param_type| {
+            assert(param.* == .variable);
+            assert(param.variable.type_hint != null);
+            param_type.* = param.variable.type_hint.?.type.clone(self.alloc);
+        }
+
+        self.putVariable(
+            function.name.lexeme,
+            null,
+            FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom(),
+        );
     }
 }
 
@@ -312,12 +315,18 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
         .function => |function| {
             if (self.scope > 0) {
-                self.putFunction(.{
-                    .name = function.name.lexeme,
-                    .body = 0,
-                    .ret_type = function.ret_type.type,
-                    .param_count = function.params.len,
-                });
+                const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+                for (function.params, param_types) |param, *param_type| {
+                    assert(param.* == .variable);
+                    assert(param.variable.type_hint != null);
+                    param_type.* = param.variable.type_hint.?.type.clone(self.alloc);
+                }
+
+                self.putVariable(
+                    function.name.lexeme,
+                    null,
+                    FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom(),
+                );
             }
 
             self.scopeIncr();
@@ -330,9 +339,11 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
 
             self.scopeDecr();
 
-            _, const variable = self.resolveVariable(function.name.lexeme);
-            assert(variable.type.isPrimitive(.function));
-            self.functions.items[variable.extra_idx].body = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
+            const var_idx, const variable = self.resolveVariable(function.name.lexeme);
+            assert(variable.type.isFunction());
+            if (maybe_body) |body| {
+                self.refVariable(var_idx, variable.scope).extra_idx = self.startOfBlock(body);
+            }
 
             if (self.scope == 0) return null;
         },
@@ -432,9 +443,9 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             const var_idx, const variable_node = self.resolveVariable(variable.name.lexeme);
             const operands = self.arena().alloc(usize, 1) catch oom();
 
-            if (variable_node.type.isPrimitive(.builtin_fn)) {
+            if (variable_node.type.isBuiltinFn()) {
                 operands[0] = self.resolveConstant(.{ .string = variable_node.name });
-                self.exprs.append(self.alloc, .{ .op = .builtin_fn, .type = .primitive(.builtin_fn), .operands = operands }) catch oom();
+                self.exprs.append(self.alloc, .{ .op = .builtin_fn, .type = .builtinFn(), .operands = operands }) catch oom();
             } else {
                 operands[0] = var_idx;
                 self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .global else .local, .type = variable_node.type, .operands = operands }) catch oom();
@@ -570,7 +581,7 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
     if (builtins.get(name)) |_| {
         return .{ 0, .{
             .name = name,
-            .type = .primitive(.builtin_fn),
+            .type = .builtinFn(),
             .scope = 0,
             .expr = null,
             .stack_idx = 0,
@@ -595,9 +606,17 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
     } else @panic("No Variable found");
 }
 
+fn refVariable(self: *FIR, var_idx: usize, scope: usize) *Node.Variable {
+    if (scope == 0) {
+        return &self.globals.items[var_idx];
+    }
+    return &self.locals.items[self.locals_stack.items[var_idx]];
+}
+
 fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *const ast.Expr) FlowType {
     const callee_expr = self.exprs.items[callee];
-    assert(callee_expr.type.isPrimitive(.function) or callee_expr.type.isPrimitive(.builtin_fn));
+
+    assert(callee_expr.type.isFunction() or callee_expr.type.isBuiltinFn());
     assert(original_callee_expr.* == .variable);
 
     switch (callee_expr.type.type) {
@@ -609,9 +628,10 @@ fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *c
         },
         .function => {
             _, const variable = self.resolveVariable(original_callee_expr.variable.name.lexeme);
-            assert(variable.type.isPrimitive(.function));
+            assert(variable.type.isFunction());
+            assert(variable.type.function_type != null);
 
-            return self.functions.items[variable.extra_idx].ret_type;
+            return variable.type.function_type.?.ret_type;
         },
         else => unreachable,
     }
@@ -653,7 +673,7 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) v
         .type = var_type,
         .scope = self.scope,
         .stack_idx = self.locals.items.len,
-        .extra_idx = if (var_type.isPrimitive(.function)) self.functions.items.len - 1 else 0,
+        .extra_idx = uninitialized_entry,
     };
 
     if (self.scope == 0) {
@@ -664,11 +684,6 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) v
         self.locals_stack.append(self.alloc, self.locals.items.len - 1) catch oom();
         self.nodes.append(self.alloc, .{ .kind = .local, .index = self.locals.items.len - 1 }) catch oom();
     }
-}
-
-fn putFunction(self: *FIR, function: Node.Function) void {
-    self.functions.append(self.alloc, function) catch oom();
-    self.putVariable(function.name, null, .primitive(.function));
 }
 
 fn typeFromToken(token: Token) ?FlowType {

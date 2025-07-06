@@ -333,7 +333,7 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compile
     };
 
     if (term != .Exited) {
-        printTo(error_writer, "Test Case {s} got interrupted\n", .{case_name});
+        printTo(error_writer, "Test Case {s} got interrupted\nStdErr:\n{s}\n", .{ case_name, stderr.items });
         return TestError.ExecutionInterrupted;
     }
 
