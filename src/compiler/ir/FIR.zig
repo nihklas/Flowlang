@@ -309,7 +309,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             const initializer = if (variable.value) |value| self.traverseExpr(value) else null;
             const typehint = if (variable.type_hint) |typehint| typehint.type else self.exprs.getLast().type;
 
-            self.putVariable(variable.name.lexeme, initializer, typehint);
+            self.putVariable(variable.name.lexeme, initializer, typehint.clone(self.alloc));
         },
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
