@@ -311,6 +311,9 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.compileExpression(expr.operands[1]);
             self.emitOpcode(.append);
         },
+        .function => {
+            @panic("Not yet implemented");
+        },
     }
 }
 

@@ -116,6 +116,8 @@ pub const Node = struct {
             builtin_fn,
             /// Operands: n
             array,
+            /// Operands: 2 -> 0 = count of params, 1 = start of body
+            function,
         };
     };
 
@@ -537,7 +539,9 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[1] = self.traverseExpr(index.index);
             const item_type = self.exprs.items[operands[0]].type;
             assert(item_type.order > 0);
-            self.exprs.append(self.alloc, .{ .op = .index, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order - 1 } }) catch oom();
+            var new_type = item_type.clone(self.alloc);
+            new_type.order -= 1;
+            self.exprs.append(self.alloc, .{ .op = .index, .operands = operands, .type = new_type }) catch oom();
         },
         .append => |append| {
             const operands = self.arena().alloc(usize, 2) catch oom();
@@ -545,8 +549,25 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[1] = self.traverseExpr(append.value);
             self.exprs.append(self.alloc, .{ .op = .append, .operands = operands, .type = self.exprs.items[operands[0]].type }) catch oom();
         },
-        .function => {
-            @panic("Not yet implemented");
+        .function => |function| {
+            self.scopeIncr();
+
+            const param_types = self.arena().alloc(FlowType, function.params.len) catch oom();
+            for (function.params, param_types) |param, *param_type| {
+                param_type.* = param.variable.type_hint.?.type;
+                self.putVariable(param.variable.name.lexeme, null, param_type.*, false);
+            }
+
+            const maybe_body = self.traverseBlock(function.body);
+
+            self.scopeDecr();
+
+            const operands = self.arena().alloc(usize, 2) catch oom();
+            operands[0] = function.params.len;
+            operands[1] = maybe_body orelse uninitialized_entry;
+
+            const func_type: FlowType = .function(self.arena(), function.ret_type.type, param_types);
+            self.exprs.append(self.alloc, .{ .op = .function, .operands = operands, .type = func_type }) catch oom();
         },
     }
     return self.exprs.items.len - 1;
