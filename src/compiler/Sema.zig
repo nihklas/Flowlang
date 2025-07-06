@@ -56,11 +56,12 @@ fn registerTopLevelFunctions(self: *Sema) void {
         if (stmt.* != .function) continue;
         const function = stmt.function.expr.function;
         const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+        defer self.alloc.free(arg_types);
         for (function.params, 0..) |param, i| {
             assert(param.* == .variable);
             assert(param.variable.type_hint != null);
 
-            arg_types[i] = param.variable.type_hint.?.type.clone(self.alloc);
+            arg_types[i] = param.variable.type_hint.?.type;
         }
 
         self.putFunction(function.token, function.ret_type.type, arg_types);
@@ -423,6 +424,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             defer self.scopeDecr();
 
             const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+            defer self.alloc.free(param_types);
             for (function.params, param_types) |param, *param_type| {
                 assert(param.* == .variable);
                 assert(param.variable.type_hint != null);
@@ -430,11 +432,11 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 self.putVariable(.{
                     .constant = true,
                     .name = param.variable.name,
-                    .type = param.variable.type_hint.?.type,
+                    .type = param.variable.type_hint.?.type.clone(self.alloc),
                     .scope = self.current_scope,
                 });
 
-                param_type.* = param.variable.type_hint.?.type.clone(self.alloc);
+                param_type.* = param.variable.type_hint.?.type;
             }
 
             for (function.body) |inner_stmt| {
@@ -443,7 +445,13 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
 
             self.checkReturnTypes(expr);
 
-            self.putType(expr, FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom());
+            // NOTE: These gymnastics are there to allow the putType function to clone the argument
+            // on every call and not own its passed type. Therefore, passed Type must be freed after
+            // its no longer used
+            const func: FlowType = .function(self.alloc, function.ret_type.type, param_types);
+            defer func.deinit(self.alloc);
+
+            self.putType(expr, func);
         },
     }
 }
@@ -561,7 +569,7 @@ fn putVariable(self: *Sema, variable: Variable) void {
 }
 
 fn putFunction(self: *Sema, name: Token, ret_type: FlowType, arg_types: []const FlowType) void {
-    const function = FlowType.function(self.alloc, ret_type, arg_types) catch oom();
+    const function: FlowType = .function(self.alloc, ret_type, arg_types);
     self.putVariable(.{
         .name = name,
         .constant = true,

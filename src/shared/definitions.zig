@@ -46,8 +46,13 @@ pub const FlowType = struct {
         switch (self.type) {
             .null, .bool, .int, .float, .string, .builtin_fn => {},
             .function => {
+                for (self.function_type.arg_types) |arg| {
+                    arg.deinit(alloc);
+                }
+
                 alloc.free(self.function_type.arg_types);
                 self.function_type.ret_type.deinit(alloc);
+
                 alloc.destroy(self.function_type);
             },
         }
@@ -58,19 +63,9 @@ pub const FlowType = struct {
         switch (self.type) {
             .null, .bool, .int, .float, .string, .builtin_fn => return self.*,
             .function => {
-                const new_func = alloc.create(FlowFunctionType) catch oom();
-                new_func.ret_type = self.function_type.ret_type.clone(alloc);
-
-                const new_args = alloc.alloc(FlowType, self.function_type.arg_types.len) catch oom();
-                for (new_args, self.function_type.arg_types) |*new_arg, old_arg| {
-                    new_arg.* = old_arg.clone(alloc);
-                }
-                new_func.arg_types = new_args;
-                return .{
-                    .order = self.order,
-                    .type = .function,
-                    .function_type = new_func,
-                };
+                var new_func: FlowType = .function(alloc, self.function_type.ret_type, self.function_type.arg_types);
+                new_func.order = self.order;
+                return new_func;
             },
         }
     }
@@ -85,11 +80,15 @@ pub const FlowType = struct {
         return .{ .type = primitive_type, .order = 0 };
     }
 
-    /// Return FlowType owns the memory of arg_types
-    pub fn function(alloc: std.mem.Allocator, ret_type: FlowType, arg_types: []const FlowType) !FlowType {
-        const func = try alloc.create(FlowFunctionType);
-        func.ret_type = ret_type;
-        func.arg_types = arg_types;
+    /// Clones the arg_types deeply
+    pub fn function(alloc: std.mem.Allocator, ret_type: FlowType, arg_types: []const FlowType) FlowType {
+        const func = alloc.create(FlowFunctionType) catch oom();
+        const args = alloc.alloc(FlowType, arg_types.len) catch oom();
+        for (arg_types, args) |old_arg, *new_arg| {
+            new_arg.* = old_arg.clone(alloc);
+        }
+        func.ret_type = ret_type.clone(alloc);
+        func.arg_types = args;
         return .{ .order = 0, .type = .function, .function_type = func };
     }
 

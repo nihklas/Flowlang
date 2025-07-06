@@ -223,7 +223,7 @@ fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
         self.putVariable(
             function.token.lexeme,
             null,
-            FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom(),
+            .function(self.alloc, function.ret_type.type, param_types),
         );
     }
 }
@@ -326,7 +326,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 self.putVariable(
                     function.token.lexeme,
                     null,
-                    FlowType.function(self.alloc, function.ret_type.type, param_types) catch oom(),
+                    .function(self.alloc, function.ret_type.type, param_types),
                 );
             }
 

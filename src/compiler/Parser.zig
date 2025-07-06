@@ -554,7 +554,7 @@ fn typeHintType(self: *Parser) ?struct { Token, definitions.FlowType } {
 
         const ret_type: definitions.FlowType = if (self.typeHintType()) |hint_type| hint_type[1] else .null;
 
-        const function = definitions.FlowType.function(self.arena, ret_type, params) catch oom();
+        const function: definitions.FlowType = .function(self.arena, ret_type, params);
 
         return .{ func, function };
     }
