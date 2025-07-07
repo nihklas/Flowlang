@@ -185,11 +185,7 @@ fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wr
     const variable = fir.globals.items[var_idx];
 
     try writer.print("${d} = ", .{var_idx});
-    if (variable.type.isFunction()) {
-        try writer.print("func ({d}) {{\n", .{variable.type.function_type.arg_types.len});
-        try dumpBlock(writer, fir, variable.extra_idx, 1);
-        try writer.writeAll("}");
-    } else if (variable.expr) |expr_idx| {
+    if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx, depth);
     } else if (variable.type.order > 0) {
         try writer.writeAll("[]");
@@ -204,12 +200,7 @@ fn dumpLocal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wri
 
     try writer.print("%{d} = ", .{variable.stack_idx});
 
-    if (variable.type.isFunction()) {
-        try writer.print("func ({d}) {{\n", .{variable.type.function_type.arg_types.len});
-        try dumpBlock(writer, fir, variable.extra_idx, depth + 1);
-        try printDepth(writer, depth);
-        try writer.writeAll("}");
-    } else if (variable.expr) |expr_idx| {
+    if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx, depth);
     } else if (variable.type.order > 0) {
         try writer.writeAll("[]");

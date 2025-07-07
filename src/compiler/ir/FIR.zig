@@ -151,9 +151,6 @@ pub const Node = struct {
         /// stack index, with which it will get fetched in VM. Set for both local and global but
         /// only used for local
         stack_idx: usize,
-        /// index for additional purpose
-        /// - index into the functions collection in case `.type == .function`
-        extra_idx: usize,
         /// Whether this variable should be hoisted up to the beginning of the scope
         /// For Example, this is applied for function declarations in global scope
         hoist: bool,
@@ -338,21 +335,12 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 );
             }
 
-            self.scopeIncr();
-
-            for (function.params) |param| {
-                self.putVariable(param.variable.name.lexeme, null, param.variable.type_hint.?.type, false);
-            }
-
-            const maybe_body = self.traverseBlock(function.body);
-
-            self.scopeDecr();
+            const expr_idx = self.traverseExpr(function_decl.expr);
 
             const var_idx, const variable = self.resolveVariable(function.token.lexeme);
             assert(variable.type.isFunction());
-            if (maybe_body) |body| {
-                self.refVariable(var_idx, variable.scope).extra_idx = self.startOfBlock(body);
-            }
+
+            self.refVariable(var_idx, variable.scope).expr = expr_idx;
 
             if (self.scope == 0) return null;
         },
@@ -616,7 +604,6 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
             .scope = 0,
             .expr = null,
             .stack_idx = 0,
-            .extra_idx = 0,
             .hoist = false,
         } };
     }
@@ -704,7 +691,6 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType, h
         .type = var_type,
         .scope = self.scope,
         .stack_idx = self.locals.items.len,
-        .extra_idx = uninitialized_entry,
         .hoist = hoist,
     };
 

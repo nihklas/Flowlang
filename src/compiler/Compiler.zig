@@ -43,11 +43,11 @@ fn compileFunctions(self: *Compiler) void {
         self.emitByte(0x00);
         const op_idx = self.byte_code.items.len;
 
-        self.compileBlock(global.extra_idx);
-        if (func_type.ret_type.isNull()) {
-            self.emitOpcode(.null);
-            self.emitOpcode(.@"return");
-        }
+        // self.compileBlock(global.extra_idx);
+        // if (func_type.ret_type.isNull()) {
+        //     self.emitOpcode(.null);
+        //     self.emitOpcode(.@"return");
+        // }
 
         const line_count = self.byte_code.items.len - op_idx + 1;
         const jump_length: u16 = @intCast(line_count);

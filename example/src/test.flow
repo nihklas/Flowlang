@@ -19,3 +19,7 @@ const func4: func() int = func() int {
 const func5: func(int) int = func(a: int) int {
     return a + a;
 };
+
+func decl(a: int) int {
+    return 5 + a;
+}
