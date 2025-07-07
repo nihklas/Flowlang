@@ -178,10 +178,6 @@ pub fn init(alloc: Allocator) FIR {
 }
 
 pub fn deinit(self: *FIR) void {
-    for (self.variables.items) |variable| {
-        variable.type.deinit(self.alloc);
-    }
-
     self.arena_state.deinit();
     self.constants.deinit(self.alloc);
     self.nodes.deinit(self.alloc);
@@ -195,46 +191,15 @@ pub fn deinit(self: *FIR) void {
 
 pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
     var fir: FIR = .init(alloc);
-    fir.getTopLevelFunctions(program);
     fir.traverseToplevel(program);
     return fir;
 }
 
-fn getTopLevelFunctions(self: *FIR, program: []const *ast.Stmt) void {
-    for (program) |stmt| {
-        if (stmt.* != .function) continue;
-        const function = stmt.function.expr.function;
-
-        const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
-        defer self.alloc.free(param_types);
-        for (function.params, param_types) |param, *param_type| {
-            assert(param.* == .variable);
-            assert(param.variable.type_hint != null);
-            param_type.* = param.variable.type_hint.?.type;
-        }
-
-        self.putVariable(
-            function.token.lexeme,
-            null,
-            .function(self.alloc, function.ret_type.type, param_types),
-        );
-    }
-}
-
 fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
-    var prev_node: ?usize = null;
+    var prev_node: ?usize = self.hoistSymbols(stmts);
     for (stmts) |stmt| {
         if (self.traverseStmt(stmt)) |current_node| {
-            if (prev_node) |prev| {
-                self.nodes.items[prev].after = current_node;
-            }
-
-            self.nodes.items[current_node].before = prev_node;
-            prev_node = self.nodes.items.len - 1;
-
-            if (self.entry == uninitialized_entry) {
-                self.entry = current_node;
-            }
+            self.patchNodesTogether(&prev_node, current_node);
         }
     }
 }
@@ -243,22 +208,72 @@ fn traverseBlock(self: *FIR, stmts: []const *ast.Stmt) ?usize {
     self.scopeIncr();
     defer self.scopeDecr();
 
-    return self.traverseStmts(stmts);
-}
-
-fn traverseStmts(self: *FIR, stmts: []const *ast.Stmt) ?usize {
-    var prev_node: ?usize = null;
+    var prev_node: ?usize = self.hoistSymbols(stmts);
     for (stmts) |stmt| {
         if (self.traverseStmt(stmt)) |current_node| {
-            if (prev_node) |prev| {
-                self.nodes.items[prev].after = current_node;
-            }
-
-            self.nodes.items[current_node].before = prev_node;
-            prev_node = self.nodes.items.len - 1;
+            self.patchNodesTogether(&prev_node, current_node);
         }
     }
     return prev_node;
+}
+
+fn hoistSymbols(self: *FIR, stmts: []const *ast.Stmt) ?usize {
+    var prev_node: ?usize = null;
+    for (stmts) |stmt| {
+        if (self.scope != 0) continue;
+        if (stmt.* != .function) continue;
+
+        if (self.traverseHoistedStmt(stmt)) |current_node| {
+            self.patchNodesTogether(&prev_node, current_node);
+        }
+    }
+    return prev_node;
+}
+
+fn patchNodesTogether(self: *FIR, prev_node: *?usize, current_node: usize) void {
+    if (prev_node.*) |prev| {
+        self.nodes.items[prev].after = current_node;
+    }
+
+    self.nodes.items[current_node].before = prev_node.*;
+    prev_node.* = self.nodes.items.len - 1;
+
+    if (self.entry == uninitialized_entry) {
+        self.entry = current_node;
+    }
+}
+
+fn traverseHoistedStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
+    switch (stmt.*) {
+        .expr,
+        .block,
+        .@"if",
+        .loop,
+        .@"break",
+        .@"continue",
+        .@"return",
+        .variable,
+        => return null,
+        .function => |function_decl| {
+            const function = function_decl.expr.function;
+
+            const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+            defer self.alloc.free(param_types);
+
+            for (function.params, param_types) |param, *param_type| {
+                assert(param.* == .variable);
+                assert(param.variable.type_hint != null);
+                param_type.* = param.variable.type_hint.?.type;
+            }
+
+            self.putVariableHoisted(
+                function.token.lexeme,
+                null,
+                .function(self.arena(), function.ret_type.type, param_types),
+            );
+            return self.nodes.items.len - 1;
+        },
+    }
 }
 
 fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
@@ -302,7 +317,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
             const initializer = if (variable.value) |value| self.traverseExpr(value) else null;
             const typehint = if (variable.type_hint) |typehint| typehint.type else self.exprs.getLast().type;
 
-            self.putVariable(variable.name.lexeme, initializer, typehint.clone(self.alloc));
+            self.putVariable(variable.name.lexeme, initializer, typehint.clone(self.arena()));
         },
         .@"break" => self.nodes.append(self.alloc, .{ .kind = .@"break", .index = 0 }) catch oom(),
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
@@ -674,17 +689,30 @@ fn scopeDecr(self: *FIR) void {
     self.locals_stack.shrinkRetainingCapacity(new_len);
 }
 
-fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
-    const should_hoist = var_type.isFunction() and self.scope == 0;
-    const variable: Node.Variable = .{
+fn putVariableHoisted(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
+    self.putVariableRaw(.{
         .name = name,
         .expr = expr,
         .type = var_type,
         .scope = self.scope,
         .stack_idx = self.locals_stack.items.len,
-        .hoist = should_hoist,
-    };
+        .hoist = true,
+    });
+}
 
+fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
+    self.putVariableRaw(.{
+        .name = name,
+        .expr = expr,
+        .type = var_type,
+        .scope = self.scope,
+        .stack_idx = self.locals_stack.items.len,
+        .hoist = false,
+    });
+}
+
+fn putVariableRaw(self: *FIR, variable: Node.Variable) void {
+    std.debug.print("Append Variable: {}\n", .{variable});
     if (self.scope > 0) {
         self.locals_stack.append(self.alloc, self.variables.items.len) catch oom();
     }
