@@ -59,6 +59,7 @@ pub const Node = struct {
             false,
             /// Operands: none
             null,
+            // TODO: Collapse global und local instruction
             /// Operands: 1 -> index
             global,
             /// Operands: 1 -> index
@@ -712,7 +713,6 @@ fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) v
 }
 
 fn putVariableRaw(self: *FIR, variable: Node.Variable) void {
-    std.debug.print("Append Variable: {}\n", .{variable});
     if (self.scope > 0) {
         self.locals_stack.append(self.alloc, self.variables.items.len) catch oom();
     }
