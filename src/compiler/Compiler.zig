@@ -56,7 +56,6 @@ fn compileFunctions(self: *Compiler) void {
         self.byte_code.items[op_idx - 2] = bytes[0];
         self.byte_code.items[op_idx - 1] = bytes[1];
     }
-    self.emitOpcode(.functions_done);
 }
 
 fn compileConstants(self: *Compiler) void {

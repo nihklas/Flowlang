@@ -32,7 +32,6 @@ pub fn deinit(self: *VM) void {
 
 pub fn run(self: *VM) void {
     self.loadConstants();
-    self.loadFunctions();
     self.call_stack.push(.{
         .stack_bottom = 0,
         .ret_addr = self.ip,
@@ -84,32 +83,32 @@ fn loadConstants(self: *VM) void {
     }
 }
 
-fn loadFunctions(self: *VM) void {
-    var global_counter: usize = 0;
-    while (self.ip < self.code.len) {
-        const op = self.instruction();
-        if (comptime debug_options.bytecode) {
-            std.debug.print("{}\n", .{op});
-        }
-        switch (op) {
-            .function => {
-                defer global_counter += 1;
-
-                const argc = self.byte();
-                const end = self.short();
-
-                self.globals[global_counter] = .{ .function = .{
-                    .arg_count = argc,
-                    .start_ip = self.ip,
-                } };
-
-                self.ip += end - 1;
-            },
-            .functions_done => break,
-            else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
-        }
-    }
-}
+// fn loadFunctions(self: *VM) void {
+//     var global_counter: usize = 0;
+//     while (self.ip < self.code.len) {
+//         const op = self.instruction();
+//         if (comptime debug_options.bytecode) {
+//             std.debug.print("{}\n", .{op});
+//         }
+//         switch (op) {
+//             .function => {
+//                 defer global_counter += 1;
+//
+//                 const argc = self.byte();
+//                 const end = self.short();
+//
+//                 self.globals[global_counter] = .{ .function = .{
+//                     .arg_count = argc,
+//                     .start_ip = self.ip,
+//                 } };
+//
+//                 self.ip += end - 1;
+//             },
+//             .functions_done => break,
+//             else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
+//         }
+//     }
+// }
 
 fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
@@ -298,14 +297,15 @@ fn runWhileSwitch(self: *VM) void {
                 self.value_stack.stack_top = frame.stack_bottom;
                 self.push(ret_value);
             },
+            .function => {
+                @panic("Not implemented Yet");
+            },
 
             .string,
             .string_long,
             .integer,
             .float,
             .constants_done,
-            .functions_done,
-            .function,
             => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
     }
