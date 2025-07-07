@@ -64,13 +64,9 @@ pub const Node = struct {
             /// Operands: 1 -> index
             local,
             /// Operands: 2 -> value, index
-            assign_global,
-            /// Operands: 2 -> value, index
-            assign_local,
+            assign,
             /// Operands: n -> value, var_index, ... remaining indices on lhs
-            assign_in_array_local,
-            /// Operands: n -> value, var_index, ... remaining indices on lhs
-            assign_in_array_global,
+            assign_in_array,
             /// Operands: 1 -> constants
             literal,
             /// Operands: 1 -> expression
@@ -446,7 +442,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 operands[0] = self.traverseExpr(assignment.value);
                 operands[1] = var_idx;
                 self.exprs.append(self.alloc, .{
-                    .op = if (variable_node.scope == 0) .assign_global else .assign_local,
+                    .op = .assign,
                     .type = variable_node.type,
                     .operands = operands,
                 }) catch oom();
@@ -472,11 +468,11 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
 
                 const operands = self.arena().alloc(usize, 2 + index_amount) catch oom();
                 operands[0] = self.traverseExpr(assignment.value);
-                operands[1], const is_global = variable: switch (index.expr.*) {
+                operands[1] = variable: switch (index.expr.*) {
                     .index => |index_expr| continue :variable index_expr.expr.*,
                     .variable => |variable| {
-                        const var_idx, const var_node = self.resolveVariable(variable.name.lexeme);
-                        break :variable .{ var_idx, var_node.scope == 0 };
+                        const var_idx, _ = self.resolveVariable(variable.name.lexeme);
+                        break :variable var_idx;
                     },
                     else => unreachable,
                 };
@@ -496,7 +492,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 }
 
                 self.exprs.append(self.alloc, .{
-                    .op = if (is_global) .assign_in_array_global else .assign_in_array_local,
+                    .op = .assign_in_array,
                     .type = self.exprs.items[operands[0]].type,
                     .operands = operands,
                 }) catch oom();
@@ -598,16 +594,19 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
         } };
     }
 
+    // Locals in Scope
     var l_idx = self.locals_stack.items.len;
     while (l_idx > 0) {
         l_idx -= 1;
 
-        const local = self.variables.items[self.locals_stack.items[l_idx]];
+        const idx = self.locals_stack.items[l_idx];
+        const local = self.variables.items[idx];
         if (std.mem.eql(u8, local.name, name)) {
-            return .{ l_idx, local };
+            return .{ idx, local };
         }
     }
 
+    // Globals
     return for (self.variables.items, 0..) |variable, idx| {
         if (variable.scope != 0) continue;
         if (std.mem.eql(u8, variable.name, name)) {

@@ -233,42 +233,34 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitOpcode(.get_local);
             self.emitByte(@intCast(local.stack_idx));
         },
-        .assign_global => {
+        .assign => {
+            const variable = self.fir.variables.items[expr.operands[1]];
             self.compileExpression(expr.operands[0]);
             if (self.shouldClone(expr.operands[0])) {
                 self.emitOpcode(.clone);
             }
-            self.emitOpcode(.set_global);
-            self.emitByte(@intCast(expr.operands[1]));
-        },
-        .assign_local => {
-            const local = self.fir.variables.items[expr.operands[1]];
-            self.compileExpression(expr.operands[0]);
-            if (self.shouldClone(expr.operands[0])) {
-                self.emitOpcode(.clone);
+            if (variable.scope == 0) {
+                self.emitOpcode(.set_global);
+                self.emitByte(@intCast(expr.operands[1]));
+            } else {
+                self.emitOpcode(.set_local);
+                self.emitByte(@intCast(variable.stack_idx));
             }
-            self.emitOpcode(.set_local);
-            self.emitByte(@intCast(local.stack_idx));
         },
-        .assign_in_array_global => {
+        .assign_in_array => {
+            const variable = self.fir.variables.items[expr.operands[1]];
             self.compileExpression(expr.operands[0]);
             var idx: usize = expr.operands.len - 1;
             while (idx >= 2) : (idx -= 1) {
                 self.compileExpression(expr.operands[idx]);
             }
-            self.emitOpcode(.set_global_array);
-            self.emitByte(@intCast(expr.operands[1]));
-            self.emitByte(@intCast(expr.operands.len - 2));
-        },
-        .assign_in_array_local => {
-            const local = self.fir.variables.items[expr.operands[1]];
-            self.compileExpression(expr.operands[0]);
-            var idx: usize = expr.operands.len - 1;
-            while (idx >= 2) : (idx -= 1) {
-                self.compileExpression(expr.operands[idx]);
+            if (variable.scope == 0) {
+                self.emitOpcode(.set_global_array);
+                self.emitByte(@intCast(expr.operands[1]));
+            } else {
+                self.emitOpcode(.set_local_array);
+                self.emitByte(@intCast(variable.stack_idx));
             }
-            self.emitOpcode(.set_local_array);
-            self.emitByte(@intCast(local.stack_idx));
             self.emitByte(@intCast(expr.operands.len - 2));
         },
         .call => {

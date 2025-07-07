@@ -65,21 +65,26 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize, depth: usize) Wri
             try writer.print(" {s}", .{@tagName(expr.op)});
         },
         .global => try writer.print("${d}", .{expr.operands[0]}),
-        .local => try writer.print("%{d}", .{expr.operands[0]}),
-        .assign_global, .assign_local => {
-            if (expr.op == .assign_global) {
+        .local => {
+            const variable = fir.variables.items[expr.operands[0]];
+            try writer.print("%{d}", .{variable.stack_idx});
+        },
+        .assign => {
+            const variable = fir.variables.items[expr.operands[1]];
+            if (variable.scope == 0) {
                 try writer.print("${d} = ", .{expr.operands[1]});
             } else {
-                try writer.print("%{d} = ", .{expr.operands[1]});
+                try writer.print("%{d} = ", .{variable.stack_idx});
             }
 
             try dumpExpr(writer, fir, expr.operands[0], depth);
         },
-        .assign_in_array_global, .assign_in_array_local => {
-            if (expr.op == .assign_in_array_global) {
+        .assign_in_array => {
+            const variable = fir.variables.items[expr.operands[1]];
+            if (variable.scope == 0) {
                 try writer.print("${d}", .{expr.operands[1]});
             } else {
-                try writer.print("%{d}", .{expr.operands[1]});
+                try writer.print("%{d}", .{variable.stack_idx});
             }
 
             for (2..expr.operands.len) |idx| {
