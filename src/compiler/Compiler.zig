@@ -25,38 +25,38 @@ pub fn compile(self: *Compiler) []const u8 {
         return &.{};
     }
     self.compileConstants();
-    self.compileFunctions();
+    // self.compileFunctions();
     self.compileBlock(self.fir.entry);
     defer self.loop_levels.deinit(self.alloc);
 
     return self.byte_code.toOwnedSlice(self.alloc) catch oom();
 }
 
-fn compileFunctions(self: *Compiler) void {
-    for (self.fir.globals.items) |global| {
-        if (!global.type.isFunction() or global.expr != null) continue;
-        const func_type = global.type.function_type;
-
-        self.emitOpcode(.function);
-        self.emitByte(@intCast(func_type.arg_types.len));
-        self.emitByte(0x00);
-        self.emitByte(0x00);
-        const op_idx = self.byte_code.items.len;
-
-        // self.compileBlock(global.extra_idx);
-        // if (func_type.ret_type.isNull()) {
-        //     self.emitOpcode(.null);
-        //     self.emitOpcode(.@"return");
-        // }
-
-        const line_count = self.byte_code.items.len - op_idx + 1;
-        const jump_length: u16 = @intCast(line_count);
-
-        const bytes = std.mem.toBytes(jump_length);
-        self.byte_code.items[op_idx - 2] = bytes[0];
-        self.byte_code.items[op_idx - 1] = bytes[1];
-    }
-}
+// fn compileFunctions(self: *Compiler) void {
+//     for (self.fir.globals.items) |global| {
+//         if (!global.type.isFunction() or global.expr != null) continue;
+//         const func_type = global.type.function_type;
+//
+//         self.emitOpcode(.function);
+//         self.emitByte(@intCast(func_type.arg_types.len));
+//         self.emitByte(0x00);
+//         self.emitByte(0x00);
+//         const op_idx = self.byte_code.items.len;
+//
+//         // self.compileBlock(global.extra_idx);
+//         // if (func_type.ret_type.isNull()) {
+//         //     self.emitOpcode(.null);
+//         //     self.emitOpcode(.@"return");
+//         // }
+//
+//         const line_count = self.byte_code.items.len - op_idx + 1;
+//         const jump_length: u16 = @intCast(line_count);
+//
+//         const bytes = std.mem.toBytes(jump_length);
+//         self.byte_code.items[op_idx - 2] = bytes[0];
+//         self.byte_code.items[op_idx - 1] = bytes[1];
+//     }
+// }
 
 fn compileConstants(self: *Compiler) void {
     for (self.fir.constants.items) |constant| {
@@ -112,8 +112,7 @@ fn compileStmt(self: *Compiler, node_idx: usize) void {
         .pop => self.emitOpcode(.pop),
         .cond => self.compileCond(node.index),
         .loop => self.compileLoop(node.index),
-        .global => self.compileGlobal(node.index),
-        .local => self.compileLocal(node.index),
+        .variable => self.compileVariable(node.index),
         .@"break" => {
             var breaks = &self.loop_levels.items[self.loop_levels.items.len - 1].breaks;
             breaks.append(self.alloc, self.emitJump(.jump)) catch oom();
@@ -180,43 +179,29 @@ fn compileLoop(self: *Compiler, loop_idx: usize) void {
     self.emitOpcode(.pop);
 }
 
-fn compileGlobal(self: *Compiler, var_idx: usize) void {
-    const global = self.fir.globals.items[var_idx];
+fn compileVariable(self: *Compiler, var_idx: usize) void {
+    const variable = self.fir.variables.items[var_idx];
 
-    if (global.expr) |expr| {
+    if (variable.expr) |expr| {
         self.compileExpression(expr);
         if (self.shouldClone(expr)) {
             self.emitOpcode(.clone);
         }
-    } else if (global.type.order > 0) {
+    } else if (variable.type.order > 0) {
         self.emitOpcode(.array);
         self.emitByte(0);
     } else {
         self.emitOpcode(.null);
     }
 
-    self.emitOpcode(.set_global);
-    self.emitByte(@intCast(var_idx));
+    if (variable.scope == 0) {
+        self.emitOpcode(.set_global);
+        self.emitByte(@intCast(var_idx));
 
-    self.emitOpcode(.pop);
-}
-
-fn compileLocal(self: *Compiler, var_idx: usize) void {
-    const local = self.fir.locals.items[var_idx];
-
-    if (local.expr) |expr| {
-        self.compileExpression(expr);
-        if (self.shouldClone(expr)) {
-            self.emitOpcode(.clone);
-        }
-    } else if (local.type.order > 0) {
-        self.emitOpcode(.array);
-        self.emitByte(0);
+        self.emitOpcode(.pop);
     } else {
-        self.emitOpcode(.null);
+        self.local_count += 1;
     }
-
-    self.local_count += 1;
 }
 
 fn compileExpression(self: *Compiler, expr_idx: usize) void {
@@ -244,7 +229,7 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitByte(@intCast(expr.operands[0]));
         },
         .local => {
-            const local = self.fir.locals.items[expr.operands[0]];
+            const local = self.fir.variables.items[expr.operands[0]];
             self.emitOpcode(.get_local);
             self.emitByte(@intCast(local.stack_idx));
         },
@@ -257,7 +242,7 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitByte(@intCast(expr.operands[1]));
         },
         .assign_local => {
-            const local = self.fir.locals.items[expr.operands[1]];
+            const local = self.fir.variables.items[expr.operands[1]];
             self.compileExpression(expr.operands[0]);
             if (self.shouldClone(expr.operands[0])) {
                 self.emitOpcode(.clone);
@@ -276,7 +261,7 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitByte(@intCast(expr.operands.len - 2));
         },
         .assign_in_array_local => {
-            const local = self.fir.locals.items[expr.operands[1]];
+            const local = self.fir.variables.items[expr.operands[1]];
             self.compileExpression(expr.operands[0]);
             var idx: usize = expr.operands.len - 1;
             while (idx >= 2) : (idx -= 1) {
