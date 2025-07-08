@@ -196,7 +196,7 @@ fn compileVariable(self: *Compiler, var_idx: usize) void {
 
     if (variable.scope == 0) {
         self.emitOpcode(.set_global);
-        self.emitByte(@intCast(var_idx));
+        self.emitByte(@intCast(variable.stack_idx));
 
         self.emitOpcode(.pop);
     } else {
@@ -224,14 +224,14 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
         .equal, .unequal, .less, .less_equal, .greater, .greater_equal, .add, .sub, .div, .mul, .mod, .concat => self.compileBinary(expr),
         .@"and", .@"or" => self.compileLogical(expr),
         .not, .negate => self.compileUnary(expr),
-        .global => {
-            self.emitOpcode(.get_global);
-            self.emitByte(@intCast(expr.operands[0]));
-        },
-        .local => {
-            const local = self.fir.variables.items[expr.operands[0]];
-            self.emitOpcode(.get_local);
-            self.emitByte(@intCast(local.stack_idx));
+        .variable => {
+            const variable = self.fir.variables.items[expr.operands[0]];
+            if (variable.scope == 0) {
+                self.emitOpcode(.get_global);
+            } else {
+                self.emitOpcode(.get_local);
+            }
+            self.emitByte(@intCast(variable.stack_idx));
         },
         .assign => {
             const variable = self.fir.variables.items[expr.operands[1]];
@@ -239,13 +239,13 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             if (self.shouldClone(expr.operands[0])) {
                 self.emitOpcode(.clone);
             }
+
             if (variable.scope == 0) {
                 self.emitOpcode(.set_global);
-                self.emitByte(@intCast(expr.operands[1]));
             } else {
                 self.emitOpcode(.set_local);
-                self.emitByte(@intCast(variable.stack_idx));
             }
+            self.emitByte(@intCast(variable.stack_idx));
         },
         .assign_in_array => {
             const variable = self.fir.variables.items[expr.operands[1]];
@@ -256,11 +256,10 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             }
             if (variable.scope == 0) {
                 self.emitOpcode(.set_global_array);
-                self.emitByte(@intCast(expr.operands[1]));
             } else {
                 self.emitOpcode(.set_local_array);
-                self.emitByte(@intCast(variable.stack_idx));
             }
+            self.emitByte(@intCast(variable.stack_idx));
             self.emitByte(@intCast(expr.operands.len - 2));
         },
         .call => {
@@ -408,7 +407,7 @@ fn emitByte(self: *Compiler, byte: u8) void {
 
 fn shouldClone(self: *Compiler, expr_idx: usize) bool {
     const expr = self.fir.exprs.items[expr_idx];
-    return (expr.op == .local or expr.op == .global) and expr.type.order > 0;
+    return expr.op == .variable and expr.type.order > 0;
 }
 
 const Compiler = @This();

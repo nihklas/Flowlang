@@ -20,6 +20,7 @@ loops: std.ArrayListUnmanaged(Node.Loop),
 variables: std.ArrayListUnmanaged(Node.Variable),
 locals_stack: std.ArrayListUnmanaged(usize),
 scope: usize,
+globals_count: usize,
 /// The entrypoint of the FIR graph, gets initialized to `uninitialized_entry`.
 entry: usize,
 
@@ -59,11 +60,8 @@ pub const Node = struct {
             false,
             /// Operands: none
             null,
-            // TODO: Collapse global und local instruction
             /// Operands: 1 -> index
-            global,
-            /// Operands: 1 -> index
-            local,
+            variable,
             /// Operands: 2 -> value, index
             assign,
             /// Operands: n -> value, var_index, ... remaining indices on lhs
@@ -175,6 +173,7 @@ pub fn init(alloc: Allocator) FIR {
         .locals_stack = .empty,
         .entry = uninitialized_entry,
         .scope = 0,
+        .globals_count = 0,
     };
 }
 
@@ -447,7 +446,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 self.exprs.append(self.alloc, .{ .op = .builtin_fn, .type = .builtinFn(), .operands = operands }) catch oom();
             } else {
                 operands[0] = var_idx;
-                self.exprs.append(self.alloc, .{ .op = if (variable_node.scope == 0) .global else .local, .type = variable_node.type, .operands = operands }) catch oom();
+                self.exprs.append(self.alloc, .{ .op = .variable, .type = variable_node.type, .operands = operands }) catch oom();
             }
         },
         .assignment => |assignment| {
@@ -691,32 +690,30 @@ fn scopeDecr(self: *FIR) void {
 }
 
 fn putVariableHoisted(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
-    self.putVariableRaw(.{
-        .name = name,
-        .expr = expr,
-        .type = var_type,
-        .scope = self.scope,
-        .stack_idx = self.locals_stack.items.len,
-        .hoist = true,
-    });
+    self.putVariableRaw(name, expr, var_type, true);
 }
 
 fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
-    self.putVariableRaw(.{
+    self.putVariableRaw(name, expr, var_type, false);
+}
+
+fn putVariableRaw(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType, hoist: bool) void {
+    const stack_idx = blk: {
+        if (self.scope == 0) {
+            defer self.globals_count += 1;
+            break :blk self.globals_count;
+        }
+        defer self.locals_stack.append(self.alloc, self.variables.items.len) catch oom();
+        break :blk self.locals_stack.items.len;
+    };
+    self.variables.append(self.alloc, .{
         .name = name,
         .expr = expr,
         .type = var_type,
         .scope = self.scope,
-        .stack_idx = self.locals_stack.items.len,
-        .hoist = false,
-    });
-}
-
-fn putVariableRaw(self: *FIR, variable: Node.Variable) void {
-    if (self.scope > 0) {
-        self.locals_stack.append(self.alloc, self.variables.items.len) catch oom();
-    }
-    self.variables.append(self.alloc, variable) catch oom();
+        .stack_idx = stack_idx,
+        .hoist = hoist,
+    }) catch oom();
     self.nodes.append(self.alloc, .{ .kind = .variable, .index = self.variables.items.len - 1 }) catch oom();
 }
 

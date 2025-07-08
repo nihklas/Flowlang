@@ -64,18 +64,23 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize, depth: usize) Wri
             try dumpExpr(writer, fir, expr.operands[0], depth);
             try writer.print(" {s}", .{@tagName(expr.op)});
         },
-        .global => try writer.print("${d}", .{expr.operands[0]}),
-        .local => {
+        .variable => {
             const variable = fir.variables.items[expr.operands[0]];
-            try writer.print("%{d}", .{variable.stack_idx});
+            if (variable.scope == 0) {
+                try writer.writeAll("$");
+            } else {
+                try writer.writeAll("%");
+            }
+            try writer.print("{d}", .{variable.stack_idx});
         },
         .assign => {
             const variable = fir.variables.items[expr.operands[1]];
             if (variable.scope == 0) {
-                try writer.print("${d} = ", .{expr.operands[1]});
+                try writer.writeAll("$");
             } else {
-                try writer.print("%{d} = ", .{variable.stack_idx});
+                try writer.writeAll("%");
             }
+            try writer.print("{d} = ", .{variable.stack_idx});
 
             try dumpExpr(writer, fir, expr.operands[0], depth);
         },
@@ -190,10 +195,11 @@ fn dumpGlobal(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) Wr
 fn dumpVariable(writer: anytype, fir: *const FIR, var_idx: usize, depth: usize) WriterError!void {
     const variable = fir.variables.items[var_idx];
     if (variable.scope == 0) {
-        try writer.print("${d} = ", .{var_idx});
+        try writer.writeAll("$");
     } else {
-        try writer.print("%{d} = ", .{variable.stack_idx});
+        try writer.writeAll("%");
     }
+    try writer.print("{d} = ", .{variable.stack_idx});
 
     if (variable.expr) |expr_idx| {
         try dumpExpr(writer, fir, expr_idx, depth);
