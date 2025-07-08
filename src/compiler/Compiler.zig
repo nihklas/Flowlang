@@ -25,7 +25,6 @@ pub fn compile(self: *Compiler) []const u8 {
         return &.{};
     }
     self.compileConstants();
-    // self.compileFunctions();
     self.compileBlock(self.fir.entry);
     defer self.loop_levels.deinit(self.alloc);
 
@@ -90,6 +89,8 @@ fn compileConstants(self: *Compiler) void {
 }
 
 fn compileBlock(self: *Compiler, starting_idx: usize) void {
+    // TODO: Compile hoisted variables first
+
     var maybe_node_idx: ?usize = starting_idx;
     while (maybe_node_idx) |node_idx| {
         defer maybe_node_idx = self.fir.nodes.items[node_idx].after;
@@ -287,7 +288,20 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitOpcode(.append);
         },
         .function => {
-            @panic("Not yet implemented");
+            self.emitOpcode(.function);
+            self.emitByte(@intCast(expr.operands[0]));
+            self.emitByte(0x00);
+            self.emitByte(0x00);
+            const op_idx = self.byte_code.items.len;
+
+            self.compileBlock(expr.operands[1]);
+
+            const line_count = self.byte_code.items.len - op_idx + 1;
+            const jump_length: u16 = @intCast(line_count);
+
+            const bytes = std.mem.toBytes(jump_length);
+            self.byte_code.items[op_idx - 2] = bytes[0];
+            self.byte_code.items[op_idx - 1] = bytes[1];
         },
     }
 }

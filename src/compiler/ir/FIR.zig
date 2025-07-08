@@ -197,6 +197,9 @@ pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
 
 fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
     var prev_node: ?usize = self.hoistSymbols(stmts);
+    if (prev_node) |hoisted| {
+        self.entry = self.startOfBlock(hoisted);
+    }
     for (stmts) |stmt| {
         if (self.traverseStmt(stmt)) |current_node| {
             self.patchNodesTogether(&prev_node, current_node);
@@ -323,7 +326,13 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
         .@"continue" => self.nodes.append(self.alloc, .{ .kind = .@"continue", .index = 0 }) catch oom(),
         .function => |function_decl| {
             const function = function_decl.expr.function;
-            if (self.scope > 0) {
+            const var_ref, const hoisted = blk: {
+                if (self.resolveVariableOptional(function.token.lexeme)) |result| {
+                    if (result[1].scope == self.scope) {
+                        break :blk .{ result[0], true };
+                    }
+                }
+
                 const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
                 for (function.params, param_types) |param, *param_type| {
                     assert(param.* == .variable);
@@ -336,14 +345,17 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                     null,
                     .function(self.alloc, function.ret_type.type, param_types),
                 );
-            }
+
+                break :blk .{ self.variables.items.len - 1, false };
+            };
 
             const expr_idx = self.traverseExpr(function_decl.expr);
 
-            const var_idx, const variable = self.resolveVariable(function.token.lexeme);
-            assert(variable.type.isFunction());
+            self.variables.items[var_ref].expr = expr_idx;
 
-            self.refVariable(var_idx, variable.scope).expr = expr_idx;
+            if (hoisted) {
+                return null;
+            }
         },
         .@"return" => |return_stmt| {
             const expr = blk: {
@@ -598,6 +610,9 @@ fn resolveConstant(self: *FIR, value: FlowValue) usize {
 }
 
 fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable } {
+    return self.resolveVariableOptional(name) orelse @panic("No Variable found");
+}
+fn resolveVariableOptional(self: *FIR, name: []const u8) ?struct { usize, Node.Variable } {
     if (builtins.get(name)) |_| {
         return .{ 0, .{
             .name = name,
@@ -627,14 +642,7 @@ fn resolveVariable(self: *FIR, name: []const u8) struct { usize, Node.Variable }
         if (std.mem.eql(u8, variable.name, name)) {
             return .{ idx, variable };
         }
-    } else @panic("No Variable found");
-}
-
-fn refVariable(self: *FIR, var_idx: usize, scope: usize) *Node.Variable {
-    if (scope == 0) {
-        return &self.variables.items[var_idx];
-    }
-    return &self.variables.items[self.locals_stack.items[var_idx]];
+    } else null;
 }
 
 fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *const ast.Expr) FlowType {
