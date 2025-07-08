@@ -200,6 +200,10 @@ fn traverseToplevel(self: *FIR, stmts: []const *ast.Stmt) void {
     for (stmts) |stmt| {
         if (self.traverseStmt(stmt)) |current_node| {
             self.patchNodesTogether(&prev_node, current_node);
+
+            if (self.entry == uninitialized_entry) {
+                self.entry = current_node;
+            }
         }
     }
 }
@@ -237,10 +241,6 @@ fn patchNodesTogether(self: *FIR, prev_node: *?usize, current_node: usize) void 
 
     self.nodes.items[current_node].before = prev_node.*;
     prev_node.* = self.nodes.items.len - 1;
-
-    if (self.entry == uninitialized_entry) {
-        self.entry = current_node;
-    }
 }
 
 fn traverseHoistedStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
