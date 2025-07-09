@@ -656,7 +656,6 @@ fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *c
     const callee_expr = self.exprs.items[callee];
 
     assert(callee_expr.type.isFunction() or callee_expr.type.isBuiltinFn());
-    assert(original_callee_expr.* == .variable);
 
     switch (callee_expr.type.type) {
         .builtin_fn => {
@@ -666,10 +665,7 @@ fn resolveFunctionReturnType(self: *FIR, callee: usize, original_callee_expr: *c
             return builtin.ret_type;
         },
         .function => {
-            _, const variable = self.resolveVariable(original_callee_expr.variable.name.lexeme);
-            assert(variable.type.isFunction());
-
-            return variable.type.function_type.ret_type;
+            return callee_expr.type.function_type.ret_type;
         },
         else => unreachable,
     }

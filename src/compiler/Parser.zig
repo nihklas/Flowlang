@@ -37,7 +37,8 @@ fn declaration(self: *Parser) ParserError!*Stmt {
         return self.varDeclaration();
     }
 
-    if (self.match(.func)) |_| {
+    if (self.check(.func) and self.checkNext(.identifier)) {
+        _ = self.advance(); // consume .func
         return self.funcDeclaration();
     }
 

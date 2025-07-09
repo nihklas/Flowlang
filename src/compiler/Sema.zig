@@ -1,4 +1,5 @@
 alloc: Allocator,
+arena_state: std.heap.ArenaAllocator,
 program: []const *Stmt,
 errors: std.ArrayListUnmanaged(ErrorInfo) = .empty,
 types: std.AutoHashMapUnmanaged(*const Expr, FlowType) = .empty,
@@ -10,22 +11,14 @@ pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
         .program = program,
         .alloc = alloc,
+        .arena_state = .init(alloc),
     };
 }
 
 pub fn deinit(self: *Sema) void {
+    self.arena_state.deinit();
     self.errors.deinit(self.alloc);
-
-    var type_iter = self.types.valueIterator();
-    while (type_iter.next()) |t| {
-        t.deinit(self.alloc);
-    }
     self.types.deinit(self.alloc);
-
-    for (self.variables.items) |variable| {
-        variable.type.deinit(self.alloc);
-    }
-
     self.variables.deinit(self.alloc);
     self.* = undefined;
 }
@@ -55,8 +48,7 @@ fn registerTopLevelFunctions(self: *Sema) void {
     for (self.program) |stmt| {
         if (stmt.* != .function) continue;
         const function = stmt.function.expr.function;
-        const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
-        defer self.alloc.free(arg_types);
+        const arg_types = self.arena().alloc(FlowType, function.params.len) catch oom();
         for (function.params, 0..) |param, i| {
             assert(param.* == .variable);
             assert(param.variable.type_hint != null);
@@ -151,7 +143,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
         .function => |function_decl| {
             const function = function_decl.expr.function;
             if (self.current_scope > 0) {
-                const arg_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
+                const arg_types = self.arena().alloc(FlowType, function.params.len) catch oom();
                 for (function.params, 0..) |param, i| {
                     assert(param.* == .variable);
                     arg_types[i] = self.typeFromVariable(param);
@@ -335,7 +327,6 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 self.analyseExpr(arg_expr);
             }
 
-            assert(call.expr.* == .variable);
             if (self.getType(call.expr)) |callee_type| {
                 switch (callee_type.type) {
                     .builtin_fn => {
@@ -346,10 +337,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                         self.validateFunction(builtin, call, expr);
                     },
                     .function => {
-                        const variable = self.findVariable(call.expr.variable.name) orelse return;
-                        assert(variable.type.isFunction());
-
-                        const function = variable.type.function_type;
+                        const function = callee_type.function_type;
                         self.validateFunction(function, call, expr);
                     },
                     else => self.pushError(TypeError.NotACallable, call.expr.getToken(), .{call.expr.getToken().lexeme}),
@@ -423,8 +411,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             self.scopeIncr();
             defer self.scopeDecr();
 
-            const param_types = self.alloc.alloc(FlowType, function.params.len) catch oom();
-            defer self.alloc.free(param_types);
+            const param_types = self.arena().alloc(FlowType, function.params.len) catch oom();
             for (function.params, param_types) |param, *param_type| {
                 assert(param.* == .variable);
                 assert(param.variable.type_hint != null);
@@ -432,7 +419,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 self.putVariable(.{
                     .constant = true,
                     .name = param.variable.name,
-                    .type = param.variable.type_hint.?.type.clone(self.alloc),
+                    .type = param.variable.type_hint.?.type,
                     .scope = self.current_scope,
                 });
 
@@ -445,13 +432,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
 
             self.checkReturnTypes(expr);
 
-            // NOTE: These gymnastics are there to allow the putType function to clone the argument
-            // on every call and not own its passed type. Therefore, passed Type must be freed after
-            // its no longer used
-            const func: FlowType = .function(self.alloc, function.ret_type.type, param_types);
-            defer func.deinit(self.alloc);
-
-            self.putType(expr, func);
+            self.putType(expr, .function(self.arena(), function.ret_type.type, param_types));
         },
     }
 }
@@ -524,7 +505,7 @@ fn checkReturnType(self: *Sema, stmt: *const Stmt, expected: FlowType) void {
 }
 
 fn putType(self: *Sema, expr: *const Expr, t: FlowType) void {
-    self.types.put(self.alloc, expr, t.clone(self.alloc)) catch oom();
+    self.types.put(self.alloc, expr, t) catch oom();
 }
 
 fn getType(self: *Sema, expr: *const Expr) ?FlowType {
@@ -569,7 +550,7 @@ fn putVariable(self: *Sema, variable: Variable) void {
 }
 
 fn putFunction(self: *Sema, name: Token, ret_type: FlowType, arg_types: []const FlowType) void {
-    const function: FlowType = .function(self.alloc, ret_type, arg_types);
+    const function: FlowType = .function(self.arena(), ret_type, arg_types);
     self.putVariable(.{
         .name = name,
         .constant = true,
@@ -622,7 +603,7 @@ fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {
     const variable = stmt.variable;
 
     const t = variable.type_hint orelse return self.getType(variable.value.?).?;
-    return t.type.clone(self.alloc);
+    return t.type;
 }
 
 fn formatNumber(self: *Sema, num: anytype) []const u8 {
@@ -634,6 +615,10 @@ fn printError(self: *Sema) void {
         error_reporter.reportError(e.token, "{s}", .{e.message});
         self.alloc.free(e.message);
     }
+}
+
+fn arena(self: *Sema) Allocator {
+    return self.arena_state.allocator();
 }
 
 const ErrorInfo = struct {
