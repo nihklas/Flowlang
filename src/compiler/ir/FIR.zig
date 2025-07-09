@@ -559,7 +559,14 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 self.putVariable(param.variable.name.lexeme, null, param_type.*);
             }
 
-            const maybe_body = self.traverseBlock(function.body);
+            var maybe_body = self.traverseBlock(function.body);
+            if (maybe_body) |body| {
+                if (self.nodes.items[body].kind != .@"return") {
+                    self.exprs.append(self.alloc, .{ .op = .null, .type = .null }) catch oom();
+                    self.nodes.append(self.alloc, .{ .kind = .@"return", .index = self.exprs.items.len - 1 }) catch oom();
+                    self.patchNodesTogether(&maybe_body, self.nodes.items.len - 1);
+                }
+            }
 
             self.scopeDecr();
 

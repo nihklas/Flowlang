@@ -1,7 +1,7 @@
 func makeDoubler() func(int) int {
     const doubler = func(a: int) int {
         return a + a;
-    }
+    };
     return doubler;
 }
 
