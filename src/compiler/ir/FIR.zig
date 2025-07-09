@@ -565,7 +565,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
 
             const operands = self.arena().alloc(usize, 2) catch oom();
             operands[0] = function.params.len;
-            operands[1] = maybe_body orelse uninitialized_entry;
+            operands[1] = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
 
             const func_type: FlowType = .function(self.arena(), function.ret_type.type, param_types);
             self.exprs.append(self.alloc, .{ .op = .function, .operands = operands, .type = func_type }) catch oom();
