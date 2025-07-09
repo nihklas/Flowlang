@@ -24,6 +24,9 @@ const SharedState = struct {
     mutex: std.Thread.Mutex,
     alloc: std.mem.Allocator,
     results: std.StringHashMapUnmanaged(Result),
+    comp_times: std.StringHashMapUnmanaged(u64),
+    run_times: std.StringHashMapUnmanaged(u64),
+    thread_times: std.StringHashMapUnmanaged(u64),
 
     fn setResult(self: *SharedState, case: []const u8, result: Result) void {
         self.mutex.lock();
@@ -31,9 +34,37 @@ const SharedState = struct {
 
         self.results.put(self.alloc, case, result) catch unreachable;
     }
+
+    fn setTime(self: *SharedState, case: []const u8, comp_time: u64, run_time: u64) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        self.comp_times.put(self.alloc, case, comp_time) catch unreachable;
+        self.run_times.put(self.alloc, case, run_time) catch unreachable;
+    }
+
+    fn setThreadTime(self: *SharedState, case: []const u8, time: u64) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        self.thread_times.put(self.alloc, case, time) catch unreachable;
+    }
+
+    fn deinit(self: *SharedState) void {
+        var key_iter = self.results.keyIterator();
+        while (key_iter.next()) |key| {
+            self.alloc.free(key.*);
+        }
+        self.results.deinit(self.alloc);
+        self.comp_times.deinit(self.alloc);
+        self.run_times.deinit(self.alloc);
+        self.thread_times.deinit(self.alloc);
+    }
 };
 
 pub fn main() u8 {
+    var timer = std.time.Timer.start() catch return 1;
+
     var debug_allocator: std.heap.DebugAllocator(.{ .thread_safe = true }) = .init;
     const gpa = debug_allocator.allocator();
     defer _ = debug_allocator.deinit();
@@ -57,14 +88,11 @@ pub fn main() u8 {
         .mutex = .{},
         .alloc = gpa,
         .results = .empty,
+        .comp_times = .empty,
+        .run_times = .empty,
+        .thread_times = .empty,
     };
-    defer {
-        var key_iter = state.results.keyIterator();
-        while (key_iter.next()) |key| {
-            state.alloc.free(key.*);
-        }
-        state.results.deinit(gpa);
-    }
+    defer state.deinit();
 
     runTests(gpa, cases_dir, file_filter, compiler, &state) catch return 1;
 
@@ -78,6 +106,8 @@ pub fn main() u8 {
     stats.putAssumeCapacity(.failure, 0);
     stats.putAssumeCapacity(.crash, 0);
 
+    var total_thread_time: u64 = 0;
+
     var iter = state.results.iterator();
     while (iter.next()) |entry| {
         const count = stats.getPtr(entry.value_ptr.*).?;
@@ -89,7 +119,16 @@ pub fn main() u8 {
             .crash => "💀",
         };
 
-        printStdOut("{s} Test Case: {s}\n", .{ icon, entry.key_ptr.* });
+        const thread_time = state.thread_times.get(entry.key_ptr.*).?;
+        total_thread_time += thread_time;
+
+        printStdOut("{s} ({d: >3}ms | {d: >3}ms | {d: >3}ms) Test Case: {s}\n", .{
+            icon,
+            thread_time,
+            state.comp_times.get(entry.key_ptr.*).?,
+            state.run_times.get(entry.key_ptr.*).?,
+            entry.key_ptr.*,
+        });
     }
 
     printStdOut("\n{d} Tests Succeeded, {d} Tests Failed", .{ stats.get(.success).?, stats.get(.failure).? });
@@ -101,6 +140,11 @@ pub fn main() u8 {
     if (stats.get(.failure).? > 0 or stats.get(.crash).? > 0) {
         return 1;
     }
+
+    printStdOut("\n", .{});
+    printStdOut("Total Thread Runtime:     {d: >4}ms\n", .{total_thread_time});
+    printStdOut("Total Wall-Clock Runtime: {d: >4}ms\n", .{timer.read() / std.time.ns_per_ms});
+    printStdOut("\n", .{});
 
     return 0;
 }
@@ -161,12 +205,15 @@ fn runTests(gpa: std.mem.Allocator, cases_dir: []const u8, file_filter: []const 
     }
 }
 
-fn workerFn(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: *SharedState) void {
+fn workerFn(dir: std.fs.Dir, case_name: []const u8, compiler: []const u8, state: *SharedState) void {
+    var timer = std.time.Timer.start() catch unreachable;
+    defer state.setThreadTime(case_name, timer.read() / std.time.ns_per_ms);
+
     var error_buf: std.ArrayListUnmanaged(u8) = .empty;
     defer error_buf.deinit(state.alloc);
     const error_writer = error_buf.writer(state.alloc);
 
-    doTest(error_writer, dir, sub_path, compiler, state) catch |err| {
+    doTest(error_writer, dir, case_name, compiler, state) catch |err| {
         const result: Result = switch (err) {
             TestError.TestFailed => .failure,
             else => .crash,
@@ -174,7 +221,7 @@ fn workerFn(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: 
 
         printStdErr("\n======================================\n", .{});
         printStdErr("Test Case {s} {s}:", .{
-            sub_path,
+            case_name,
             if (result == .failure) "failed" else "crashed",
         });
         printStdErr("\n======================================\n", .{});
@@ -183,7 +230,7 @@ fn workerFn(dir: std.fs.Dir, sub_path: []const u8, compiler: []const u8, state: 
             printStdErr("{s}\n", .{@errorName(err)});
         }
 
-        state.setResult(sub_path, result);
+        state.setResult(case_name, result);
     };
 }
 
@@ -224,7 +271,7 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compile
     const source = std.mem.trim(u8, content[0..assertions_start], " \n");
     const assertion = content[assertions_start + SPLIT_MARKER_LEN ..];
 
-    const tmp_file_path = try std.fmt.allocPrint(state.alloc, "/tmp/{s}", .{case_name});
+    const tmp_file_path = try std.fmt.allocPrint(state.alloc, "/tmp/flowlang/{s}", .{case_name});
     defer state.alloc.free(tmp_file_path);
 
     {
@@ -246,19 +293,44 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compile
         try source_file.writeAll(source);
     }
 
-    var child = std.process.Child.init(&.{ compiler, "--no-color", "--run", tmp_file_path }, state.alloc);
-    child.stderr_behavior = .Pipe;
-    child.stdout_behavior = .Pipe;
-
     var stdout: std.ArrayListUnmanaged(u8) = .empty;
     defer stdout.deinit(state.alloc);
 
     var stderr: std.ArrayListUnmanaged(u8) = .empty;
     defer stderr.deinit(state.alloc);
 
-    try child.spawn();
-    try child.collectOutput(state.alloc, &stdout, &stderr, MAX_OUTPUT_BYTES);
-    const term = try child.wait();
+    const term = run: {
+        var comp_time: u64 = 0;
+        var run_time: u64 = 0;
+        defer state.setTime(case_name, comp_time, run_time);
+
+        var timer: std.time.Timer = try .start();
+
+        var child = std.process.Child.init(&.{ compiler, "--no-color", tmp_file_path, tmp_file_path }, state.alloc);
+        child.stderr_behavior = .Pipe;
+        child.stdout_behavior = .Pipe;
+
+        timer.reset();
+        try child.spawn();
+        try child.collectOutput(state.alloc, &stdout, &stderr, MAX_OUTPUT_BYTES);
+        var term = try child.wait();
+        comp_time = timer.read() / std.time.ns_per_ms;
+
+        if (term != .Exited or term.Exited != 0) {
+            break :run term;
+        }
+
+        child = std.process.Child.init(&.{tmp_file_path}, state.alloc);
+        child.stderr_behavior = .Pipe;
+        child.stdout_behavior = .Pipe;
+
+        timer.reset();
+        try child.spawn();
+        try child.collectOutput(state.alloc, &stdout, &stderr, MAX_OUTPUT_BYTES);
+        term = try child.wait();
+        run_time = timer.read() / std.time.ns_per_ms;
+        break :run term;
+    };
 
     if (term != .Exited) {
         printTo(error_writer, "Test Case {s} got interrupted\n", .{case_name});
