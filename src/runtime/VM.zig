@@ -298,7 +298,17 @@ fn runWhileSwitch(self: *VM) void {
                 self.push(ret_value);
             },
             .function => {
-                @panic("Not implemented Yet");
+                const argc = self.byte();
+                const end = self.short();
+
+                self.push(.{
+                    .function = .{
+                        .arg_count = argc,
+                        .start_ip = self.ip,
+                    },
+                });
+
+                self.ip += end - 1;
             },
 
             .string,
