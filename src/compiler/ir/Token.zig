@@ -56,6 +56,7 @@ pub const Type = enum {
     null,
     true,
     false,
+    use,
     // Types
     bool,
     int,
@@ -92,6 +93,7 @@ pub const ReservedKeywords = std.StaticStringMap(Type).initComptime(.{
     .{ "float", .float },
     .{ "string", .string },
     .{ "return", .@"return" },
+    .{ "use", .use },
 });
 
 pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
