@@ -1,17 +1,24 @@
 alloc: Allocator,
 arena_state: std.heap.ArenaAllocator,
 program: []const *Stmt,
-errors: std.ArrayListUnmanaged(ErrorInfo) = .empty,
-types: std.AutoHashMapUnmanaged(*const Expr, FlowType) = .empty,
-variables: std.ArrayListUnmanaged(Variable) = .empty,
-current_scope: u8 = 0,
-loop_level: u8 = 0,
+errors: std.ArrayListUnmanaged(ErrorInfo),
+types: std.AutoHashMapUnmanaged(*const Expr, FlowType),
+variables: std.ArrayListUnmanaged(Variable),
+current_scope: u8,
+loop_level: u8,
+faulty_expr: bool,
 
 pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
     return .{
         .program = program,
         .alloc = alloc,
         .arena_state = .init(alloc),
+        .errors = .empty,
+        .types = .empty,
+        .variables = .empty,
+        .current_scope = 0,
+        .loop_level = 0,
+        .faulty_expr = false,
     };
 }
 
@@ -61,6 +68,8 @@ fn registerTopLevelFunctions(self: *Sema) void {
 }
 
 fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
+    defer self.faulty_expr = false;
+
     switch (stmt.*) {
         .expr => |expr_stmt| self.analyseExpr(expr_stmt.expr),
         .block => |block_stmt| {
@@ -111,6 +120,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
 
             if (var_stmt.value) |value| {
                 self.analyseExpr(value);
+                if (self.faulty_expr) return;
             }
 
             const variable: Variable = .{
@@ -152,26 +162,7 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
                 self.putFunction(function.token, function.ret_type.type, arg_types);
             }
 
-            self.scopeIncr();
-            defer self.scopeDecr();
-
-            for (function.params) |param| {
-                assert(param.* == .variable);
-                assert(param.variable.type_hint != null);
-
-                self.putVariable(.{
-                    .constant = true,
-                    .name = param.variable.name,
-                    .type = param.variable.type_hint.?.type,
-                    .scope = self.current_scope,
-                });
-            }
-
-            for (function.body) |inner_stmt| {
-                self.analyseStmt(inner_stmt);
-            }
-
-            self.checkReturnTypes(stmt.function.expr);
+            self.analyseExpr(function_decl.expr);
         },
         .@"return" => |return_stmt| {
             if (self.current_scope == 0) {
@@ -182,6 +173,15 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
 }
 
 fn analyseExpr(self: *Sema, expr: *const Expr) void {
+    if (self.faulty_expr) return;
+
+    const prev_error_count = self.errors.items.len;
+    defer {
+        if (prev_error_count != self.errors.items.len) {
+            self.faulty_expr = true;
+        }
+    }
+
     switch (expr.*) {
         .literal => switch (expr.literal.value) {
             .null => self.putType(expr, .null),

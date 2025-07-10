@@ -2,7 +2,7 @@ const arr = [1, 2, 3];
 const x = arr["0"];
 
 +++++
-error: Index has to be an integer, got 'string' at 2:13
+error: Index has to be an integer, got 'string' at 2:15
    2 | const x = arr["0"];
-                      ^~~~~ Here
+                     ^~~~~ Here
 

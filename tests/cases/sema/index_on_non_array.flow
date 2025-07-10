@@ -2,6 +2,6 @@ const x = 5;
 const y = x[0];
 
 +++++
-error: Can only index on arrays, got 'int' at 2:13
+error: Can only index on arrays, got 'int' at 2:12
    2 | const y = x[0];
-                 ^~~~~ Here
+                  ^~~~~ Here
