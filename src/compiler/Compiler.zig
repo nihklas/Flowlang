@@ -31,32 +31,6 @@ pub fn compile(self: *Compiler) []const u8 {
     return self.byte_code.toOwnedSlice(self.alloc) catch oom();
 }
 
-// fn compileFunctions(self: *Compiler) void {
-//     for (self.fir.globals.items) |global| {
-//         if (!global.type.isFunction() or global.expr != null) continue;
-//         const func_type = global.type.function_type;
-//
-//         self.emitOpcode(.function);
-//         self.emitByte(@intCast(func_type.arg_types.len));
-//         self.emitByte(0x00);
-//         self.emitByte(0x00);
-//         const op_idx = self.byte_code.items.len;
-//
-//         // self.compileBlock(global.extra_idx);
-//         // if (func_type.ret_type.isNull()) {
-//         //     self.emitOpcode(.null);
-//         //     self.emitOpcode(.@"return");
-//         // }
-//
-//         const line_count = self.byte_code.items.len - op_idx + 1;
-//         const jump_length: u16 = @intCast(line_count);
-//
-//         const bytes = std.mem.toBytes(jump_length);
-//         self.byte_code.items[op_idx - 2] = bytes[0];
-//         self.byte_code.items[op_idx - 1] = bytes[1];
-//     }
-// }
-
 fn compileConstants(self: *Compiler) void {
     for (self.fir.constants.items) |constant| {
         switch (constant) {
@@ -294,7 +268,7 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitByte(0x00);
             const op_idx = self.byte_code.items.len;
 
-            self.compileBlock(expr.operands[1]);
+            self.compileBlock(expr.operands[2]);
 
             const line_count = self.byte_code.items.len - op_idx + 1;
             const jump_length: u16 = @intCast(line_count);
