@@ -239,18 +239,23 @@ fn workerFn(dir: std.fs.Dir, case_name: []const u8, compiler: []const u8, state:
             else => .crash,
         };
 
-        printStdErr("\n======================================\n", .{});
-        printStdErr("Test Case {s} {s}:", .{
-            case_name,
-            if (result == .failure) "failed" else "crashed",
-        });
-        printStdErr("\n======================================\n", .{});
-        printStdErr("{s}\n", .{error_buf.items});
-        if (result == .crash) {
-            printStdErr("{s}\n", .{@errorName(err)});
-        }
-
         state.setResult(case_name, result);
+
+        {
+            print_mutex.lock();
+            defer print_mutex.unlock();
+
+            printStdErr("\n======================================\n", .{});
+            printStdErr("Test Case {s} {s}:", .{
+                case_name,
+                if (result == .failure) "failed" else "crashed",
+            });
+            printStdErr("\n======================================\n", .{});
+            printStdErr("{s}\n", .{error_buf.items});
+            if (result == .crash) {
+                printStdErr("{s}\n", .{@errorName(err)});
+            }
+        }
     };
 }
 
@@ -449,6 +454,7 @@ fn printLine(writer: anytype, line: []const u8) void {
     printTo(writer, "{s}\n", .{line});
 }
 
+var print_mutex: std.Thread.Mutex = .{};
 const stdout_writer = std.io.getStdOut().writer();
 const stderr_writer = std.io.getStdErr().writer();
 
