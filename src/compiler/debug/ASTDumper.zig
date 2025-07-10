@@ -159,6 +159,12 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) WriterError!vo
             }
 
             try writeIndent(writer, depth + 1);
+            try writer.writeAll("(Closed Values)\n");
+            for (function.closed_values) |value| {
+                try dumpExpr(writer, value, depth + 2);
+            }
+
+            try writeIndent(writer, depth + 1);
             try writer.writeAll("(Body)\n");
             for (function.body) |body_stmt| {
                 try dumpStmt(writer, body_stmt, depth + 2);

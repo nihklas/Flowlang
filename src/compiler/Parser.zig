@@ -86,7 +86,7 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
 
     const func = try self.parseFunction();
 
-    return Stmt.createFunction(self.arena, name, func.type_hint, func.params, func.body);
+    return Stmt.createFunction(self.arena, name, func.type_hint, func.params, func.body, func.closed_values);
 }
 
 fn parameters(self: *Parser) ParserError![]*Stmt {
@@ -436,7 +436,7 @@ fn index(self: *Parser) ParserError!*Expr {
 fn primary(self: *Parser) ParserError!*Expr {
     if (self.match(.func)) |token| {
         const func = try self.parseFunction();
-        return Expr.createFunction(self.arena, token, func.type_hint, func.params, func.body);
+        return Expr.createFunction(self.arena, token, func.type_hint, func.params, func.body, func.closed_values);
     }
 
     if (self.match(.@"[")) |open_bracket| {
@@ -567,6 +567,7 @@ fn parseFunction(self: *Parser) ParserError!struct {
     type_hint: ast.TypeHint,
     params: []*Stmt,
     body: []*Stmt,
+    closed_values: []*Expr,
 } {
     try self.consume(.@"(", "Expected '(' after function name");
 
@@ -574,6 +575,25 @@ fn parseFunction(self: *Parser) ParserError!struct {
 
     try self.consume(.@")", "Expected ')' after function parameters");
     const close_paren = self.previous();
+
+    const closed_values: []*Expr = blk: {
+        if (self.match(.use) == null) break :blk &.{};
+
+        try self.consume(.@"(", "Expected '(' after 'use'");
+
+        var closed_list: std.ArrayList(*Expr) = .init(self.arena);
+        defer closed_list.deinit();
+
+        while (!self.check(.@")") and !self.isAtEnd()) {
+            closed_list.append(try self.expression()) catch oom();
+
+            if (self.match(.@",") == null) break;
+        }
+
+        try self.consume(.@")", "Expected ')' after parameters");
+
+        break :blk closed_list.toOwnedSlice() catch oom();
+    };
 
     const type_hint: ast.TypeHint = blk: {
         if (self.check(.@"{")) {
@@ -604,6 +624,7 @@ fn parseFunction(self: *Parser) ParserError!struct {
         .type_hint = type_hint,
         .params = params,
         .body = body,
+        .closed_values = closed_values,
     };
 }
 

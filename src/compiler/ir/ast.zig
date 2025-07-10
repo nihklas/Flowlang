@@ -23,7 +23,7 @@ pub const Expr = union(enum) {
     call: struct { expr: *Expr, args: []*Expr },
     index: struct { expr: *Expr, bracket: Token, index: *Expr },
     append: struct { variable: *Expr, value: *Expr },
-    function: struct { token: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt },
+    function: struct { token: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt, closed_values: []*Expr },
 
     pub fn createLiteral(alloc: Allocator, token: Token, value: Literal) *Expr {
         const new_expr = Expr.create(alloc);
@@ -109,10 +109,10 @@ pub const Expr = union(enum) {
         return new_expr;
     }
 
-    pub fn createFunction(alloc: Allocator, token: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt) *Expr {
+    pub fn createFunction(alloc: Allocator, token: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt, closed_values: []*Expr) *Expr {
         const new_expr = Expr.create(alloc);
         new_expr.* = .{
-            .function = .{ .token = token, .ret_type = ret_type, .params = params, .body = body },
+            .function = .{ .token = token, .ret_type = ret_type, .params = params, .body = body, .closed_values = closed_values },
         };
         return new_expr;
     }
@@ -223,10 +223,10 @@ pub const Stmt = union(enum) {
         return stmt;
     }
 
-    pub fn createFunction(alloc: Allocator, name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt) *Stmt {
+    pub fn createFunction(alloc: Allocator, name: Token, ret_type: TypeHint, params: []*Stmt, body: []*Stmt, closed_values: []*Expr) *Stmt {
         const stmt = Stmt.create(alloc);
         stmt.* = .{
-            .function = .{ .expr = Expr.createFunction(alloc, name, ret_type, params, body) },
+            .function = .{ .expr = Expr.createFunction(alloc, name, ret_type, params, body, closed_values) },
         };
         return stmt;
     }
@@ -391,6 +391,7 @@ test "Stmt.createFunction" {
         .{ .type = .primitive(.int), .token = .{ .type = .int, .lexeme = "int", .line = 1, .column = 1 } },
         params,
         body,
+        &.{},
     );
 }
 
