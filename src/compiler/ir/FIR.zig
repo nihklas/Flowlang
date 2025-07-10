@@ -18,7 +18,8 @@ exprs: std.ArrayListUnmanaged(Node.Expr),
 conds: std.ArrayListUnmanaged(Node.Cond),
 loops: std.ArrayListUnmanaged(Node.Loop),
 variables: std.ArrayListUnmanaged(Node.Variable),
-locals_stack: std.ArrayListUnmanaged(usize),
+locals_stack: *std.ArrayListUnmanaged(usize),
+stack_list: std.ArrayListUnmanaged(std.ArrayListUnmanaged(usize)),
 scope: usize,
 globals_count: usize,
 /// The entrypoint of the FIR graph, gets initialized to `uninitialized_entry`.
@@ -110,7 +111,7 @@ pub const Node = struct {
             builtin_fn,
             /// Operands: n
             array,
-            /// Operands: 2 -> 0 = count of params, 1 = start of body
+            /// Operands: n -> 0 = count of params, 1 = count of closed_values, 2 = start of body, 3..n = closed_values expr indexes
             function,
         };
     };
@@ -170,7 +171,8 @@ pub fn init(alloc: Allocator) FIR {
         .conds = .empty,
         .loops = .empty,
         .variables = .empty,
-        .locals_stack = .empty,
+        .locals_stack = undefined,
+        .stack_list = .empty,
         .entry = uninitialized_entry,
         .scope = 0,
         .globals_count = 0,
@@ -178,6 +180,8 @@ pub fn init(alloc: Allocator) FIR {
 }
 
 pub fn deinit(self: *FIR) void {
+    assert(self.stack_list.items.len == 1);
+
     self.arena_state.deinit();
     self.constants.deinit(self.alloc);
     self.nodes.deinit(self.alloc);
@@ -186,11 +190,14 @@ pub fn deinit(self: *FIR) void {
     self.loops.deinit(self.alloc);
     self.variables.deinit(self.alloc);
     self.locals_stack.deinit(self.alloc);
+    self.stack_list.deinit(self.alloc);
     self.* = undefined;
 }
 
 pub fn fromAST(alloc: Allocator, program: []const *ast.Stmt) FIR {
     var fir: FIR = .init(alloc);
+    fir.stack_list.append(fir.alloc, .empty) catch oom();
+    fir.updateLocalStack();
     fir.traverseToplevel(program);
     return fir;
 }
@@ -551,7 +558,22 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             self.exprs.append(self.alloc, .{ .op = .append, .operands = operands, .type = self.exprs.items[operands[0]].type }) catch oom();
         },
         .function => |function| {
-            self.scopeIncr();
+            const closed_values = self.arena().alloc(usize, function.closed_values.len) catch oom();
+            for (function.closed_values, 0..) |closed_value, idx| {
+                assert(closed_value.* == .variable);
+                closed_values[idx] = self.traverseExpr(closed_value);
+            }
+
+            self.openFunction();
+            defer self.closeFunction();
+
+            for (function.closed_values, closed_values) |value, idx| {
+                self.putVariable(
+                    value.variable.name.lexeme,
+                    null,
+                    self.exprs.items[idx].type,
+                );
+            }
 
             const param_types = self.arena().alloc(FlowType, function.params.len) catch oom();
             for (function.params, param_types) |param, *param_type| {
@@ -568,11 +590,16 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 }
             }
 
-            self.scopeDecr();
-
-            const operands = self.arena().alloc(usize, 2) catch oom();
+            const operands = self.arena().alloc(usize, 3 + closed_values.len) catch oom();
             operands[0] = function.params.len;
-            operands[1] = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
+            operands[1] = closed_values.len;
+            operands[2] = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
+
+            if (closed_values.len > 0) {
+                for (operands[3..], closed_values) |*operand, closed_value| {
+                    operand.* = closed_value;
+                }
+            }
 
             const func_type: FlowType = .function(self.arena(), function.ret_type.type, param_types);
             self.exprs.append(self.alloc, .{ .op = .function, .operands = operands, .type = func_type }) catch oom();
@@ -675,6 +702,12 @@ fn scopeIncr(self: *FIR) void {
     self.scope += 1;
 }
 
+fn openFunction(self: *FIR) void {
+    self.scopeIncr();
+    self.stack_list.append(self.alloc, .empty) catch oom();
+    self.updateLocalStack();
+}
+
 fn scopeDecr(self: *FIR) void {
     // NOTE: We cannot go lower than global scope
     assert(self.scope > 0);
@@ -698,6 +731,17 @@ fn scopeDecr(self: *FIR) void {
     }
 
     self.locals_stack.shrinkRetainingCapacity(new_len);
+}
+
+fn closeFunction(self: *FIR) void {
+    self.scopeDecr();
+    var last_stack = self.stack_list.pop();
+    last_stack.?.deinit(self.alloc);
+    self.updateLocalStack();
+}
+
+fn updateLocalStack(self: *FIR) void {
+    self.locals_stack = &self.stack_list.items[self.stack_list.items.len - 1];
 }
 
 fn putVariableHoisted(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {

@@ -438,6 +438,10 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             self.openFunction();
             defer self.closeFunction();
 
+            for (closed_values) |value| {
+                self.putVariable(value);
+            }
+
             const param_types = self.arena().alloc(FlowType, function.params.len) catch oom();
             for (function.params, param_types) |param, *param_type| {
                 assert(param.* == .variable);
@@ -451,10 +455,6 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 });
 
                 param_type.* = param.variable.type_hint.?.type;
-            }
-
-            for (closed_values) |value| {
-                self.putVariable(value);
             }
 
             for (function.body) |inner_stmt| {

@@ -55,7 +55,7 @@ pub const OpCode = enum(u8) {
     clone,
 
     // functions
-    function, // operands: 1 byte for constant idx name, 1 byte for arg count, 2 byte for line count
+    function, // operands: 1 byte for arg count, 1 byte for closed_value count, 2 byte for line count
     get_builtin,
     call,
     @"return",

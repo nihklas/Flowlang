@@ -136,8 +136,20 @@ fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize, depth: usize) Wri
             try dumpExpr(writer, fir, expr.operands[1], depth);
         },
         .function => {
-            try writer.print("func ({d}) {{\n", .{expr.operands[0]});
-            try dumpBlock(writer, fir, expr.operands[1], depth + 1);
+            try writer.print("func ({d}) ", .{expr.operands[0]});
+            if (expr.operands[1] > 0) {
+                try writer.writeAll("use (");
+                for (expr.operands[3..], 0..) |closed_value, idx| {
+                    if (idx > 0) {
+                        try writer.writeAll(", ");
+                    }
+                    try dumpExpr(writer, fir, closed_value, depth + 1);
+                }
+                try writer.writeAll(") ");
+            }
+            try writer.writeAll("{\n");
+
+            try dumpBlock(writer, fir, expr.operands[2], depth + 1);
             try printDepth(writer, depth);
             try writer.writeAll("}");
         },
