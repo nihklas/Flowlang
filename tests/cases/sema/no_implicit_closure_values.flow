@@ -1,0 +1,15 @@
+func closure(a: int) func() int {
+    var b = a + 2;
+    return func() int {
+        return b + a;
+    };
+}
+
++++++
+error: Variable 'b' is not defined at 4:16
+   4 |         return b + a;
+                      ^~~~~ Here
+
+error: Variable 'a' is not defined at 4:20
+   4 |         return b + a;
+                          ^~~~~ Here

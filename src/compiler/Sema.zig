@@ -4,6 +4,7 @@ program: []const *Stmt,
 errors: std.ArrayListUnmanaged(ErrorInfo),
 types: std.AutoHashMapUnmanaged(*const Expr, FlowType),
 variables: std.ArrayListUnmanaged(Variable),
+function_scopes: std.ArrayListUnmanaged(u8),
 current_scope: u8,
 loop_level: u8,
 faulty_expr: bool,
@@ -16,6 +17,7 @@ pub fn init(alloc: Allocator, program: []const *Stmt) Sema {
         .errors = .empty,
         .types = .empty,
         .variables = .empty,
+        .function_scopes = .empty,
         .current_scope = 0,
         .loop_level = 0,
         .faulty_expr = false,
@@ -27,6 +29,7 @@ pub fn deinit(self: *Sema) void {
     self.errors.deinit(self.alloc);
     self.types.deinit(self.alloc);
     self.variables.deinit(self.alloc);
+    self.function_scopes.deinit(self.alloc);
     self.* = undefined;
 }
 
@@ -173,8 +176,6 @@ fn analyseStmt(self: *Sema, stmt: *const Stmt) void {
 }
 
 fn analyseExpr(self: *Sema, expr: *const Expr) void {
-    if (self.faulty_expr) return;
-
     const prev_error_count = self.errors.items.len;
     defer {
         if (prev_error_count != self.errors.items.len) {
@@ -230,6 +231,8 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
         .binary => |binary| {
             self.analyseExpr(binary.lhs);
             self.analyseExpr(binary.rhs);
+            if (self.faulty_expr) return;
+
             const left_type = self.getType(binary.lhs).?;
             const right_type = self.getType(binary.rhs).?;
             switch (binary.op.type) {
@@ -270,6 +273,7 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
         },
         .assignment => |assignment| {
             self.analyseExpr(assignment.value);
+            if (self.faulty_expr) return;
 
             var order_diff: u8 = 0;
             outer: switch (assignment.variable.*) {
@@ -408,8 +412,8 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             self.putType(expr, variable_type);
         },
         .function => |function| {
-            self.scopeIncr();
-            defer self.scopeDecr();
+            self.openFunction();
+            defer self.closeFunction();
 
             const param_types = self.arena().alloc(FlowType, function.params.len) catch oom();
             for (function.params, param_types) |param, *param_type| {
@@ -479,6 +483,8 @@ fn checkReturnType(self: *Sema, stmt: *const Stmt, expected: FlowType) void {
 
             const value = return_stmt.value.?;
             self.analyseExpr(value);
+            if (self.faulty_expr) return;
+
             const value_type = self.getType(value).?;
             if (!expected.equals(&value_type) or expected.isNull()) {
                 self.pushError(TypeError.UnexpectedType, return_stmt.token, .{ expected, value_type });
@@ -562,6 +568,12 @@ fn putFunction(self: *Sema, name: Token, ret_type: FlowType, arg_types: []const 
 fn findVariable(self: *Sema, name: Token) ?Variable {
     var rev_iter = std.mem.reverseIterator(self.variables.items);
     while (rev_iter.next()) |variable| {
+        if (self.function_scopes.getLastOrNull()) |func_scope| {
+            if (variable.scope < func_scope and variable.scope > 0) {
+                continue;
+            }
+        }
+
         if (std.mem.eql(u8, variable.name.lexeme, name.lexeme)) {
             return variable;
         }
@@ -583,6 +595,11 @@ fn scopeIncr(self: *Sema) void {
     self.current_scope += 1;
 }
 
+fn openFunction(self: *Sema) void {
+    self.scopeIncr();
+    self.function_scopes.append(self.alloc, self.current_scope) catch oom();
+}
+
 fn scopeDecr(self: *Sema) void {
     self.current_scope -= 1;
 
@@ -596,6 +613,15 @@ fn scopeDecr(self: *Sema) void {
         }
     }
     self.variables.shrinkRetainingCapacity(write_idx);
+}
+
+fn closeFunction(self: *Sema) void {
+    assert(self.function_scopes.items.len > 0);
+
+    const func_scope = self.function_scopes.pop().?;
+    assert(func_scope == self.current_scope);
+
+    self.scopeDecr();
 }
 
 fn typeFromVariable(self: *Sema, stmt: *const Stmt) FlowType {

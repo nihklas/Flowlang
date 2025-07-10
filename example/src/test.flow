@@ -1,6 +1,6 @@
 func closure(a: int) func() int {
     var b = a + 2;
-    return func() int {
+    return func() use (b) int {
         b += 1;
         return b;
     };

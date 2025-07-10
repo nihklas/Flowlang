@@ -1,7 +1,11 @@
-print(y);
+print(x + y);
 
 +++++
-error: Variable 'y' is not defined at 1:7
-   1 | print(y);
+error: Variable 'x' is not defined at 1:7
+   1 | print(x + y);
              ^~~~~ Here
+
+error: Variable 'y' is not defined at 1:11
+   1 | print(x + y);
+                 ^~~~~ Here
 
