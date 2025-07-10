@@ -1,0 +1,11 @@
+break;
+continue;
+
++++++
+error: 'break' is only allowed inside a loop at 1:1
+   1 | break;
+       ^~~~~ Here
+
+error: 'continue' is only allowed inside a loop at 2:1
+   2 | continue;
+       ^~~~~ Here

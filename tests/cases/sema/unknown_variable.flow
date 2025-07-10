@@ -1,0 +1,7 @@
+print(y);
+
++++++
+error: Variable 'y' is not defined at 1:7
+   1 | print(y);
+             ^~~~~ Here
+

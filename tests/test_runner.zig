@@ -269,7 +269,7 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compile
     };
 
     const source = std.mem.trim(u8, content[0..assertions_start], " \n");
-    const assertion = content[assertions_start + SPLIT_MARKER_LEN ..];
+    const assertion = std.mem.trim(u8, content[assertions_start + SPLIT_MARKER_LEN ..], "\n");
 
     const tmp_file_path = try std.fmt.allocPrint(state.alloc, "/tmp/flowlang/{s}", .{case_name});
     defer state.alloc.free(tmp_file_path);
@@ -343,14 +343,16 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compile
             printTo(error_writer, "Error Output:\n\n{s}", .{stderr.items});
             return TestError.TestFailed;
         }
-        try expectEqualStrings(error_writer, assertion, stderr.items);
+        const actual = std.mem.trim(u8, stderr.items, "\n");
+        try expectEqualStrings(error_writer, assertion, actual);
     } else {
         if (output != .stdout) {
             printTo(error_writer, "Expected the test program to fail, but it succeeded. TestCase: {s}\n", .{case_name});
             printTo(error_writer, "Succesfull Output:\n\n{s}", .{stdout.items});
             return TestError.TestFailed;
         }
-        try expectEqualStrings(error_writer, assertion, stdout.items);
+        const actual = std.mem.trim(u8, stdout.items, "\n");
+        try expectEqualStrings(error_writer, assertion, actual);
     }
 
     state.setResult(case_name, .success);

@@ -1,0 +1,9 @@
+const a = 1;
+const b = true;
+const c = a == b;
+
++++++
+error: Operands of Equality-Check (== and !=) have to be of the same type, got 'int' and 'bool' at 3:13
+   3 | const c = a == b;
+                   ^~~~~ Here
+

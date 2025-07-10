@@ -1,0 +1,7 @@
+var x: string = 5;
+
++++++
+error: Unexpected type, expected 'string', got 'int' at 1:17
+   1 | var x: string = 5;
+                       ^~~~~ Here
+

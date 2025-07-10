@@ -1,0 +1,7 @@
+const a;
+
++++++
+error: Constant 'a' must have an initial value at 1:7
+   1 | const a;
+             ^~~~~ Here
+

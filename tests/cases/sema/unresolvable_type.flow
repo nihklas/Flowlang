@@ -1,0 +1,7 @@
+var x;
+
++++++
+error: Type of Variable could not be resolved. Consider adding an explicit Typehint at 1:5
+   1 | var x;
+           ^~~~~ Here
+

@@ -1,0 +1,8 @@
+func add(a: int, b: int) {}
+add(1);
+
++++++
+error: Argument count mismatch, found 1 but expected 2 at 2:1
+   2 | add(1);
+       ^~~~~ Here
+

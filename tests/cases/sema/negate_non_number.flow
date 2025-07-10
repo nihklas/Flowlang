@@ -1,0 +1,7 @@
+const x = -"hello";
+
++++++
+error: Operand of Negate Operations has to be either int or float, got 'string' at 1:11
+   1 | const x = -"hello";
+                 ^~~~~ Here
+

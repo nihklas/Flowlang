@@ -1,0 +1,8 @@
+const x = 5;
+x[] = 10;
+
++++++
+error: Can only append to arrays, got 'int' at 2:1
+   2 | x[] = 10;
+       ^~~~~ Here
+

@@ -1,0 +1,8 @@
+func greet(name: string) {}
+greet(123);
+
++++++
+error: Unexpected argument type, expected 'string', got 'int' at 2:7
+   2 | greet(123);
+             ^~~~~ Here
+

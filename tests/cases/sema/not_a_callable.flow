@@ -1,0 +1,8 @@
+const x = 5;
+x();
+
++++++
+error: 'x' is not a callable at 2:1
+   2 | x();
+       ^~~~~ Here
+

@@ -1,0 +1,7 @@
+const x = 1 + 2.5;
+
++++++
+error: Operands of Arithmetic Operations have to be of the same numeric type, got 'int' and 'float' at 1:13
+   1 | const x = 1 + 2.5;
+                   ^~~~~ Here
+

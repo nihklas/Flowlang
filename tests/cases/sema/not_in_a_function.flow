@@ -1,0 +1,7 @@
+return 5;
+
++++++
+error: 'return' is only allowed inside a function at 1:1
+   1 | return 5;
+       ^~~~~ Here
+
