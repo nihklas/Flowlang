@@ -8,6 +8,7 @@ const IntegrationConfig = struct {
 
 pub fn addIntegrationTests(b: *std.Build, config: IntegrationConfig) void {
     const case = b.option([]const u8, "case", "Target a specific Test case for integration testing");
+    const verbose = b.option(bool, "integration-verbose", "List successful tests as well") orelse false;
     const integration_step = b.step("integration", "Run the integration tests");
 
     const runner_mod = b.addModule("integration_test", .{
@@ -24,7 +25,8 @@ pub fn addIntegrationTests(b: *std.Build, config: IntegrationConfig) void {
     const runner = b.addRunArtifact(runner_exe);
     runner.addFileArg(config.compiler.getEmittedBin());
     runner.addDirectoryArg(b.path(cases_dir));
-    if (case) |c| runner.addArg(c);
+    if (case) |c| runner.addArg(b.fmt("--filter={s}", .{c}));
+    if (verbose) runner.addArg("--verbose");
     runner.addCheck(.{ .expect_term = .{ .Exited = 0 } });
 
     // NOTE: this ensures that the tests are actually re-run

@@ -62,12 +62,19 @@ const SharedState = struct {
     }
 };
 
+const Options = struct {
+    filter: []const u8 = "",
+    verbose: bool = false,
+};
+
 pub fn main() u8 {
     var timer = std.time.Timer.start() catch return 1;
 
     var debug_allocator: std.heap.DebugAllocator(.{ .thread_safe = true }) = .init;
     const gpa = debug_allocator.allocator();
     defer _ = debug_allocator.deinit();
+
+    var options: Options = .{};
 
     var args = std.process.args();
     _ = args.skip(); // skip own program name
@@ -82,7 +89,16 @@ pub fn main() u8 {
         return 1;
     };
 
-    const file_filter = args.next() orelse "";
+    while (args.next()) |arg| {
+        if (std.mem.startsWith(u8, arg, "--filter=")) {
+            options.filter = arg["--filter=".len..];
+        } else if (std.mem.eql(u8, arg, "--verbose")) {
+            options.verbose = true;
+        } else {
+            printStdErr("Unrecognized Option: {s}\n", .{arg});
+            return 1;
+        }
+    }
 
     var state: SharedState = .{
         .mutex = .{},
@@ -94,7 +110,7 @@ pub fn main() u8 {
     };
     defer state.deinit();
 
-    runTests(gpa, cases_dir, file_filter, compiler, &state) catch return 1;
+    runTests(gpa, cases_dir, options.filter, compiler, &state) catch return 1;
 
     printStdErr("\n======================================\n\n", .{});
 
@@ -121,6 +137,10 @@ pub fn main() u8 {
 
         const thread_time = state.thread_times.get(entry.key_ptr.*).?;
         total_thread_time += thread_time;
+
+        if (entry.value_ptr.* == .success and !options.verbose) {
+            continue;
+        }
 
         printStdOut("{s} ({d: >3}ms | {d: >3}ms | {d: >3}ms) Test Case: {s}\n", .{
             icon,
@@ -429,7 +449,6 @@ fn printLine(writer: anytype, line: []const u8) void {
     printTo(writer, "{s}\n", .{line});
 }
 
-var print_mutex: std.Thread.Mutex = .{};
 const stdout_writer = std.io.getStdOut().writer();
 const stderr_writer = std.io.getStdErr().writer();
 
