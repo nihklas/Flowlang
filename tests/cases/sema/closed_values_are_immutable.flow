@@ -1,0 +1,11 @@
+func test() {
+    var b = 1;
+    const test_close = func() use (b) {
+        b += 1;
+    };
+}
+
++++++
+error: Constant 'b' cannot be modified at 4:9
+   4 |         b += 1;
+               ^~~~~ Here

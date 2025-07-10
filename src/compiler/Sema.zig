@@ -412,6 +412,29 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
             self.putType(expr, variable_type);
         },
         .function => |function| {
+            const closed_values = self.arena().alloc(Variable, function.closed_values.len) catch oom();
+            for (function.closed_values, 0..) |closed_value, idx| {
+                assert(closed_value.* == .variable);
+
+                const value_type: FlowType = blk: {
+                    if (self.findVariable(closed_value.variable.name)) |variable| {
+                        break :blk variable.type;
+                    }
+
+                    self.pushError(VariableError.UnknownVariable, closed_value.variable.name, .{closed_value.variable.name.lexeme});
+                    break :blk .null;
+                };
+
+                closed_values[idx] = .{
+                    .constant = true,
+                    .name = closed_value.variable.name,
+                    .type = value_type,
+                    // NOTE: Already add 1 to the scope, because it is not yet in the function scope
+                    // but needs to be available there
+                    .scope = self.current_scope + 1,
+                };
+            }
+
             self.openFunction();
             defer self.closeFunction();
 
@@ -428,6 +451,10 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 });
 
                 param_type.* = param.variable.type_hint.?.type;
+            }
+
+            for (closed_values) |value| {
+                self.putVariable(value);
             }
 
             for (function.body) |inner_stmt| {

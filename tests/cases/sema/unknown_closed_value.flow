@@ -1,0 +1,10 @@
+func test() {
+    const test_close = func() use (b) {
+        print(b);
+    };
+}
+
++++++
+error: Variable 'b' is not defined at 2:36
+   2 |     const test_close = func() use (b) {
+                                          ^~~~~ Here
