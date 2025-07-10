@@ -1,0 +1,8 @@
+func myFunc {
+    print("hello");
+}
+
++++++
+error: SyntaxError: Expected '(' after function name at 1:13
+   1 | func myFunc {
+                   ^~~~~ Here

@@ -1,0 +1,6 @@
+(1 + 2
+
++++++
+error: SyntaxError: Expected ')' after Expression at 1:7
+   1 | (1 + 2
+             ^~~~~ Here

@@ -1,0 +1,6 @@
+const msg = "hello;
+
++++++
+error: SyntaxError: unterminated string at 1:20
+   1 | const msg = "hello;
+                          ^~~~~ Here

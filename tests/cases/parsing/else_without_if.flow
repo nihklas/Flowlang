@@ -1,0 +1,8 @@
+else {
+    print("bad");
+}
+
++++++
+error: UnexpectedToken: Expected Expression, got 'else' at 1:1
+   1 | else {
+       ^~~~~ Here

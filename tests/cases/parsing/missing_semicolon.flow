@@ -1,0 +1,6 @@
+const a = 1
+
++++++
+error: SyntaxError: Expected ';' after variable declaration at 1:12
+   1 | const a = 1
+                  ^~~~~ Here

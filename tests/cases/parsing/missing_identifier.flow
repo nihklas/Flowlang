@@ -1,0 +1,6 @@
+const = 5;
+
++++++
+error: SyntaxError: Expected variable identifier at 1:7
+   1 | const = 5;
+             ^~~~~ Here

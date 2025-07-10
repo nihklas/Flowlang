@@ -1,0 +1,7 @@
+if true {
+    const x = 10;
+
++++++
+error: SyntaxError: Expected '}' at the end of block at 2:18
+   2 |     const x = 10;
+                        ^~~~~ Here

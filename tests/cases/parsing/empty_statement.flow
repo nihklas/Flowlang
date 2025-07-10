@@ -1,0 +1,6 @@
+;
+
++++++
+error: UnexpectedToken: Expected Expression, got ';' at 1:1
+   1 | ;
+       ^~~~~ Here

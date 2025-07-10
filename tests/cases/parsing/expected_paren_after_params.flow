@@ -1,0 +1,6 @@
+print((1 + 2);
+
++++++
+error: SyntaxError: Expected ')' after parameters at 1:14
+   1 | print((1 + 2);
+                    ^~~~~ Here

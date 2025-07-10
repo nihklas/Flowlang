@@ -1,0 +1,6 @@
+func greet(name: string);
+
++++++
+error: Unexpected Token, expected either typehint or '{' at 1:25
+   1 | func greet(name: string);
+                               ^~~~~ Here
