@@ -7,7 +7,3 @@ func closure(a: int) func() int {
 
 const function = closure(2);
 print(function());
-print(function());
-print(function());
-print(function());
-print(function());

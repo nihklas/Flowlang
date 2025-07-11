@@ -5,7 +5,7 @@ func produceMultiplier(factor: int) func(int) int {
 }
 
 const doubler = produceMultiplier(2);
-const tripler = produceMutliplier(3);
+const tripler = produceMultiplier(3);
 
 print(doubler(4));
 print(tripler(5));

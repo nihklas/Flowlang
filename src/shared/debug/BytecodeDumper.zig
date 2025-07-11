@@ -32,8 +32,9 @@ fn runDump(self: *Dumper) void {
                 defer self.ip += 2;
                 defer self.function_counter += 1;
                 const arg_count = self.byte();
+                const closed_count = self.byte();
                 const line_count = std.mem.bytesToValue(u16, self.code[self.ip .. self.ip + 2]);
-                self.printInstruction("OP_FUNCTION", "{d: <10}{{{d}}} [{x:0>4}]", .{ arg_count, self.function_counter, self.ip + line_count });
+                self.printInstruction("OP_FUNCTION", "{d: <5}{d: <5}{{{d}}} [{x:0>4}]", .{ arg_count, closed_count, self.function_counter, self.ip + line_count });
             },
             .set_global_array, .set_local_array => {
                 const var_index = self.byte();

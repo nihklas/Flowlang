@@ -264,6 +264,7 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
         .function => {
             self.emitOpcode(.function);
             self.emitByte(@intCast(expr.operands[0]));
+            self.emitByte(@intCast(expr.operands[1]));
             self.emitByte(0x00);
             self.emitByte(0x00);
             const op_idx = self.byte_code.items.len;
