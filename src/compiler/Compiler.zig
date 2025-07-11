@@ -262,14 +262,20 @@ fn compileExpression(self: *Compiler, expr_idx: usize) void {
             self.emitOpcode(.append);
         },
         .function => {
+            if (expr.operands.len > 2) {
+                for (expr.operands[2..]) |var_idx| {
+                    self.compileExpression(var_idx);
+                }
+            }
+
             self.emitOpcode(.function);
             self.emitByte(@intCast(expr.operands[0]));
-            self.emitByte(@intCast(expr.operands[1]));
+            self.emitByte(@intCast(expr.operands.len - 2));
             self.emitByte(0x00);
             self.emitByte(0x00);
             const op_idx = self.byte_code.items.len;
 
-            self.compileBlock(expr.operands[2]);
+            self.compileBlock(expr.operands[1]);
 
             const line_count = self.byte_code.items.len - op_idx + 1;
             const jump_length: u16 = @intCast(line_count);

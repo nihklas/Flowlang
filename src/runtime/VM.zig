@@ -83,33 +83,6 @@ fn loadConstants(self: *VM) void {
     }
 }
 
-// fn loadFunctions(self: *VM) void {
-//     var global_counter: usize = 0;
-//     while (self.ip < self.code.len) {
-//         const op = self.instruction();
-//         if (comptime debug_options.bytecode) {
-//             std.debug.print("{}\n", .{op});
-//         }
-//         switch (op) {
-//             .function => {
-//                 defer global_counter += 1;
-//
-//                 const argc = self.byte();
-//                 const end = self.short();
-//
-//                 self.globals[global_counter] = .{ .function = .{
-//                     .arg_count = argc,
-//                     .start_ip = self.ip,
-//                 } };
-//
-//                 self.ip += end - 1;
-//             },
-//             .functions_done => break,
-//             else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
-//         }
-//     }
-// }
-
 fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
@@ -299,11 +272,18 @@ fn runWhileSwitch(self: *VM) void {
             },
             .function => {
                 const argc = self.byte();
+                const closed_values_count = self.byte();
                 const end = self.short();
+
+                const closed_values = self.gc.alloc(FlowValue, closed_values_count) catch oom();
+                for (closed_values) |*value| {
+                    value.* = self.pop();
+                }
 
                 self.push(.{
                     .function = .{
                         .arg_count = argc,
+                        .closed_values = closed_values,
                         .start_ip = self.ip,
                     },
                 });
@@ -424,6 +404,9 @@ fn callFlowFunction(self: *VM, value: FlowValue) void {
         .ret_addr = self.ip,
         .stack_bottom = stack_bottom,
     });
+    for (value.function.closed_values) |closed_value| {
+        self.push(closed_value);
+    }
     self.ip = value.function.start_ip;
 }
 

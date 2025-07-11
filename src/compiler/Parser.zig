@@ -397,28 +397,28 @@ fn unary(self: *Parser) ParserError!*Expr {
 }
 
 fn call(self: *Parser) ParserError!*Expr {
-    const expr = try self.index();
+    var expr = try self.index();
 
-    if (self.match(.@"(") == null) {
-        return expr;
+    while (self.match(.@"(")) |_| {
+        const params: []*Expr = blk: {
+            var params_list: std.ArrayList(*Expr) = .init(self.arena);
+            defer params_list.deinit();
+
+            while (!self.check(.@")") and !self.isAtEnd()) {
+                params_list.append(try self.expression()) catch oom();
+
+                if (self.match(.@",") == null) break;
+            }
+
+            break :blk params_list.toOwnedSlice() catch oom();
+        };
+
+        try self.consume(.@")", "Expected ')' after parameters");
+
+        expr = Expr.createCall(self.arena, expr, params);
     }
 
-    const params: []*Expr = blk: {
-        var params_list: std.ArrayList(*Expr) = .init(self.arena);
-        defer params_list.deinit();
-
-        while (!self.check(.@")") and !self.isAtEnd()) {
-            params_list.append(try self.expression()) catch oom();
-
-            if (self.match(.@",") == null) break;
-        }
-
-        break :blk params_list.toOwnedSlice() catch oom();
-    };
-
-    try self.consume(.@")", "Expected ')' after parameters");
-
-    return Expr.createCall(self.arena, expr, params);
+    return expr;
 }
 
 fn index(self: *Parser) ParserError!*Expr {

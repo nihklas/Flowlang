@@ -1,0 +1,13 @@
+const factor = 10;
+
+func makeScaler() func(int) int {
+    return func(x: int) int {
+        return x * factor;
+    };
+}
+
+print(makeScaler()(2));
+
+=====
+20
+

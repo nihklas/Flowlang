@@ -111,7 +111,7 @@ pub const Node = struct {
             builtin_fn,
             /// Operands: n
             array,
-            /// Operands: n -> 0 = count of params, 1 = count of closed_values, 2 = start of body, 3..n = closed_values expr indexes
+            /// Operands: n -> 0 = count of params, 1 = start of body, 2..n = closed_values expr indexes
             function,
         };
     };
@@ -567,18 +567,18 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             self.openFunction();
             defer self.closeFunction();
 
+            const param_types = self.arena().alloc(FlowType, function.params.len) catch oom();
+            for (function.params, param_types) |param, *param_type| {
+                param_type.* = param.variable.type_hint.?.type;
+                self.putVariable(param.variable.name.lexeme, null, param_type.*);
+            }
+
             for (function.closed_values, closed_values) |value, idx| {
                 self.putVariable(
                     value.variable.name.lexeme,
                     null,
                     self.exprs.items[idx].type,
                 );
-            }
-
-            const param_types = self.arena().alloc(FlowType, function.params.len) catch oom();
-            for (function.params, param_types) |param, *param_type| {
-                param_type.* = param.variable.type_hint.?.type;
-                self.putVariable(param.variable.name.lexeme, null, param_type.*);
             }
 
             var maybe_body = self.traverseBlock(function.body);
@@ -590,13 +590,12 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 }
             }
 
-            const operands = self.arena().alloc(usize, 3 + closed_values.len) catch oom();
+            const operands = self.arena().alloc(usize, 2 + closed_values.len) catch oom();
             operands[0] = function.params.len;
-            operands[1] = closed_values.len;
-            operands[2] = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
+            operands[1] = if (maybe_body) |body| self.startOfBlock(body) else uninitialized_entry;
 
             if (closed_values.len > 0) {
-                for (operands[3..], closed_values) |*operand, closed_value| {
+                for (operands[2..], closed_values) |*operand, closed_value| {
                     operand.* = closed_value;
                 }
             }

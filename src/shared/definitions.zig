@@ -11,6 +11,7 @@ pub const BuiltinFunction = struct {
 
 pub const FlowFunction = struct {
     arg_count: u8,
+    closed_values: []const FlowValue,
     start_ip: usize,
 };
 pub const FlowFunctionType = struct {
@@ -228,7 +229,7 @@ pub const FlowValue = union(enum) {
 
     pub fn clone(self: *const FlowValue, gc: std.mem.Allocator) FlowValue {
         return switch (self.*) {
-            .null, .bool, .int, .float, .builtin_fn, .function => self.*,
+            .null, .bool, .int, .float, .builtin_fn => self.*,
             .string => .{ .string = gc.dupe(u8, self.string) catch oom() },
             .array => {
                 const new_arr = gc.alloc(FlowValue, self.array.cap) catch oom();
@@ -238,6 +239,18 @@ pub const FlowValue = union(enum) {
                 array.len = self.array.len;
                 array.items = new_arr.ptr;
                 return .{ .array = array };
+            },
+            .function => {
+                if (self.function.closed_values.len == 0) return self.*;
+                const new_closed = gc.alloc(FlowValue, self.function.closed_values.len) catch oom();
+                @memcpy(new_closed, self.function.closed_values);
+                return .{
+                    .function = .{
+                        .arg_count = self.function.arg_count,
+                        .start_ip = self.function.start_ip,
+                        .closed_values = new_closed,
+                    },
+                };
             },
         };
     }

@@ -1,9 +1,10 @@
-func closure(a: int) func() int {
+func closure(a: int) func(int) int {
     var b = a + 2;
-    return func() use (b) int {
-        return b;
+    const double = a * 2;
+    return func(c: int) use (b, double) int {
+        return b + double + c;
     };
 }
 
 const function = closure(2);
-print(function());
+print(function(1));
