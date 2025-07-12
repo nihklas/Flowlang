@@ -128,7 +128,7 @@ pub const FlowType = struct {
         if (other.isPrimitive(.null)) return true;
 
         if (self.order != other.order) return false;
-        if (self.type != other.type) return false;
+        if (self.type != other.type and self.type != .null and other.type != .null) return false;
 
         if (self.type == .function) {
             const self_func = self.function_type;

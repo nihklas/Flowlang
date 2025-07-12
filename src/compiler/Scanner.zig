@@ -141,7 +141,7 @@ fn string(self: *Scanner) void {
 }
 
 fn number(self: *Scanner) void {
-    while (std.ascii.isDigit(self.peek())) {
+    while (std.ascii.isDigit(self.peek()) or self.peek() == '_') {
         self.advance();
     }
 

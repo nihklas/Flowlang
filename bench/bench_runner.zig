@@ -29,7 +29,8 @@ pub fn main() u8 {
         return 1;
     };
 
-    printStdOut("Running Benchmarks for Compiler mode: {s}\n", .{compiler_mode});
+    printStdOut("======================\n", .{});
+    printStdOut("Running Benchmarks for Compiler mode: {s}", .{compiler_mode});
 
     runBenches(gpa, benches_dir, compiler) catch return 1;
 
@@ -64,6 +65,9 @@ fn runBenches(alloc: std.mem.Allocator, bench_dir: []const u8, compiler: []const
 
 fn runSingleBenchmark(alloc: std.mem.Allocator, bench_path: []const u8, compiler: []const u8) !void {
     const basename = std.fs.path.basename(bench_path);
+
+    printStdOut("----------------------\n", .{});
+    printStdOut("Running Benchmark '{s}'\n", .{basename});
 
     const tmp_file_path = try std.fmt.allocPrint(alloc, "/tmp/flowlang/benchmarks/{s}", .{basename});
     defer alloc.free(tmp_file_path);
@@ -103,18 +107,36 @@ fn runSingleBenchmark(alloc: std.mem.Allocator, bench_path: []const u8, compiler
 
     std.mem.sort(u64, &times, .{}, lessThan);
 
-    const average = (total_time / times.len) / std.time.ns_per_ms;
-    const median = times[times.len / 2] / std.time.ns_per_ms;
-    const fastest = times[0] / std.time.ns_per_ms;
-    const slowest = times[times.len - 1] / std.time.ns_per_ms;
+    const factor: u64, const time_notation = blk: {
+        if (times[0] > std.time.ns_per_min) {
+            break :blk .{ std.time.ns_per_min, "min" };
+        }
+        if (times[0] > std.time.ns_per_s) {
+            break :blk .{ std.time.ns_per_s, "s" };
+        }
+        if (times[0] > std.time.ns_per_ms) {
+            break :blk .{ std.time.ns_per_ms, "ms" };
+        }
+        break :blk .{ 1, "ns" };
+    };
 
-    printStdOut("======================\n", .{});
-    printStdOut("Benchmark '{s}' ran {d} times\n\n", .{ basename, times.len });
-    printStdOut("average: {d}ms\n", .{average});
-    printStdOut("median : {d}ms\n", .{median});
-    printStdOut("fastest: {d}ms\n", .{fastest});
-    printStdOut("slowest: {d}ms\n", .{slowest});
-    printStdOut("======================\n\n", .{});
+    const average = calcTiming(total_time / times.len, factor);
+    const median = calcTiming(times[times.len / 2], factor);
+    const fastest = calcTiming(times[0], factor);
+    const slowest = calcTiming(times[times.len - 1], factor);
+
+    printStdOut("{d} runs\n\n", .{times.len});
+    printStdOut("average: {d:.5}{s}\n", .{ average, time_notation });
+    printStdOut("median : {d:.5}{s}\n", .{ median, time_notation });
+    printStdOut("fastest: {d:.5}{s}\n", .{ fastest, time_notation });
+    printStdOut("slowest: {d:.5}{s}\n", .{ slowest, time_notation });
+    printStdOut("----------------------\n", .{});
+}
+
+fn calcTiming(time: u64, factor: u64) f64 {
+    const converted: f64 = @floatFromInt(time);
+    const converted_factor: f64 = @floatFromInt(factor);
+    return converted / converted_factor;
 }
 
 fn lessThan(_: @TypeOf(.{}), lhs: u64, rhs: u64) bool {

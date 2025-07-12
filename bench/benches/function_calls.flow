@@ -1,0 +1,8 @@
+func noop() {return;}
+
+var i = 0;
+for i < 5_000_000 {
+    noop();
+    i = i + 1;
+}
+
