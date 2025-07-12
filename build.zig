@@ -45,6 +45,9 @@ pub fn build(b: *Build) !void {
         .compiler = compiler,
     });
 
+    // Benchmarks tests
+    @import("bench/bench_step.zig").addBenchmark(b);
+
     // Check step for lsp compile errors
     const check_step = b.step("check", "Check Step for LSP");
     check_step.dependOn(&compiler.step);

@@ -112,7 +112,7 @@ pub fn main() u8 {
 
     runTests(gpa, cases_dir, options.filter, compiler, &state) catch return 1;
 
-    printStdErr("\n======================================\n\n", .{});
+    printStdOut("\n======================================\n\n", .{});
 
     var stats: std.AutoHashMapUnmanaged(Result, u16) = .empty;
     defer stats.deinit(gpa);

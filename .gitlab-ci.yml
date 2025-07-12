@@ -7,6 +7,7 @@ tests:
     - nix develop .#pipeline --command bash -c "zig build check --summary all"
     - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
     - nix develop .#pipeline --command bash -c "zig build integration -Dintegration-verbose"
+    - nix develop .#pipeline --command bash -c "zig build benchmark -Dbench-setting=All"
   tags:
     - nix
 
