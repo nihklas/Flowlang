@@ -6,3 +6,4 @@ pub const readfile = stdlib.readfile;
 pub const writefile = stdlib.writefile;
 pub const time = stdlib.time;
 pub const len = stdlib.len;
+pub const exit = stdlib.exit;

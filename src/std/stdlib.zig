@@ -89,6 +89,23 @@ fn _len(_: Allocator, args: []FlowValue) FlowValue {
     };
 }
 
+pub const exit: BuiltinFunction = .{
+    .arg_types = &.{.primitive(.int)},
+    .ret_type = .null,
+    .function = &_exit,
+};
+
+fn _exit(_: Allocator, args: []FlowValue) FlowValue {
+    assert(args.len == 1);
+    assert(args[0] == .int);
+    assert(args[0].int < std.math.maxInt(u8));
+    assert(args[0].int >= 0);
+
+    std.process.exit(@intCast(args[0].int));
+
+    return .null;
+}
+
 const BuiltinFunction = @import("shared").definitions.BuiltinFunction;
 const FlowValue = @import("shared").definitions.FlowValue;
 const oom = @import("shared").oom;

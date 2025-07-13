@@ -8,3 +8,5 @@ func closure(a: int) func(int) int {
 
 const function = closure(2);
 print(function(1));
+
+exit(0);
