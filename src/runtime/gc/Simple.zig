@@ -5,6 +5,7 @@ vm: *VM,
 initialized: bool,
 next_gc: usize,
 bytes_allocated: usize,
+enabled: bool,
 
 pub const pre_init: GC = .{
     .managed_objects = .empty,
@@ -13,6 +14,7 @@ pub const pre_init: GC = .{
     .child_alloc = undefined,
     .bytes_allocated = 0,
     .next_gc = initial_gc_theshold,
+    .enabled = true,
     .vtable = .{
         .alloc = alloc,
         .resize = resize,
@@ -169,7 +171,17 @@ pub fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) v
     self.bytes_allocated -= buf.len;
 }
 
+pub fn disable(self: *GC) void {
+    self.enabled = false;
+}
+
+pub fn enable(self: *GC) void {
+    self.enabled = true;
+}
+
 fn gc(self: *GC) void {
+    if (!self.enabled) return;
+
     if (stress_gc or self.bytes_allocated >= self.next_gc) {
         if (comptime trace) {
             std.debug.print("[DEBUG] -- gc start\n", .{});

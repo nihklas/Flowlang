@@ -389,7 +389,13 @@ fn call(self: *VM) void {
 fn callBuiltin(self: *VM, value: FlowValue) void {
     const arg_count = value.builtin_fn.arg_types.len;
     const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
+
+    // NOTE: Running a builtin function should not trigger a GC
+    const gc: *GC = @ptrCast(@alignCast(self.gc.ptr));
+    gc.disable();
     const result = value.builtin_fn.function(self.gc, args);
+    gc.enable();
+
     for (0..arg_count) |_| {
         _ = self.pop();
     }
@@ -454,6 +460,8 @@ const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
 const stdout = std.io.getStdOut().writer();
+
+const GC = @import("gc/Simple.zig");
 
 const OpCode = @import("shared").OpCode;
 const definitions = @import("shared").definitions;
