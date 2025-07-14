@@ -2,6 +2,7 @@ const cases_dir = "bench/benches";
 
 pub fn addBenchmark(b: *std.Build) void {
     const benchmark_step = b.step("benchmark", "Run the benchmarks");
+    const bench_small_out = b.option(bool, "bench-summary", "Only print the average time of every benchmark") orelse false;
     const bench_setting = b.option(enum {
         Debug,
         Safe,
@@ -26,24 +27,33 @@ pub fn addBenchmark(b: *std.Build) void {
     });
 
     if (bench_setting == .Debug or bench_setting == .All) {
-        buildRunner(b, debug_compiler, runner_exe, benchmark_step);
+        buildRunner(b, debug_compiler, runner_exe, benchmark_step, bench_small_out);
     }
     if (bench_setting == .Safe or bench_setting == .All) {
-        buildRunner(b, safe_compiler, runner_exe, benchmark_step);
+        buildRunner(b, safe_compiler, runner_exe, benchmark_step, bench_small_out);
     }
     if (bench_setting == .Fast or bench_setting == .All) {
-        buildRunner(b, fast_compiler, runner_exe, benchmark_step);
+        buildRunner(b, fast_compiler, runner_exe, benchmark_step, bench_small_out);
     }
     if (bench_setting == .Small or bench_setting == .All) {
-        buildRunner(b, small_compiler, runner_exe, benchmark_step);
+        buildRunner(b, small_compiler, runner_exe, benchmark_step, bench_small_out);
     }
 }
 
-fn buildRunner(b: *std.Build, compiler: *std.Build.Step.Compile, runner_exe: *std.Build.Step.Compile, benchmark_step: *std.Build.Step) void {
+fn buildRunner(
+    b: *std.Build,
+    compiler: *std.Build.Step.Compile,
+    runner_exe: *std.Build.Step.Compile,
+    benchmark_step: *std.Build.Step,
+    small_out: bool,
+) void {
     const runner = b.addRunArtifact(runner_exe);
     runner.addFileArg(compiler.getEmittedBin());
     runner.addDirectoryArg(b.path(cases_dir));
     runner.addArg(b.fmt("{?}\n", .{compiler.root_module.optimize}));
+    if (small_out) {
+        runner.addArg("--summary");
+    }
     runner.addCheck(.{ .expect_term = .{ .Exited = 0 } });
 
     // NOTE: this ensures that the tests are actually re-run

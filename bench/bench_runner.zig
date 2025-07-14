@@ -2,22 +2,18 @@ const MAX_BENCH_SIZE = 1024 * 1024 * 1024; // 1 MB
 /// How many times should a single benchmark be ran
 const RUN_COUNT = 10;
 
-const Options = struct {};
+const Options = struct {
+    small_output: bool,
+};
 
 pub fn main() u8 {
-    var timer = std.time.Timer.start() catch return 1;
-    defer {
-        const total_time = timer.read();
-        const factor, const notation = getFactorAndNotation(total_time);
-
-        printStdOut("total runtime: {d:.5}{s}\n", .{ calcTiming(total_time, factor), notation });
-    }
-
     var debug_allocator: std.heap.DebugAllocator(.{ .thread_safe = true }) = .init;
     const gpa = debug_allocator.allocator();
     defer _ = debug_allocator.deinit();
 
-    // var options: Options = .{};
+    var options: Options = .{
+        .small_output = false,
+    };
 
     var args = std.process.args();
     _ = args.skip(); // skip own program name
@@ -37,16 +33,37 @@ pub fn main() u8 {
         return 1;
     };
 
-    printStdOut("======================\n", .{});
-    printStdOut("Running Benchmarks for Compiler mode: {s}\n", .{compiler_mode});
-    printStdOut("Running each benchmark {d} times\n", .{RUN_COUNT});
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--summary")) {
+            options.small_output = true;
+        } else {
+            printStdErr("Unknown Options: {s}\n", .{arg});
+            return 1;
+        }
+    }
 
-    runBenches(gpa, benches_dir, compiler) catch return 1;
+    if (!options.small_output) {
+        printStdOut("======================\n", .{});
+        printStdOut("Running Benchmarks for Compiler mode: {s}\n", .{compiler_mode});
+        printStdOut("Running each benchmark {d} times\n", .{RUN_COUNT});
+    }
+
+    var timer = std.time.Timer.start() catch return 1;
+    defer {
+        const total_time = timer.read();
+        const factor, const notation = getFactorAndNotation(total_time);
+
+        if (!options.small_output) {
+            printStdOut("total runtime: {d:.5}{s}\n", .{ calcTiming(total_time, factor), notation });
+        }
+    }
+
+    runBenches(gpa, benches_dir, compiler, options) catch return 1;
 
     return 0;
 }
 
-fn runBenches(alloc: std.mem.Allocator, bench_dir: []const u8, compiler: []const u8) !void {
+fn runBenches(alloc: std.mem.Allocator, bench_dir: []const u8, compiler: []const u8, options: Options) !void {
     var root_dir = try std.fs.openDirAbsolute(bench_dir, .{ .iterate = true });
     defer root_dir.close();
 
@@ -58,15 +75,17 @@ fn runBenches(alloc: std.mem.Allocator, bench_dir: []const u8, compiler: []const
         const full_path = try std.fs.path.join(alloc, &.{ bench_dir, entry.name });
         defer alloc.free(full_path);
 
-        try runSingleBenchmark(alloc, full_path, compiler);
+        try runSingleBenchmark(alloc, full_path, compiler, options);
     }
 }
 
-fn runSingleBenchmark(alloc: std.mem.Allocator, bench_path: []const u8, compiler: []const u8) !void {
+fn runSingleBenchmark(alloc: std.mem.Allocator, bench_path: []const u8, compiler: []const u8, options: Options) !void {
     const basename = std.fs.path.basename(bench_path);
 
-    printStdOut("----------------------\n", .{});
-    printStdOut("Running Benchmark '{s}'\n", .{basename});
+    if (!options.small_output) {
+        printStdOut("----------------------\n", .{});
+        printStdOut("Running Benchmark '{s}'\n", .{basename});
+    }
 
     const tmp_file_path = try std.fmt.allocPrint(alloc, "/tmp/flowlang/benchmarks/{s}", .{basename});
     defer alloc.free(tmp_file_path);
@@ -105,6 +124,11 @@ fn runSingleBenchmark(alloc: std.mem.Allocator, bench_path: []const u8, compiler
     }
 
     std.mem.sort(u64, &times, .{}, lessThan);
+
+    if (options.small_output) {
+        printStdOut("{s}: {d}\n", .{ basename, total_time / times.len });
+        return;
+    }
 
     const factor: u64, const time_notation = getFactorAndNotation(times[0]);
 
