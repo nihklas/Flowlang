@@ -1,5 +1,6 @@
 stages:
   - test
+  - benchmark
 
 tests:
   stage: test
@@ -10,7 +11,18 @@ tests:
     - nix develop .#pipeline --command bash -c "zig build check -Doptimize=ReleaseSmall --summary all"
     - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
     - nix develop .#pipeline --command bash -c "zig build integration -Dintegration-verbose"
+  tags:
+    - nix
+  cache:
+    paths:
+      - .zig-cache
+
+bench:
+  stage: benchmark
+  script:
     - nix develop .#pipeline --command bash -c "zig build benchmark -Dbench-setting=All"
   tags:
     - nix
-
+  cache:
+    paths:
+      - .zig-cache
