@@ -1,6 +1,5 @@
 stages:
   - test
-  - benchmark
 
 tests:
   stage: test
@@ -15,14 +14,4 @@ tests:
     - nix
   cache:
     paths:
-      - .zig-cache
-
-bench:
-  stage: benchmark
-  script:
-    - nix develop .#pipeline --command bash -c "zig build benchmark -Dbench-setting=All"
-  tags:
-    - nix
-  cache:
-    paths:
-      - .zig-cache
+      - .zig-cache/
