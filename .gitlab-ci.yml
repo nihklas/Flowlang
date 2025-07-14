@@ -12,6 +12,3 @@ tests:
     - nix develop .#pipeline --command bash -c "zig build integration -Dintegration-verbose"
   tags:
     - nix
-  cache:
-    paths:
-      - .zig-cache/
