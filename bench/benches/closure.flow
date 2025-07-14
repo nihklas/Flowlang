@@ -1,0 +1,14 @@
+func makeAdder(a: int) func(int) int {
+    return func(b: int) use (a) int {
+        return a + b;
+    };
+}
+
+const add1 = makeAdder(1);
+
+var i = 0;
+var sum = 0;
+for i < 1_000_000 {
+    sum = sum + add1(i);
+    i = i + 1;
+}

@@ -1,10 +1,18 @@
 const MAX_BENCH_SIZE = 1024 * 1024 * 1024; // 1 MB
 /// How many times should a single benchmark be ran
-const RUN_COUNT = 8;
+const RUN_COUNT = 10;
 
 const Options = struct {};
 
 pub fn main() u8 {
+    var timer = std.time.Timer.start() catch return 1;
+    defer {
+        const total_time = timer.read();
+        const factor, const notation = getFactorAndNotation(total_time);
+
+        printStdOut("total runtime: {d:.5}{s}\n", .{ calcTiming(total_time, factor), notation });
+    }
+
     var debug_allocator: std.heap.DebugAllocator(.{ .thread_safe = true }) = .init;
     const gpa = debug_allocator.allocator();
     defer _ = debug_allocator.deinit();
@@ -30,20 +38,11 @@ pub fn main() u8 {
     };
 
     printStdOut("======================\n", .{});
-    printStdOut("Running Benchmarks for Compiler mode: {s}", .{compiler_mode});
+    printStdOut("Running Benchmarks for Compiler mode: {s}\n", .{compiler_mode});
+    printStdOut("Running each benchmark {d} times\n", .{RUN_COUNT});
 
     runBenches(gpa, benches_dir, compiler) catch return 1;
 
-    // while (args.next()) |arg| {
-    //     if (std.mem.startsWith(u8, arg, "--filter=")) {
-    //         options.filter = arg["--filter=".len..];
-    //     } else if (std.mem.eql(u8, arg, "--verbose")) {
-    //         options.verbose = true;
-    //     } else {
-    //         printStdErr("Unrecognized Option: {s}\n", .{arg});
-    //         return 1;
-    //     }
-    // }
     return 0;
 }
 
@@ -107,18 +106,7 @@ fn runSingleBenchmark(alloc: std.mem.Allocator, bench_path: []const u8, compiler
 
     std.mem.sort(u64, &times, .{}, lessThan);
 
-    const factor: u64, const time_notation = blk: {
-        if (times[0] > std.time.ns_per_min) {
-            break :blk .{ std.time.ns_per_min, "min" };
-        }
-        if (times[0] > std.time.ns_per_s) {
-            break :blk .{ std.time.ns_per_s, "s" };
-        }
-        if (times[0] > std.time.ns_per_ms) {
-            break :blk .{ std.time.ns_per_ms, "ms" };
-        }
-        break :blk .{ 1, "ns" };
-    };
+    const factor: u64, const time_notation = getFactorAndNotation(times[0]);
 
     const average = calcTiming(total_time / times.len, factor);
     const median = calcTiming(times[times.len / 2], factor);
@@ -137,6 +125,24 @@ fn calcTiming(time: u64, factor: u64) f64 {
     const converted: f64 = @floatFromInt(time);
     const converted_factor: f64 = @floatFromInt(factor);
     return converted / converted_factor;
+}
+
+fn getFactorAndNotation(time: u64) struct { u64, []const u8 } {
+    return blk: {
+        if (time > std.time.ns_per_hour) {
+            break :blk .{ std.time.ns_per_hour, "h" };
+        }
+        if (time > std.time.ns_per_min) {
+            break :blk .{ std.time.ns_per_min, "min" };
+        }
+        if (time > std.time.ns_per_s) {
+            break :blk .{ std.time.ns_per_s, "s" };
+        }
+        if (time > std.time.ns_per_ms) {
+            break :blk .{ std.time.ns_per_ms, "ms" };
+        }
+        break :blk .{ 1, "ns" };
+    };
 }
 
 fn lessThan(_: @TypeOf(.{}), lhs: u64, rhs: u64) bool {
