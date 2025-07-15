@@ -16,6 +16,7 @@ pub fn build(b: *Build) !void {
     const stress_gc = b.option(bool, "gc-stress", "Enable Garbage Collection on every Allocation") orelse false;
     const initial_gc_threshold = b.option(usize, "gc-thresh", "Initial Threshold on which the GC kicks in (bytes)") orelse 1024 * 1024;
     const gc_growth_factor = b.option(u8, "gc-growth", "Factor by which the threshold is determined") orelse 2;
+    const run_mode = b.option(RunMode, "run-mode", "Choose which main-loop strategy the VM uses") orelse .loop;
 
     const compiler = buildCompiler(b, .{
         .target = target,
@@ -29,6 +30,7 @@ pub fn build(b: *Build) !void {
         .vm = .{
             .initial_gc_threshold = initial_gc_threshold,
             .gc_growth_factor = gc_growth_factor,
+            .run_mode = run_mode,
         },
     });
     b.installArtifact(compiler);
@@ -80,8 +82,10 @@ const CompilerOptions = struct {
     vm: struct {
         initial_gc_threshold: usize = 1024 * 1024,
         gc_growth_factor: u8 = 2,
+        run_mode: RunMode = .loop,
     } = .{},
 };
+const RunMode = enum { loop, @"switch" };
 
 pub fn buildCompiler(flow_builder: *Build, compile_options: CompilerOptions) *Compile {
     const shared = buildShared(flow_builder, compile_options);
@@ -95,6 +99,7 @@ pub fn buildCompiler(flow_builder: *Build, compile_options: CompilerOptions) *Co
     const vm_options = flow_builder.addOptions();
     vm_options.addOption(usize, "initial_gc_threshold", compile_options.vm.initial_gc_threshold);
     vm_options.addOption(usize, "gc_growth_factor", compile_options.vm.gc_growth_factor);
+    vm_options.addOption(RunMode, "run_mode", compile_options.vm.run_mode);
 
     const flow_std = flow_builder.addModule("flow_std", .{
         .root_source_file = flow_builder.path("src/std/stdlib.zig"),

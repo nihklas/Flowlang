@@ -36,8 +36,11 @@ pub fn run(self: *VM) void {
         .stack_bottom = 0,
         .ret_addr = self.ip,
     });
-    self.runWhileSwitch();
-    // self.runSwitchContinue();
+
+    switch (@import("vm_options").run_mode) {
+        .loop => self.runWhileSwitch(),
+        .@"switch" => self.runSwitchContinue(),
+    }
 }
 
 fn loadConstants(self: *VM) void {
@@ -92,195 +95,30 @@ fn runWhileSwitch(self: *VM) void {
             .add_f, .sub_f, .mul_f, .div_f, .mod_f => self.arithmeticFloat(op),
             .concat => self.concat(),
             .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
-            .array => {
-                const len = self.byte();
-                const cap = std.math.ceilPowerOfTwoAssert(usize, if (len == 0) 1 else len);
-                const items = self.gc.alloc(FlowValue, cap) catch oom();
-                const arr = self.gc.create(definitions.FlowArray) catch oom();
-                for (0..len) |i| {
-                    items[len - 1 - i] = self.pop();
-                }
-                arr.items = items.ptr;
-                arr.cap = cap;
-                arr.len = len;
-                self.push(.{ .array = arr });
-            },
-            .clone => {
-                const value = self.pop();
-                self.push(value.clone(self.gc));
-            },
-            .index => {
-                const index = self.pop().int;
-                const array = self.pop().array;
-                if (index < 0) {
-                    std.debug.panic("IndexUnderflow: {d}\n", .{index});
-                } else if (index > array.len) {
-                    std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ index, array.len });
-                }
-                self.push(array.items[@intCast(index)]);
-            },
-            .append => {
-                const value = self.pop();
-                var array = &self.value_stack.stack[self.value_stack.stack_top - 1];
-
-                if (array.array.cap >= array.array.len + 1) {
-                    array.array.items[array.array.len] = value;
-                    array.array.len += 1;
-                } else {
-                    if (array.array.cap == 0) array.array.cap = 1;
-                    const new_values = self.gc.alloc(FlowValue, array.array.cap * 2) catch oom();
-                    @memcpy(new_values[0..array.array.len], array.array.items[0..array.array.len]);
-                    new_values[array.array.len] = value;
-                    array.array.len += 1;
-                    array.array.cap *= 2;
-                    array.array.items = new_values.ptr;
-                }
-            },
-            .constant => {
-                const constant = self.constants[self.byte()];
-                self.push(constant);
-            },
-            .negate_i => {
-                const value = self.pop();
-                const negated: FlowValue = .{ .int = -value.int };
-                self.push(negated);
-            },
-            .negate_f => {
-                const value = self.pop();
-                const negated: FlowValue = .{ .float = -value.float };
-                self.push(negated);
-            },
-            .not => {
-                const value = self.pop();
-                self.push(.{ .bool = !value.isTrue() });
-            },
-            .equal, .unequal => {
-                const rhs = self.pop();
-                const lhs = self.pop();
-                const equal = lhs.equals(&rhs);
-                if (op == .equal) {
-                    self.push(.{ .bool = equal });
-                } else {
-                    self.push(.{ .bool = !equal });
-                }
-            },
-            .get_builtin => {
-                const name = self.pop();
-                self.push(.{ .builtin_fn = builtins.get(name.string).? });
-            },
-            .get_global => {
-                const idx = self.byte();
-                const value = self.globals[idx];
-
-                self.push(value);
-            },
-            .set_global => {
-                const idx = self.byte();
-                const value = self.value_stack.at(0);
-                self.globals[idx] = value;
-
-                if (self.globals_count <= idx) {
-                    self.globals_count = idx + 1;
-                }
-            },
-            .set_global_array => {
-                const global_idx = self.byte();
-                const index_amount = self.byte();
-                assert(index_amount > 0);
-
-                var array = self.globals[global_idx];
-
-                for (0..index_amount - 1) |_| {
-                    const idx = self.pop().int;
-                    if (idx < 0) {
-                        std.debug.panic("IndexUnderflow: {d}\n", .{idx});
-                    } else if (idx > array.array.len) {
-                        std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
-                    }
-                    array = array.array.items[@intCast(idx)];
-                }
-
-                const last_idx = self.pop().int;
-                array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
-            },
-            .get_local => {
-                const idx = self.byte();
-                const value = self.getLocal(idx);
-                self.push(value);
-            },
-            .set_local => {
-                const idx = self.byte();
-                const value = self.value_stack.at(0);
-                self.setLocal(idx, value);
-            },
-            .set_local_array => {
-                const local_idx = self.byte();
-                const index_amount = self.byte();
-                assert(index_amount > 0);
-
-                var array = self.getLocal(local_idx);
-
-                for (0..index_amount - 1) |_| {
-                    const idx = self.pop().int;
-                    if (idx < 0) {
-                        std.debug.panic("IndexUnderflow: {d}\n", .{idx});
-                    } else if (idx > array.array.len) {
-                        std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
-                    }
-                    array = array.array.items[@intCast(idx)];
-                }
-
-                const last_idx = self.pop().int;
-                array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
-            },
-            .jump => {
-                // For some reason we cannot inline this
-                const distance = self.short();
-                self.ip += distance;
-            },
-            .jump_back => {
-                // For some reason we cannot inline this
-                const distance = self.short();
-                self.ip -= distance;
-            },
-            .jump_if_true => {
-                const distance = self.short();
-                const value = self.value_stack.at(0);
-                if (value.isTrue()) self.ip += distance;
-            },
-            .jump_if_false => {
-                const distance = self.short();
-                const value = self.value_stack.at(0);
-                if (!value.isTrue()) self.ip += distance;
-            },
+            .array => self.array(),
+            .clone => self.clone(),
+            .index => self.index(),
+            .append => self.append(),
+            .constant => self.constant(),
+            .negate_i => self.negateInt(),
+            .negate_f => self.negateFloat(),
+            .not => self.not(),
+            .equal => self.equal(),
+            .unequal => self.unequal(),
+            .get_builtin => self.getBuiltin(),
+            .get_global => self.getGlobal(),
+            .set_global => self.setGlobal(),
+            .set_global_array => self.setGlobalArray(),
+            .get_local => self.getLocal(),
+            .set_local => self.setLocal(),
+            .set_local_array => self.setLocalArray(),
+            .jump => self.jump(),
+            .jump_back => self.jumpBack(),
+            .jump_if_true => self.jumpIfTrue(),
+            .jump_if_false => self.jumpIfFalse(),
             .call => self.call(),
-            .@"return" => {
-                const ret_value = self.pop();
-                const frame = self.call_stack.pop();
-                self.ip = frame.ret_addr;
-                self.value_stack.stack_top = frame.stack_bottom;
-                self.push(ret_value);
-            },
-            .function => {
-                const argc = self.byte();
-                const closed_values_count = self.byte();
-                const end = self.short();
-
-                const closed_values = self.gc.alloc(FlowValue, closed_values_count) catch oom();
-                for (closed_values) |*value| {
-                    value.* = self.pop();
-                }
-
-                self.push(.{
-                    .function = .{
-                        .arg_count = argc,
-                        .closed_values = closed_values,
-                        .start_ip = self.ip,
-                    },
-                });
-
-                self.ip += end - 1;
-            },
+            .@"return" => self.returnInstr(),
+            .function => self.function(),
             .eof => break,
 
             .string,
@@ -328,184 +166,87 @@ fn runSwitchContinue(self: *VM) void {
             continue :loop self.instruction();
         },
         .array => {
-            const len = self.byte();
-            const cap = std.math.ceilPowerOfTwoAssert(usize, if (len == 0) 1 else len);
-            const items = self.gc.alloc(FlowValue, cap) catch oom();
-            const arr = self.gc.create(definitions.FlowArray) catch oom();
-            for (0..len) |i| {
-                items[len - 1 - i] = self.pop();
-            }
-            arr.items = items.ptr;
-            arr.cap = cap;
-            arr.len = len;
-            self.push(.{ .array = arr });
+            self.array();
             continue :loop self.instruction();
         },
         .clone => {
-            const value = self.pop();
-            self.push(value.clone(self.gc));
+            self.clone();
             continue :loop self.instruction();
         },
         .index => {
-            const index = self.pop().int;
-            const array = self.pop().array;
-            if (index < 0) {
-                std.debug.panic("IndexUnderflow: {d}\n", .{index});
-            } else if (index > array.len) {
-                std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ index, array.len });
-            }
-            self.push(array.items[@intCast(index)]);
+            self.index();
             continue :loop self.instruction();
         },
         .append => {
-            const value = self.pop();
-            var array = &self.value_stack.stack[self.value_stack.stack_top - 1];
-
-            if (array.array.cap >= array.array.len + 1) {
-                array.array.items[array.array.len] = value;
-                array.array.len += 1;
-            } else {
-                if (array.array.cap == 0) array.array.cap = 1;
-                const new_values = self.gc.alloc(FlowValue, array.array.cap * 2) catch oom();
-                @memcpy(new_values[0..array.array.len], array.array.items[0..array.array.len]);
-                new_values[array.array.len] = value;
-                array.array.len += 1;
-                array.array.cap *= 2;
-                array.array.items = new_values.ptr;
-            }
+            self.append();
             continue :loop self.instruction();
         },
         .constant => {
-            const constant = self.constants[self.byte()];
-            self.push(constant);
+            self.constant();
             continue :loop self.instruction();
         },
         .negate_i => {
-            const value = self.pop();
-            const negated: FlowValue = .{ .int = -value.int };
-            self.push(negated);
+            self.negateInt();
             continue :loop self.instruction();
         },
         .negate_f => {
-            const value = self.pop();
-            const negated: FlowValue = .{ .float = -value.float };
-            self.push(negated);
+            self.negateFloat();
             continue :loop self.instruction();
         },
         .not => {
-            const value = self.pop();
-            self.push(.{ .bool = !value.isTrue() });
+            self.not();
             continue :loop self.instruction();
         },
-        .equal, .unequal => |op| {
-            const rhs = self.pop();
-            const lhs = self.pop();
-            const equal = lhs.equals(&rhs);
-            if (op == .equal) {
-                self.push(.{ .bool = equal });
-            } else {
-                self.push(.{ .bool = !equal });
-            }
+        .equal => {
+            self.equal();
+            continue :loop self.instruction();
+        },
+        .unequal => {
+            self.unequal();
             continue :loop self.instruction();
         },
         .get_builtin => {
-            const name = self.pop();
-            self.push(.{ .builtin_fn = builtins.get(name.string).? });
+            self.getBuiltin();
             continue :loop self.instruction();
         },
         .get_global => {
-            const idx = self.byte();
-            const value = self.globals[idx];
-
-            self.push(value);
+            self.getGlobal();
             continue :loop self.instruction();
         },
         .set_global => {
-            const idx = self.byte();
-            const value = self.value_stack.at(0);
-            self.globals[idx] = value;
-
-            if (self.globals_count <= idx) {
-                self.globals_count = idx + 1;
-            }
+            self.setGlobal();
             continue :loop self.instruction();
         },
         .set_global_array => {
-            const global_idx = self.byte();
-            const index_amount = self.byte();
-            assert(index_amount > 0);
-
-            var array = self.globals[global_idx];
-
-            for (0..index_amount - 1) |_| {
-                const idx = self.pop().int;
-                if (idx < 0) {
-                    std.debug.panic("IndexUnderflow: {d}\n", .{idx});
-                } else if (idx > array.array.len) {
-                    std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
-                }
-                array = array.array.items[@intCast(idx)];
-            }
-
-            const last_idx = self.pop().int;
-            array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+            self.setGlobalArray();
             continue :loop self.instruction();
         },
         .get_local => {
-            const idx = self.byte();
-            const value = self.getLocal(idx);
-            self.push(value);
+            self.getLocal();
             continue :loop self.instruction();
         },
         .set_local => {
-            const idx = self.byte();
-            const value = self.value_stack.at(0);
-            self.setLocal(idx, value);
+            self.setLocal();
             continue :loop self.instruction();
         },
         .set_local_array => {
-            const local_idx = self.byte();
-            const index_amount = self.byte();
-            assert(index_amount > 0);
-
-            var array = self.getLocal(local_idx);
-
-            for (0..index_amount - 1) |_| {
-                const idx = self.pop().int;
-                if (idx < 0) {
-                    std.debug.panic("IndexUnderflow: {d}\n", .{idx});
-                } else if (idx > array.array.len) {
-                    std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
-                }
-                array = array.array.items[@intCast(idx)];
-            }
-
-            const last_idx = self.pop().int;
-            array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+            self.setLocalArray();
             continue :loop self.instruction();
         },
         .jump => {
-            // For some reason we cannot inline this
-            const distance = self.short();
-            self.ip += distance;
+            self.jump();
             continue :loop self.instruction();
         },
         .jump_back => {
-            // For some reason we cannot inline this
-            const distance = self.short();
-            self.ip -= distance;
+            self.jumpBack();
             continue :loop self.instruction();
         },
         .jump_if_true => {
-            const distance = self.short();
-            const value = self.value_stack.at(0);
-            if (value.isTrue()) self.ip += distance;
+            self.jumpIfTrue();
             continue :loop self.instruction();
         },
         .jump_if_false => {
-            const distance = self.short();
-            const value = self.value_stack.at(0);
-            if (!value.isTrue()) self.ip += distance;
+            self.jumpIfFalse();
             continue :loop self.instruction();
         },
         .call => {
@@ -513,32 +254,11 @@ fn runSwitchContinue(self: *VM) void {
             continue :loop self.instruction();
         },
         .@"return" => {
-            const ret_value = self.pop();
-            const frame = self.call_stack.pop();
-            self.ip = frame.ret_addr;
-            self.value_stack.stack_top = frame.stack_bottom;
-            self.push(ret_value);
+            self.returnInstr();
             continue :loop self.instruction();
         },
         .function => {
-            const argc = self.byte();
-            const closed_values_count = self.byte();
-            const end = self.short();
-
-            const closed_values = self.gc.alloc(FlowValue, closed_values_count) catch oom();
-            for (closed_values) |*value| {
-                value.* = self.pop();
-            }
-
-            self.push(.{
-                .function = .{
-                    .arg_count = argc,
-                    .closed_values = closed_values,
-                    .start_ip = self.ip,
-                },
-            });
-
-            self.ip += end - 1;
+            self.function();
             continue :loop self.instruction();
         },
         .eof => {},
@@ -552,7 +272,7 @@ fn runSwitchContinue(self: *VM) void {
     }
 }
 
-fn concat(self: *VM) void {
+inline fn concat(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
 
@@ -560,7 +280,7 @@ fn concat(self: *VM) void {
     self.push(.{ .string = result });
 }
 
-fn arithmeticInt(self: *VM, op: OpCode) void {
+inline fn arithmeticInt(self: *VM, op: OpCode) void {
     const rhs = self.pop();
     const lhs = self.pop();
 
@@ -579,7 +299,7 @@ fn arithmeticInt(self: *VM, op: OpCode) void {
     self.push(result);
 }
 
-fn arithmeticFloat(self: *VM, op: OpCode) void {
+inline fn arithmeticFloat(self: *VM, op: OpCode) void {
     const rhs = self.pop();
     const lhs = self.pop();
 
@@ -598,7 +318,7 @@ fn arithmeticFloat(self: *VM, op: OpCode) void {
     self.push(result);
 }
 
-fn comparison(self: *VM, op: OpCode) void {
+inline fn comparison(self: *VM, op: OpCode) void {
     const rhs = self.pop();
     const lhs = self.pop();
 
@@ -628,7 +348,191 @@ fn comparison(self: *VM, op: OpCode) void {
     }
 }
 
-fn call(self: *VM) void {
+inline fn array(self: *VM) void {
+    const len = self.byte();
+    const cap = std.math.ceilPowerOfTwoAssert(usize, if (len == 0) 1 else len);
+    const items = self.gc.alloc(FlowValue, cap) catch oom();
+    const arr = self.gc.create(definitions.FlowArray) catch oom();
+    for (0..len) |i| {
+        items[len - 1 - i] = self.pop();
+    }
+    arr.items = items.ptr;
+    arr.cap = cap;
+    arr.len = len;
+    self.push(.{ .array = arr });
+}
+
+inline fn clone(self: *VM) void {
+    const value = self.pop();
+    self.push(value.clone(self.gc));
+}
+
+inline fn index(self: *VM) void {
+    const idx = self.pop().int;
+    const arr = self.pop().array;
+    if (idx < 0) {
+        std.debug.panic("IndexUnderflow: {d}\n", .{idx});
+    } else if (idx > arr.len) {
+        std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, arr.len });
+    }
+    self.push(arr.items[@intCast(idx)]);
+}
+
+inline fn append(self: *VM) void {
+    const value = self.pop();
+    var arr = &self.value_stack.stack[self.value_stack.stack_top - 1];
+
+    if (arr.array.cap >= arr.array.len + 1) {
+        arr.array.items[arr.array.len] = value;
+        arr.array.len += 1;
+    } else {
+        if (arr.array.cap == 0) arr.array.cap = 1;
+        const new_values = self.gc.alloc(FlowValue, arr.array.cap * 2) catch oom();
+        @memcpy(new_values[0..arr.array.len], arr.array.items[0..arr.array.len]);
+        new_values[arr.array.len] = value;
+        arr.array.len += 1;
+        arr.array.cap *= 2;
+        arr.array.items = new_values.ptr;
+    }
+}
+
+inline fn constant(self: *VM) void {
+    const c = self.constants[self.byte()];
+    self.push(c);
+}
+
+inline fn negateInt(self: *VM) void {
+    const value = self.pop();
+    const negated: FlowValue = .{ .int = -value.int };
+    self.push(negated);
+}
+
+inline fn negateFloat(self: *VM) void {
+    const value = self.pop();
+    const negated: FlowValue = .{ .float = -value.float };
+    self.push(negated);
+}
+
+inline fn not(self: *VM) void {
+    const value = self.pop();
+    self.push(.{ .bool = !value.isTrue() });
+}
+
+inline fn equal(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+    const res = lhs.equals(&rhs);
+    self.push(.{ .bool = res });
+}
+
+inline fn unequal(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+    const res = lhs.equals(&rhs);
+    self.push(.{ .bool = !res });
+}
+
+inline fn getBuiltin(self: *VM) void {
+    const name = self.pop();
+    self.push(.{ .builtin_fn = builtins.get(name.string).? });
+}
+
+inline fn getGlobal(self: *VM) void {
+    const idx = self.byte();
+    const value = self.globals[idx];
+    self.push(value);
+}
+
+inline fn setGlobal(self: *VM) void {
+    const idx = self.byte();
+    const value = self.value_stack.at(0);
+    self.globals[idx] = value;
+
+    if (self.globals_count <= idx) {
+        self.globals_count = idx + 1;
+    }
+}
+
+inline fn setGlobalArray(self: *VM) void {
+    const global_idx = self.byte();
+    const index_amount = self.byte();
+    assert(index_amount > 0);
+
+    var arr = self.globals[global_idx];
+
+    for (0..index_amount - 1) |_| {
+        const idx = self.pop().int;
+        if (idx < 0) {
+            std.debug.panic("IndexUnderflow: {d}\n", .{idx});
+        } else if (idx > arr.array.len) {
+            std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, arr.array.len });
+        }
+        arr = arr.array.items[@intCast(idx)];
+    }
+
+    const last_idx = self.pop().int;
+    arr.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+}
+
+inline fn getLocal(self: *VM) void {
+    const idx = self.byte();
+    const frame = self.call_stack.at(0);
+    const value = self.value_stack.stack[frame.stack_bottom + idx];
+    self.push(value);
+}
+
+inline fn setLocal(self: *VM) void {
+    const idx = self.byte();
+    const value = self.value_stack.at(0);
+    const frame = self.call_stack.at(0);
+    self.value_stack.stack[frame.stack_bottom + idx] = value;
+}
+
+inline fn setLocalArray(self: *VM) void {
+    const local_idx = self.byte();
+    const index_amount = self.byte();
+    assert(index_amount > 0);
+
+    const frame = self.call_stack.at(0);
+    var arr = self.value_stack.stack[frame.stack_bottom + local_idx];
+
+    for (0..index_amount - 1) |_| {
+        const idx = self.pop().int;
+        if (idx < 0) {
+            std.debug.panic("IndexUnderflow: {d}\n", .{idx});
+        } else if (idx > arr.array.len) {
+            std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, arr.array.len });
+        }
+        arr = arr.array.items[@intCast(idx)];
+    }
+
+    const last_idx = self.pop().int;
+    arr.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+}
+
+inline fn jump(self: *VM) void {
+    const distance = self.short();
+    self.ip += distance;
+}
+
+inline fn jumpBack(self: *VM) void {
+    const distance = self.short();
+    self.ip -= distance;
+}
+
+inline fn jumpIfTrue(self: *VM) void {
+    const distance = self.short();
+    const value = self.value_stack.at(0);
+    self.ip += distance * @intFromBool(value.isTrue());
+}
+
+inline fn jumpIfFalse(self: *VM) void {
+    const distance = self.short();
+    const value = self.value_stack.at(0);
+    self.ip += distance * @intFromBool(!value.isTrue());
+}
+
+inline fn call(self: *VM) void {
     const value = self.pop();
     switch (value) {
         .builtin_fn => self.callBuiltin(value),
@@ -637,7 +541,7 @@ fn call(self: *VM) void {
     }
 }
 
-fn callBuiltin(self: *VM, value: FlowValue) void {
+inline fn callBuiltin(self: *VM, value: FlowValue) void {
     const arg_count = value.builtin_fn.arg_types.len;
     const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
 
@@ -654,7 +558,7 @@ fn callBuiltin(self: *VM, value: FlowValue) void {
     self.push(result);
 }
 
-fn callFlowFunction(self: *VM, value: FlowValue) void {
+inline fn callFlowFunction(self: *VM, value: FlowValue) void {
     const arg_count = value.function.arg_count;
     const stack_bottom = self.value_stack.stack_top - arg_count;
     self.call_stack.push(.{
@@ -667,25 +571,44 @@ fn callFlowFunction(self: *VM, value: FlowValue) void {
     self.ip = value.function.start_ip;
 }
 
-fn getLocal(self: *VM, local_idx: usize) FlowValue {
-    const frame = self.call_stack.at(0);
-    return self.value_stack.stack[frame.stack_bottom + local_idx];
+inline fn returnInstr(self: *VM) void {
+    const ret_value = self.pop();
+    const frame = self.call_stack.pop();
+    self.ip = frame.ret_addr;
+    self.value_stack.stack_top = frame.stack_bottom;
+    self.push(ret_value);
 }
 
-fn setLocal(self: *VM, local_idx: usize, value: FlowValue) void {
-    const frame = self.call_stack.at(0);
-    self.value_stack.stack[frame.stack_bottom + local_idx] = value;
+inline fn function(self: *VM) void {
+    const argc = self.byte();
+    const closed_values_count = self.byte();
+    const end = self.short();
+
+    const closed_values = self.gc.alloc(FlowValue, closed_values_count) catch oom();
+    for (closed_values) |*value| {
+        value.* = self.pop();
+    }
+
+    self.push(.{
+        .function = .{
+            .arg_count = argc,
+            .closed_values = closed_values,
+            .start_ip = self.ip,
+        },
+    });
+
+    self.ip += end - 1;
 }
 
-fn push(self: *VM, value: FlowValue) void {
+inline fn push(self: *VM, value: FlowValue) void {
     self.value_stack.push(value);
 }
 
-fn pop(self: *VM) FlowValue {
+inline fn pop(self: *VM) FlowValue {
     return self.value_stack.pop();
 }
 
-fn instruction(self: *VM) OpCode {
+inline fn instruction(self: *VM) OpCode {
     const op: OpCode = @enumFromInt(self.code[self.ip]);
     defer self.ip += 1;
 
@@ -699,11 +622,11 @@ fn instruction(self: *VM) OpCode {
     return op;
 }
 
-fn short(self: *VM) u16 {
+inline fn short(self: *VM) u16 {
     return std.mem.bytesToValue(u16, &.{ self.byte(), self.byte() });
 }
 
-fn byte(self: *VM) u8 {
+inline fn byte(self: *VM) u8 {
     defer self.ip += 1;
     return self.code[self.ip];
 }
