@@ -369,7 +369,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 if (return_stmt.value) |value| {
                     break :blk self.traverseExpr(value);
                 }
-                return self.addExpr(.{ .op = .null, .type = .null });
+                break :blk self.addExpr(.{ .op = .null, .type = .null });
             };
 
             self.nodes.append(self.alloc, .{ .kind = .@"return", .index = expr }) catch oom();
@@ -579,8 +579,8 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             var maybe_body = self.traverseBlock(function.body);
             if (maybe_body) |body| {
                 if (self.nodes.items[body].kind != .@"return") {
-                    _ = self.addExpr(.{ .op = .null, .type = .null });
-                    self.nodes.append(self.alloc, .{ .kind = .@"return", .index = self.exprs.items.len - 1 }) catch oom();
+                    const ret_expr = self.addExpr(.{ .op = .null, .type = .null });
+                    self.nodes.append(self.alloc, .{ .kind = .@"return", .index = ret_expr }) catch oom();
                     self.patchNodesTogether(&maybe_body, self.nodes.items.len - 1);
                 }
             }
@@ -638,7 +638,7 @@ fn resolveFlowValue(expr: *const ast.Expr) FlowValue {
     };
 }
 
-pub fn resolveConstant(self: *FIR, value: FlowValue) usize {
+fn resolveConstant(self: *FIR, value: FlowValue) usize {
     return for (self.constants.items, 0..) |c, i| {
         if (c.equals(&value)) break i;
     } else {

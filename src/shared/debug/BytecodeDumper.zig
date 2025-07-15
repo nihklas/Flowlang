@@ -86,6 +86,7 @@ fn runDump(self: *Dumper) void {
             .unequal => self.printInstruction("OP_UNEQUAL", "", .{}),
             .@"return" => self.printInstruction("OP_RETURN", "", .{}),
             .constants_done => self.printInstruction("OP_CONSTANTS_DONE", "", .{}),
+            .eof => self.printInstruction("OP_EOF", "", .{}),
         }
     }
 }

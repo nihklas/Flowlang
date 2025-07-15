@@ -37,16 +37,13 @@ pub fn run(self: *VM) void {
         .ret_addr = self.ip,
     });
     self.runWhileSwitch();
-    // try self.runSwitchContinue();
+    // self.runSwitchContinue();
 }
 
 fn loadConstants(self: *VM) void {
     var constants_counter: usize = 0;
     while (self.ip < self.code.len) {
         const op = self.instruction();
-        if (comptime debug_options.bytecode) {
-            std.debug.print("{}\n", .{op});
-        }
         switch (op) {
             .integer => {
                 defer constants_counter += 1;
@@ -86,12 +83,6 @@ fn loadConstants(self: *VM) void {
 fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
         const op = self.instruction();
-        defer if (comptime debug_options.stack) {
-            self.value_stack.dump();
-        };
-        if (comptime debug_options.bytecode) {
-            std.debug.print("{x:0>4} {}\n", .{ self.ip, op });
-        }
         switch (op) {
             .true => self.push(.{ .bool = true }),
             .false => self.push(.{ .bool = false }),
@@ -290,6 +281,7 @@ fn runWhileSwitch(self: *VM) void {
 
                 self.ip += end - 1;
             },
+            .eof => break,
 
             .string,
             .string_long,
@@ -298,6 +290,265 @@ fn runWhileSwitch(self: *VM) void {
             .constants_done,
             => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
         }
+    }
+}
+
+fn runSwitchContinue(self: *VM) void {
+    loop: switch (self.instruction()) {
+        .true => {
+            self.push(.{ .bool = true });
+            continue :loop self.instruction();
+        },
+        .false => {
+            self.push(.{ .bool = false });
+            continue :loop self.instruction();
+        },
+        .null => {
+            self.push(.null);
+            continue :loop self.instruction();
+        },
+        .pop => {
+            _ = self.pop();
+            continue :loop self.instruction();
+        },
+        .add_i, .sub_i, .mul_i, .div_i, .mod_i => |op| {
+            self.arithmeticInt(op);
+            continue :loop self.instruction();
+        },
+        .add_f, .sub_f, .mul_f, .div_f, .mod_f => |op| {
+            self.arithmeticFloat(op);
+            continue :loop self.instruction();
+        },
+        .concat => {
+            self.concat();
+            continue :loop self.instruction();
+        },
+        .lower, .lower_equal, .greater, .greater_equal => |op| {
+            self.comparison(op);
+            continue :loop self.instruction();
+        },
+        .array => {
+            const len = self.byte();
+            const cap = std.math.ceilPowerOfTwoAssert(usize, if (len == 0) 1 else len);
+            const items = self.gc.alloc(FlowValue, cap) catch oom();
+            const arr = self.gc.create(definitions.FlowArray) catch oom();
+            for (0..len) |i| {
+                items[len - 1 - i] = self.pop();
+            }
+            arr.items = items.ptr;
+            arr.cap = cap;
+            arr.len = len;
+            self.push(.{ .array = arr });
+            continue :loop self.instruction();
+        },
+        .clone => {
+            const value = self.pop();
+            self.push(value.clone(self.gc));
+            continue :loop self.instruction();
+        },
+        .index => {
+            const index = self.pop().int;
+            const array = self.pop().array;
+            if (index < 0) {
+                std.debug.panic("IndexUnderflow: {d}\n", .{index});
+            } else if (index > array.len) {
+                std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ index, array.len });
+            }
+            self.push(array.items[@intCast(index)]);
+            continue :loop self.instruction();
+        },
+        .append => {
+            const value = self.pop();
+            var array = &self.value_stack.stack[self.value_stack.stack_top - 1];
+
+            if (array.array.cap >= array.array.len + 1) {
+                array.array.items[array.array.len] = value;
+                array.array.len += 1;
+            } else {
+                if (array.array.cap == 0) array.array.cap = 1;
+                const new_values = self.gc.alloc(FlowValue, array.array.cap * 2) catch oom();
+                @memcpy(new_values[0..array.array.len], array.array.items[0..array.array.len]);
+                new_values[array.array.len] = value;
+                array.array.len += 1;
+                array.array.cap *= 2;
+                array.array.items = new_values.ptr;
+            }
+            continue :loop self.instruction();
+        },
+        .constant => {
+            const constant = self.constants[self.byte()];
+            self.push(constant);
+            continue :loop self.instruction();
+        },
+        .negate_i => {
+            const value = self.pop();
+            const negated: FlowValue = .{ .int = -value.int };
+            self.push(negated);
+            continue :loop self.instruction();
+        },
+        .negate_f => {
+            const value = self.pop();
+            const negated: FlowValue = .{ .float = -value.float };
+            self.push(negated);
+            continue :loop self.instruction();
+        },
+        .not => {
+            const value = self.pop();
+            self.push(.{ .bool = !value.isTrue() });
+            continue :loop self.instruction();
+        },
+        .equal, .unequal => |op| {
+            const rhs = self.pop();
+            const lhs = self.pop();
+            const equal = lhs.equals(&rhs);
+            if (op == .equal) {
+                self.push(.{ .bool = equal });
+            } else {
+                self.push(.{ .bool = !equal });
+            }
+            continue :loop self.instruction();
+        },
+        .get_builtin => {
+            const name = self.pop();
+            self.push(.{ .builtin_fn = builtins.get(name.string).? });
+            continue :loop self.instruction();
+        },
+        .get_global => {
+            const idx = self.byte();
+            const value = self.globals[idx];
+
+            self.push(value);
+            continue :loop self.instruction();
+        },
+        .set_global => {
+            const idx = self.byte();
+            const value = self.value_stack.at(0);
+            self.globals[idx] = value;
+
+            if (self.globals_count <= idx) {
+                self.globals_count = idx + 1;
+            }
+            continue :loop self.instruction();
+        },
+        .set_global_array => {
+            const global_idx = self.byte();
+            const index_amount = self.byte();
+            assert(index_amount > 0);
+
+            var array = self.globals[global_idx];
+
+            for (0..index_amount - 1) |_| {
+                const idx = self.pop().int;
+                if (idx < 0) {
+                    std.debug.panic("IndexUnderflow: {d}\n", .{idx});
+                } else if (idx > array.array.len) {
+                    std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
+                }
+                array = array.array.items[@intCast(idx)];
+            }
+
+            const last_idx = self.pop().int;
+            array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+            continue :loop self.instruction();
+        },
+        .get_local => {
+            const idx = self.byte();
+            const value = self.getLocal(idx);
+            self.push(value);
+            continue :loop self.instruction();
+        },
+        .set_local => {
+            const idx = self.byte();
+            const value = self.value_stack.at(0);
+            self.setLocal(idx, value);
+            continue :loop self.instruction();
+        },
+        .set_local_array => {
+            const local_idx = self.byte();
+            const index_amount = self.byte();
+            assert(index_amount > 0);
+
+            var array = self.getLocal(local_idx);
+
+            for (0..index_amount - 1) |_| {
+                const idx = self.pop().int;
+                if (idx < 0) {
+                    std.debug.panic("IndexUnderflow: {d}\n", .{idx});
+                } else if (idx > array.array.len) {
+                    std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, array.array.len });
+                }
+                array = array.array.items[@intCast(idx)];
+            }
+
+            const last_idx = self.pop().int;
+            array.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+            continue :loop self.instruction();
+        },
+        .jump => {
+            // For some reason we cannot inline this
+            const distance = self.short();
+            self.ip += distance;
+            continue :loop self.instruction();
+        },
+        .jump_back => {
+            // For some reason we cannot inline this
+            const distance = self.short();
+            self.ip -= distance;
+            continue :loop self.instruction();
+        },
+        .jump_if_true => {
+            const distance = self.short();
+            const value = self.value_stack.at(0);
+            if (value.isTrue()) self.ip += distance;
+            continue :loop self.instruction();
+        },
+        .jump_if_false => {
+            const distance = self.short();
+            const value = self.value_stack.at(0);
+            if (!value.isTrue()) self.ip += distance;
+            continue :loop self.instruction();
+        },
+        .call => {
+            self.call();
+            continue :loop self.instruction();
+        },
+        .@"return" => {
+            const ret_value = self.pop();
+            const frame = self.call_stack.pop();
+            self.ip = frame.ret_addr;
+            self.value_stack.stack_top = frame.stack_bottom;
+            self.push(ret_value);
+            continue :loop self.instruction();
+        },
+        .function => {
+            const argc = self.byte();
+            const closed_values_count = self.byte();
+            const end = self.short();
+
+            const closed_values = self.gc.alloc(FlowValue, closed_values_count) catch oom();
+            for (closed_values) |*value| {
+                value.* = self.pop();
+            }
+
+            self.push(.{
+                .function = .{
+                    .arg_count = argc,
+                    .closed_values = closed_values,
+                    .start_ip = self.ip,
+                },
+            });
+
+            self.ip += end - 1;
+            continue :loop self.instruction();
+        },
+        .eof => {},
+
+        .string,
+        .string_long,
+        .integer,
+        .float,
+        .constants_done,
+        => |op| panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
     }
 }
 
@@ -435,8 +686,17 @@ fn pop(self: *VM) FlowValue {
 }
 
 fn instruction(self: *VM) OpCode {
+    const op: OpCode = @enumFromInt(self.code[self.ip]);
     defer self.ip += 1;
-    return @enumFromInt(self.code[self.ip]);
+
+    if (comptime debug_options.stack) {
+        self.value_stack.dump();
+    }
+    if (comptime debug_options.bytecode) {
+        std.debug.print("{x:0>4} {}\n", .{ self.ip, op });
+    }
+
+    return op;
 }
 
 fn short(self: *VM) u16 {

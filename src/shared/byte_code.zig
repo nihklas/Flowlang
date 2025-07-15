@@ -68,6 +68,7 @@ pub const OpCode = enum(u8) {
 
     // markers
     constants_done,
+    eof,
 
     pub fn raw(op: OpCode) u8 {
         return @intFromEnum(op);

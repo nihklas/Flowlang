@@ -31,6 +31,7 @@ pub fn compile(self: *Compiler) []const u8 {
     }
     self.compileConstants();
     self.compileBlock(self.fir.entry);
+    self.emitOpcode(.eof);
 
     return self.byte_code.toOwnedSlice(self.alloc) catch oom();
 }
