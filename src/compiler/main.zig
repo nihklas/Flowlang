@@ -67,12 +67,13 @@ pub fn compile(gpa: Allocator, flow_source: []const u8, cli_opts: cli.Options) !
         return null;
     }
 
-    // TODO: Optimisatios
-    // - Dead Code Elimination
-    // - Constants evaluation
-
     var fir: FIR = .fromAST(gpa, ast);
     defer fir.deinit();
+
+    var optimizer: Optimizer = .init(gpa, &fir);
+    defer optimizer.deinit();
+
+    optimizer.optimize();
 
     if (cli_opts.dump_fir) {
         var buf: std.ArrayListUnmanaged(u8) = .empty;
@@ -87,6 +88,8 @@ pub fn compile(gpa: Allocator, flow_source: []const u8, cli_opts: cli.Options) !
     }
 
     var compiler: Compiler = .init(gpa, &fir);
+    defer compiler.deinit();
+
     const bytecode = compiler.compile();
 
     if (cli_opts.dump_bc) {
@@ -126,6 +129,7 @@ const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
 const Sema = @import("Sema.zig");
 const FIR = @import("ir/FIR.zig");
+const Optimizer = @import("Optimizer.zig");
 
 const cli = @import("util/cli.zig");
 

@@ -20,13 +20,17 @@ pub fn init(alloc: Allocator, fir: *const FIR) Compiler {
     };
 }
 
+pub fn deinit(self: *Compiler) void {
+    self.byte_code.deinit(self.alloc);
+    self.loop_levels.deinit(self.alloc);
+}
+
 pub fn compile(self: *Compiler) []const u8 {
     if (self.fir.entry == FIR.uninitialized_entry) {
         return &.{};
     }
     self.compileConstants();
     self.compileBlock(self.fir.entry);
-    defer self.loop_levels.deinit(self.alloc);
 
     return self.byte_code.toOwnedSlice(self.alloc) catch oom();
 }
