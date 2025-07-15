@@ -1,14 +1,41 @@
 stages:
+  - build
   - test
+  - benchmark
+
+compile:
+  stage: build
+  tags:
+    - nix
+  script:
+    - nix develop .#pipeline --command bash -c "zig build -Doptimize=Debug --summary all"
+    - nix develop .#pipeline --command bash -c "zig build -Doptimize=ReleaseSafe --summary all"
+    - nix develop .#pipeline --command bash -c "zig build -Doptimize=ReleaseFast --summary all"
+    - nix develop .#pipeline --command bash -c "zig build -Doptimize=ReleaseSmall --summary all"
+  cache:
+    key: build-cache
+    paths:
+      - .zig-cache/
 
 tests:
   stage: test
-  script:
-    - nix develop .#pipeline --command bash -c "zig build check -Doptimize=Debug --summary all"
-    - nix develop .#pipeline --command bash -c "zig build check -Doptimize=ReleaseSafe --summary all"
-    - nix develop .#pipeline --command bash -c "zig build check -Doptimize=ReleaseFast --summary all"
-    - nix develop .#pipeline --command bash -c "zig build check -Doptimize=ReleaseSmall --summary all"
-    - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
-    - nix develop .#pipeline --command bash -c "zig build integration -Dintegration-verbose"
   tags:
     - nix
+  script:
+    - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
+    - nix develop .#pipeline --command bash -c "zig build integration -Dintegration-verbose"
+  cache:
+    key: build-cache
+    paths:
+      - .zig-cache/
+
+bench:
+  stage: benchmark
+  tags:
+    - nix
+  script:
+    - nix develop .#pipeline --command bash -c "zig build benchmark -Dbench-setting=Fast"
+  cache:
+    key: build-cache
+    paths:
+      - .zig-cache/
