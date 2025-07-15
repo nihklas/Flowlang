@@ -1,18 +1,14 @@
 pub fn foldConstants(fir: *FIR) void {
     var folder: Folder = .{ .fir = fir };
-    folder.traverseBlock(fir.entry);
+    folder.traverse();
 }
 
 const Folder = struct {
     fir: *FIR,
 
-    fn traverseBlock(self: *Folder, start_idx: usize) void {
-        if (start_idx == FIR.uninitialized_entry) return;
-
-        var maybe_node_idx: ?usize = start_idx;
-        while (maybe_node_idx) |node_idx| {
-            self.traverseStmt(node_idx);
-            maybe_node_idx = self.fir.nodes.items[node_idx].after;
+    fn traverse(self: *Folder) void {
+        for (0..self.fir.nodes.items.len) |idx| {
+            self.traverseStmt(idx);
         }
     }
 
@@ -22,20 +18,25 @@ const Folder = struct {
             .pop => {},
             .@"break" => {},
             .@"continue" => {},
-            .expr => {
+            .expr, .@"return" => {
                 node.index = self.traverseExpr(node.index);
             },
-            .@"return" => {
-                // TODO: traverse Expr
-            },
             .cond => {
-                // TODO: Traverse conditional
+                const cond = &self.fir.conds.items[node.index];
+                cond.condition = self.traverseExpr(cond.condition);
             },
             .loop => {
-                // TODO: Traverse loop
+                const loop = &self.fir.loops.items[node.index];
+                loop.condition = self.traverseExpr(loop.condition);
+                if (loop.inc) |inc| {
+                    loop.inc = self.traverseExpr(inc);
+                }
             },
             .variable => {
-                // TODO: travers variable
+                const variable = &self.fir.variables.items[node.index];
+                if (variable.expr) |expr| {
+                    variable.expr = self.traverseExpr(expr);
+                }
             },
         }
     }
@@ -44,7 +45,7 @@ const Folder = struct {
         const expr = self.fir.exprs.items[expr_idx];
         switch (expr.op) {
             .true, .false, .null, .literal => {},
-            .add => {
+            .add, .sub, .mul, .div, .mod => |tag| {
                 assert(expr.type.isPrimitive(.int) or expr.type.isPrimitive(.float));
 
                 expr.operands[0] = self.traverseExpr(expr.operands[0]);
@@ -54,9 +55,33 @@ const Folder = struct {
                 if (lhs_result.op == .literal and rhs_result.op == .literal) {
                     const lhs = self.fir.constants.items[lhs_result.operands[0]];
                     const rhs = self.fir.constants.items[rhs_result.operands[0]];
-                    const new_constant: usize = switch (expr.type.type) {
-                        .int => self.fir.resolveConstant(.{ .int = lhs.int + rhs.int }),
-                        .float => self.fir.resolveConstant(.{ .float = lhs.float + rhs.float }),
+
+                    const new_constant = switch (tag) {
+                        .add => switch (expr.type.type) {
+                            .int => self.fir.resolveConstant(.{ .int = lhs.int + rhs.int }),
+                            .float => self.fir.resolveConstant(.{ .float = lhs.float + rhs.float }),
+                            else => unreachable,
+                        },
+                        .sub => switch (expr.type.type) {
+                            .int => self.fir.resolveConstant(.{ .int = lhs.int - rhs.int }),
+                            .float => self.fir.resolveConstant(.{ .float = lhs.float - rhs.float }),
+                            else => unreachable,
+                        },
+                        .mul => switch (expr.type.type) {
+                            .int => self.fir.resolveConstant(.{ .int = lhs.int * rhs.int }),
+                            .float => self.fir.resolveConstant(.{ .float = lhs.float * rhs.float }),
+                            else => unreachable,
+                        },
+                        .div => switch (expr.type.type) {
+                            .int => self.fir.resolveConstant(.{ .int = @divTrunc(lhs.int, rhs.int) }),
+                            .float => self.fir.resolveConstant(.{ .float = lhs.float / rhs.float }),
+                            else => unreachable,
+                        },
+                        .mod => switch (expr.type.type) {
+                            .int => self.fir.resolveConstant(.{ .int = @mod(lhs.int, rhs.int) }),
+                            .float => self.fir.resolveConstant(.{ .float = @mod(lhs.float, rhs.float) }),
+                            else => unreachable,
+                        },
                         else => unreachable,
                     };
 
@@ -66,10 +91,6 @@ const Folder = struct {
                     return self.fir.exprs.items.len - 1;
                 }
             },
-            .sub => {},
-            .div => {},
-            .mul => {},
-            .mod => {},
             .variable => {},
             .assign => {},
             .assign_in_array => {},
