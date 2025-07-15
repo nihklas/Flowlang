@@ -369,8 +369,7 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
                 if (return_stmt.value) |value| {
                     break :blk self.traverseExpr(value);
                 }
-                self.exprs.append(self.alloc, .{ .op = .null, .type = .null }) catch oom();
-                break :blk self.exprs.items.len - 1;
+                return self.addExpr(.{ .op = .null, .type = .null });
             };
 
             self.nodes.append(self.alloc, .{ .kind = .@"return", .index = expr }) catch oom();
@@ -383,26 +382,22 @@ fn traverseStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
 fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
     switch (expr.*) {
         .grouping => return self.traverseExpr(expr.grouping.expr),
-        .literal => lit: {
+        .literal => {
             if (expr.literal.value != .array) {
                 const value = resolveFlowValue(expr);
-                const node_expr: Node.Expr = blk: switch (value) {
+                const node_expr: Node.Expr = switch (value) {
                     .bool => |boolean| .{ .op = if (boolean) .true else .false, .type = .primitive(.bool) },
                     .null => .{ .op = .null, .type = .null },
                     .string, .int, .float => {
-                        const operands = self.arena().alloc(usize, 1) catch oom();
-                        operands[0] = self.resolveConstant(value);
-                        break :blk .{ .op = .literal, .type = self.constants.items[operands[0]].getType(), .operands = operands };
+                        return self.addConstantExpr(value);
                     },
                     else => unreachable,
                 };
-                self.exprs.append(self.alloc, node_expr) catch oom();
-                break :lit;
+                return self.addExpr(node_expr);
             }
 
             if (expr.literal.value.array.len == 0) {
-                self.exprs.append(self.alloc, .{ .op = .array, .operands = &.{}, .type = .{ .type = .null, .order = 1 } }) catch oom();
-                break :lit;
+                return self.addExpr(.{ .op = .array, .operands = &.{}, .type = .{ .type = .null, .order = 1 } });
             }
 
             const operands = self.arena().alloc(usize, expr.literal.value.array.len) catch oom();
@@ -410,7 +405,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 operands[i] = self.traverseExpr(item);
             }
             const item_type = self.exprs.items[operands[0]].type;
-            self.exprs.append(self.alloc, .{ .op = .array, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order + 1 } }) catch oom();
+            return self.addExpr(.{ .op = .array, .operands = operands, .type = .{ .type = item_type.type, .order = item_type.order + 1 } });
         },
         .binary => |binary| {
             const operands = self.arena().alloc(usize, 2) catch oom();
@@ -434,7 +429,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 else => unreachable,
             };
 
-            self.exprs.append(self.alloc, .{ .op = op, .type = flow_type, .operands = operands }) catch oom();
+            return self.addExpr(.{ .op = op, .type = flow_type, .operands = operands });
         },
         .logical => |logical| {
             const operands = self.arena().alloc(usize, 2) catch oom();
@@ -442,7 +437,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             operands[0] = self.traverseExpr(logical.lhs);
             operands[1] = self.traverseExpr(logical.rhs);
 
-            self.exprs.append(self.alloc, .{ .op = if (logical.op.type == .@"and") .@"and" else .@"or", .type = .primitive(.bool), .operands = operands }) catch oom();
+            return self.addExpr(.{ .op = if (logical.op.type == .@"and") .@"and" else .@"or", .type = .primitive(.bool), .operands = operands });
         },
         .unary => |unary| {
             const operands = self.arena().alloc(usize, 1) catch oom();
@@ -454,7 +449,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 else => unreachable,
             };
 
-            self.exprs.append(self.alloc, .{ .op = op, .type = flow_type, .operands = operands }) catch oom();
+            return self.addExpr(.{ .op = op, .type = flow_type, .operands = operands });
         },
         .variable => |variable| {
             const var_idx, const variable_node = self.resolveVariable(variable.name.lexeme);
@@ -462,10 +457,10 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
 
             if (variable_node.type.isBuiltinFn()) {
                 operands[0] = self.resolveConstant(.{ .string = variable_node.name });
-                self.exprs.append(self.alloc, .{ .op = .builtin_fn, .type = .builtinFn(), .operands = operands }) catch oom();
+                return self.addExpr(.{ .op = .builtin_fn, .type = .builtinFn(), .operands = operands });
             } else {
                 operands[0] = var_idx;
-                self.exprs.append(self.alloc, .{ .op = .variable, .type = variable_node.type, .operands = operands }) catch oom();
+                return self.addExpr(.{ .op = .variable, .type = variable_node.type, .operands = operands });
             }
         },
         .assignment => |assignment| {
@@ -475,11 +470,11 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 const operands = self.arena().alloc(usize, 2) catch oom();
                 operands[0] = self.traverseExpr(assignment.value);
                 operands[1] = var_idx;
-                self.exprs.append(self.alloc, .{
+                return self.addExpr(.{
                     .op = .assign,
                     .type = variable_node.type,
                     .operands = operands,
-                }) catch oom();
+                });
             } else {
                 assert(assignment.variable.* == .index);
                 const index = assignment.variable.index;
@@ -525,11 +520,11 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                     else => unreachable,
                 }
 
-                self.exprs.append(self.alloc, .{
+                return self.addExpr(.{
                     .op = .assign_in_array,
                     .type = self.exprs.items[operands[0]].type,
                     .operands = operands,
-                }) catch oom();
+                });
             }
         },
         .call => |call| {
@@ -539,7 +534,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
                 operands[idx] = self.traverseExpr(arg);
             }
 
-            self.exprs.append(self.alloc, .{ .op = .call, .operands = operands, .type = self.resolveFunctionReturnType(operands[0], call.expr) }) catch oom();
+            return self.addExpr(.{ .op = .call, .operands = operands, .type = self.resolveFunctionReturnType(operands[0], call.expr) });
         },
         .index => |index| {
             const operands = self.arena().alloc(usize, 2) catch oom();
@@ -549,13 +544,13 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             assert(item_type.order > 0);
             var new_type = item_type.clone(self.alloc);
             new_type.order -= 1;
-            self.exprs.append(self.alloc, .{ .op = .index, .operands = operands, .type = new_type }) catch oom();
+            return self.addExpr(.{ .op = .index, .operands = operands, .type = new_type });
         },
         .append => |append| {
             const operands = self.arena().alloc(usize, 2) catch oom();
             operands[0] = self.traverseExpr(append.variable);
             operands[1] = self.traverseExpr(append.value);
-            self.exprs.append(self.alloc, .{ .op = .append, .operands = operands, .type = self.exprs.items[operands[0]].type }) catch oom();
+            return self.addExpr(.{ .op = .append, .operands = operands, .type = self.exprs.items[operands[0]].type });
         },
         .function => |function| {
             const closed_values = self.arena().alloc(usize, function.closed_values.len) catch oom();
@@ -584,7 +579,7 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             var maybe_body = self.traverseBlock(function.body);
             if (maybe_body) |body| {
                 if (self.nodes.items[body].kind != .@"return") {
-                    self.exprs.append(self.alloc, .{ .op = .null, .type = .null }) catch oom();
+                    _ = self.addExpr(.{ .op = .null, .type = .null });
                     self.nodes.append(self.alloc, .{ .kind = .@"return", .index = self.exprs.items.len - 1 }) catch oom();
                     self.patchNodesTogether(&maybe_body, self.nodes.items.len - 1);
                 }
@@ -601,9 +596,19 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             }
 
             const func_type: FlowType = .function(self.arena(), function.ret_type.type, param_types);
-            self.exprs.append(self.alloc, .{ .op = .function, .operands = operands, .type = func_type }) catch oom();
+            return self.addExpr(.{ .op = .function, .operands = operands, .type = func_type });
         },
     }
+}
+
+pub fn addConstantExpr(self: *FIR, value: FlowValue) usize {
+    const operands = self.arena().alloc(usize, 1) catch oom();
+    operands[0] = self.resolveConstant(value);
+    return self.addExpr(.{ .op = .literal, .type = self.constants.items[operands[0]].getType(), .operands = operands });
+}
+
+pub fn addExpr(self: *FIR, expr: Node.Expr) usize {
+    self.exprs.append(self.alloc, expr) catch oom();
     return self.exprs.items.len - 1;
 }
 
@@ -782,7 +787,7 @@ fn typeFromToken(token: Token) ?FlowType {
     };
 }
 
-pub fn arena(self: *FIR) Allocator {
+fn arena(self: *FIR) Allocator {
     return self.arena_state.allocator();
 }
 
