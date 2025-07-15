@@ -5,6 +5,7 @@ pub const Options = struct {
     dump_bc: bool = false,
     dump_ast: bool = false,
     dump_fir: bool = false,
+    constant_folding: bool = true,
     run: bool = false,
 };
 
@@ -46,6 +47,8 @@ pub fn parse() Options {
             options.check = true;
         } else if (std.mem.eql(u8, argument, "--run")) {
             options.run = true;
+        } else if (std.mem.eql(u8, argument, "--no-constant-folding")) {
+            options.constant_folding = false;
         } else if (std.mem.eql(u8, argument, "--no-color")) {
             @import("error_reporter.zig").colored_output = false;
         } else if (std.mem.eql(u8, argument, "--help")) {
@@ -71,22 +74,25 @@ pub fn printHelpAndQuit(exit_code: u8) noreturn {
         \\flow_compiler [SOURCE] [OUTPUT] (options)
         \\
         \\    Options
-        \\        --dump-bc           Dump the resulting Bytecode into the output File 
-        \\                            instead of building an executable
-        \\        --dump-ast          Dump the resulting Abstract Syntax Tree to the output File
-        \\                            instead of building an executable
-        \\        --dump-fir          Dump the resulting FIR (Flowlang Intermediate Representation)
-        \\                            to the output File instead of building an executable
-        \\        --check             Go through Semantic Analysis and quit
-        \\        --run               Run the compiled code directly
-        \\        --no-color          Turns off colored error messages, useful for testing or 
-        \\                            running in terminals that display the error messages wrongly
-        \\        --help              Print this message
+        \\        --dump-bc               Dump the resulting Bytecode into the output File 
+        \\                                instead of building an executable
+        \\        --dump-ast              Dump the resulting Abstract Syntax Tree to the output File
+        \\                                instead of building an executable
+        \\        --dump-fir              Dump the resulting FIR (Flowlang Intermediate Representation)
+        \\                                to the output File instead of building an executable
+        \\        --check                 Go through Semantic Analysis and quit
+        \\        --run                   Run the compiled code directly
+        \\        --no-color              Turns off colored error messages, useful for testing or 
+        \\                                running in terminals that display the error messages wrongly
+        \\
+        \\        --no-constant-folding   Turn off Constant folding optimzations
+        \\
+        \\        --help                  Print this message
         \\
         \\    Arguments
-        \\        SOURCE              Path to the .flow Source file
-        \\        OUTPUT              Path to the target output file, 
-        \\                            default is filename of the SOURCE argument without extension
+        \\        SOURCE                  Path to the .flow Source file
+        \\        OUTPUT                  Path to the target output file, 
+        \\                                default is filename of the SOURCE argument without extension
         \\
     ;
 

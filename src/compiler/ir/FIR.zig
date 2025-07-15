@@ -52,7 +52,7 @@ pub const Node = struct {
         type: FlowType,
         /// The used operands. Depending on the `op`, this can have a different size and the
         /// elements point into a different collection
-        operands: []const usize = &.{},
+        operands: []usize = &.{},
 
         const Operator = enum {
             /// Operands: none
@@ -633,7 +633,7 @@ fn resolveFlowValue(expr: *const ast.Expr) FlowValue {
     };
 }
 
-fn resolveConstant(self: *FIR, value: FlowValue) usize {
+pub fn resolveConstant(self: *FIR, value: FlowValue) usize {
     return for (self.constants.items, 0..) |c, i| {
         if (c.equals(&value)) break i;
     } else {
@@ -782,7 +782,7 @@ fn typeFromToken(token: Token) ?FlowType {
     };
 }
 
-fn arena(self: *FIR) Allocator {
+pub fn arena(self: *FIR) Allocator {
     return self.arena_state.allocator();
 }
 

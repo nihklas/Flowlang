@@ -73,7 +73,9 @@ pub fn compile(gpa: Allocator, flow_source: []const u8, cli_opts: cli.Options) !
     var optimizer: Optimizer = .init(gpa, &fir);
     defer optimizer.deinit();
 
-    optimizer.optimize();
+    if (cli_opts.constant_folding) {
+        optimizer.constantFolding();
+    }
 
     if (cli_opts.dump_fir) {
         var buf: std.ArrayListUnmanaged(u8) = .empty;
