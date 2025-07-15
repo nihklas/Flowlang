@@ -74,7 +74,7 @@ pub fn compile(gpa: Allocator, flow_source: []const u8, cli_opts: cli.Options) !
     defer optimizer.deinit();
 
     if (cli_opts.constant_folding) {
-        optimizer.constantFolding();
+        optimizer.foldConstants();
     }
 
     if (cli_opts.dump_fir) {
