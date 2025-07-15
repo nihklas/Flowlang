@@ -149,19 +149,84 @@ const Folder = struct {
                     return self.fir.addExpr(.{ .op = if (result) .true else .false, .operands = &.{}, .type = .primitive(.bool) });
                 }
             },
-            .less => {},
-            .less_equal => {},
-            .greater => {},
-            .greater_equal => {},
-            .concat => {},
-            .@"and" => {},
-            .@"or" => {},
-            .index => {},
-            .append => {},
-            .call => {},
+            .less,
+            .less_equal,
+            .greater,
+            .greater_equal,
+            => {
+                expr.operands[0] = self.traverseExpr(expr.operands[0]);
+                expr.operands[1] = self.traverseExpr(expr.operands[1]);
+                const lhs_result = self.fir.exprs.items[expr.operands[0]];
+                const rhs_result = self.fir.exprs.items[expr.operands[1]];
+                if (lhs_result.op == .literal and rhs_result.op == .literal) {
+                    const lhs = self.fir.constants.items[lhs_result.operands[0]];
+                    const rhs = self.fir.constants.items[rhs_result.operands[0]];
+
+                    const result = blk: {
+                        if (lhs.getType().isPrimitive(.float)) {
+                            break :blk switch (expr.op) {
+                                .less => lhs.float < rhs.float,
+                                .less_equal => lhs.float <= rhs.float,
+                                .greater => lhs.float > rhs.float,
+                                .greater_equal => lhs.float >= rhs.float,
+                                else => unreachable,
+                            };
+                        }
+
+                        break :blk switch (expr.op) {
+                            .less => lhs.int < rhs.int,
+                            .less_equal => lhs.int <= rhs.int,
+                            .greater => lhs.int > rhs.int,
+                            .greater_equal => lhs.int >= rhs.int,
+                            else => unreachable,
+                        };
+                    };
+
+                    return self.fir.addExpr(.{ .op = if (result) .true else .false, .operands = &.{}, .type = .primitive(.bool) });
+                }
+            },
+            .concat => {
+                expr.operands[0] = self.traverseExpr(expr.operands[0]);
+                expr.operands[1] = self.traverseExpr(expr.operands[1]);
+                // TODO: Folding this means managing memory, wait till later
+            },
+            .@"and", .@"or" => {
+                expr.operands[0] = self.traverseExpr(expr.operands[0]);
+                expr.operands[1] = self.traverseExpr(expr.operands[1]);
+                const lhs_result = self.fir.exprs.items[expr.operands[0]];
+                const rhs_result = self.fir.exprs.items[expr.operands[1]];
+
+                if (lhs_result.op == .true and rhs_result.op == .true and expr.op == .@"and") return self.fir.addExpr(.{ .op = .true, .operands = &.{}, .type = .primitive(.bool) });
+
+                if (lhs_result.op == .true and expr.op == .@"or") return self.fir.addExpr(.{ .op = .true, .operands = &.{}, .type = .primitive(.bool) });
+                if (rhs_result.op == .true and expr.op == .@"or") return self.fir.addExpr(.{ .op = .true, .operands = &.{}, .type = .primitive(.bool) });
+            },
+            .index => {
+                expr.operands[0] = self.traverseExpr(expr.operands[0]);
+                expr.operands[1] = self.traverseExpr(expr.operands[1]);
+            },
+            .append => {
+                expr.operands[0] = self.traverseExpr(expr.operands[0]);
+                expr.operands[1] = self.traverseExpr(expr.operands[1]);
+            },
+            .call => {
+                for (0..expr.operands.len) |idx| {
+                    expr.operands[idx] = self.traverseExpr(expr.operands[idx]);
+                }
+            },
             .builtin_fn => {},
-            .array => {},
-            .function => {},
+            .array => {
+                for (0..expr.operands.len) |idx| {
+                    expr.operands[idx] = self.traverseExpr(expr.operands[idx]);
+                }
+            },
+            .function => {
+                if (expr.operands.len > 2) {
+                    for (2..expr.operands.len) |idx| {
+                        expr.operands[idx] = self.traverseExpr(expr.operands[idx]);
+                    }
+                }
+            },
         }
 
         return expr_idx;

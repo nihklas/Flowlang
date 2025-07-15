@@ -8,14 +8,15 @@
 1 == 2;
 1 != 1;
 1 != 2;
-// const str = "Hallo";
-// const test = 1 + 2 + 4 + 8 * 3 - 12; // 19
-// const test_str = str . " Welt"; // Hallo Welt
-// const another = test + 67; // 86
-// const even_more = "Some String: " . (10 + 15 - 5) * 20; // 400
-//
-// print(str);
-// print(test);
-// print(test_str);
-// print(another);
-// print(even_more);
+
+const str = "Hallo";
+const test = 1 + 2 + 4 + 8 * 3 - 12; // 19
+const test_str = str . " Welt"; // Hallo Welt
+const another = test + 67; // 86
+const even_more = "Some String: " . (10 + 15 - 5) * 20; // 400
+
+print(str);
+print(test);
+print(test_str);
+print(another);
+print(even_more);
