@@ -85,7 +85,7 @@ const CompilerOptions = struct {
         run_mode: RunMode = .loop,
     } = .{},
 };
-const RunMode = enum { loop, @"switch" };
+const RunMode = enum { loop, @"switch", jumpTable };
 
 pub fn buildCompiler(flow_builder: *Build, compile_options: CompilerOptions) *Compile {
     const shared = buildShared(flow_builder, compile_options);

@@ -1,6 +1,6 @@
 const MAX_BENCH_SIZE = 1024 * 1024 * 1024; // 1 MB
 /// How many times should a single benchmark be ran
-const RUN_COUNT = 10;
+const RUN_COUNT = 20;
 
 const Options = struct {
     small_output: bool,

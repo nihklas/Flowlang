@@ -40,6 +40,7 @@ pub fn run(self: *VM) void {
     switch (comptime @import("vm_options").run_mode) {
         .loop => self.runWhileSwitch(),
         .@"switch" => self.runSwitchContinue(),
+        .jumpTable => self.runJumpTable(),
     }
 }
 
@@ -86,13 +87,32 @@ fn loadConstants(self: *VM) void {
 fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
         switch (self.instruction()) {
-            .true => self.push(.{ .bool = true }),
-            .false => self.push(.{ .bool = false }),
-            .null => self.push(.null),
-            .pop => _ = self.pop(),
-            .add_i, .sub_i, .mul_i, .div_i, .mod_i => |op| self.arithmeticInt(op),
-            .add_f, .sub_f, .mul_f, .div_f, .mod_f => |op| self.arithmeticFloat(op),
-            .lower, .lower_equal, .greater, .greater_equal => |op| self.comparison(op),
+            .true => self.pushTrue(),
+            .false => self.pushFalse(),
+            .null => self.pushNull(),
+            .pop => self.popSilent(),
+
+            .add_i => self.addInt(),
+            .sub_i => self.subInt(),
+            .mul_i => self.mulInt(),
+            .div_i => self.divInt(),
+            .mod_i => self.modInt(),
+
+            .add_f => self.addFloat(),
+            .sub_f => self.subFloat(),
+            .mul_f => self.mulFloat(),
+            .div_f => self.divFloat(),
+            .mod_f => self.modFloat(),
+
+            .equal => self.equal(),
+            .unequal => self.unequal(),
+
+            .greater => self.greater(),
+            .greater_equal => self.greaterEqual(),
+
+            .lower => self.lower(),
+            .lower_equal => self.lowerEqual(),
+
             .concat => self.concat(),
             .array => self.array(),
             .clone => self.clone(),
@@ -102,8 +122,6 @@ fn runWhileSwitch(self: *VM) void {
             .negate_i => self.negateInt(),
             .negate_f => self.negateFloat(),
             .not => self.not(),
-            .equal => self.equal(),
-            .unequal => self.unequal(),
             .get_builtin => self.getBuiltin(),
             .get_global => self.getGlobal(),
             .set_global => self.setGlobal(),
@@ -120,12 +138,12 @@ fn runWhileSwitch(self: *VM) void {
             .function => self.function(),
             .eof => break,
 
-            .string,
+            inline .string,
             .string_long,
             .integer,
             .float,
             .constants_done,
-            => unreachable,
+            => self.illegalInstruction(),
         }
     }
 }
@@ -133,35 +151,87 @@ fn runWhileSwitch(self: *VM) void {
 fn runSwitchContinue(self: *VM) void {
     loop: switch (self.instruction()) {
         .true => {
-            self.push(.{ .bool = true });
+            self.pushTrue();
             continue :loop self.instruction();
         },
         .false => {
-            self.push(.{ .bool = false });
+            self.pushFalse();
             continue :loop self.instruction();
         },
         .null => {
-            self.push(.null);
+            self.pushNull();
             continue :loop self.instruction();
         },
         .pop => {
-            _ = self.pop();
+            self.popSilent();
             continue :loop self.instruction();
         },
-        .add_i, .sub_i, .mul_i, .div_i, .mod_i => |op| {
-            self.arithmeticInt(op);
+        .add_i => {
+            self.addInt();
             continue :loop self.instruction();
         },
-        .add_f, .sub_f, .mul_f, .div_f, .mod_f => |op| {
-            self.arithmeticFloat(op);
+        .sub_i => {
+            self.subInt();
+            continue :loop self.instruction();
+        },
+        .mul_i => {
+            self.mulInt();
+            continue :loop self.instruction();
+        },
+        .div_i => {
+            self.divInt();
+            continue :loop self.instruction();
+        },
+        .mod_i => {
+            self.modInt();
+            continue :loop self.instruction();
+        },
+        .add_f => {
+            self.addFloat();
+            continue :loop self.instruction();
+        },
+        .sub_f => {
+            self.subFloat();
+            continue :loop self.instruction();
+        },
+        .mul_f => {
+            self.mulFloat();
+            continue :loop self.instruction();
+        },
+        .div_f => {
+            self.divFloat();
+            continue :loop self.instruction();
+        },
+        .mod_f => {
+            self.modFloat();
+            continue :loop self.instruction();
+        },
+        .equal => {
+            self.equal();
+            continue :loop self.instruction();
+        },
+        .unequal => {
+            self.unequal();
+            continue :loop self.instruction();
+        },
+        .greater => {
+            self.greater();
+            continue :loop self.instruction();
+        },
+        .greater_equal => {
+            self.greaterEqual();
+            continue :loop self.instruction();
+        },
+        .lower => {
+            self.lower();
+            continue :loop self.instruction();
+        },
+        .lower_equal => {
+            self.lowerEqual();
             continue :loop self.instruction();
         },
         .concat => {
             self.concat();
-            continue :loop self.instruction();
-        },
-        .lower, .lower_equal, .greater, .greater_equal => |op| {
-            self.comparison(op);
             continue :loop self.instruction();
         },
         .array => {
@@ -194,14 +264,6 @@ fn runSwitchContinue(self: *VM) void {
         },
         .not => {
             self.not();
-            continue :loop self.instruction();
-        },
-        .equal => {
-            self.equal();
-            continue :loop self.instruction();
-        },
-        .unequal => {
-            self.unequal();
             continue :loop self.instruction();
         },
         .get_builtin => {
@@ -262,16 +324,219 @@ fn runSwitchContinue(self: *VM) void {
         },
         .eof => {},
 
-        .string,
+        inline .string,
         .string_long,
         .integer,
         .float,
         .constants_done,
-        => unreachable,
+        => self.illegalInstruction(),
     }
 }
 
-inline fn concat(self: *VM) void {
+fn runJumpTable(self: *VM) void {
+    const table: []const *const fn (*VM) void = &.{
+        pushTrue,
+        pushFalse,
+        pushNull,
+
+        array,
+        index,
+        illegalInstruction, // integer
+        illegalInstruction, // float
+        illegalInstruction, // string
+        illegalInstruction, // string_long
+
+        popSilent,
+        constant,
+
+        negateInt,
+        negateFloat,
+        not,
+
+        concat,
+
+        addInt,
+        subInt,
+        divInt,
+        mulInt,
+        modInt,
+
+        addFloat,
+        subFloat,
+        divFloat,
+        mulFloat,
+        modFloat,
+
+        equal,
+        unequal,
+        greater,
+        greaterEqual,
+        lower,
+        lowerEqual,
+
+        getGlobal,
+        setGlobal,
+        setGlobalArray,
+
+        getLocal,
+        setLocal,
+        setLocalArray,
+
+        append,
+        clone,
+
+        function,
+        getBuiltin,
+        call,
+        returnInstr,
+
+        jump,
+        jumpBack,
+        jumpIfTrue,
+        jumpIfFalse,
+
+        illegalInstruction,
+        noop,
+    };
+
+    while (true) {
+        table[self.instructionNumber()](self);
+        if (self.ip >= self.code.len) {
+            @branchHint(.unlikely);
+            break;
+        }
+    }
+}
+
+fn noop(_: *VM) void {}
+
+fn illegalInstruction(_: *VM) void {
+    @branchHint(.cold);
+    @panic("Illegal Instruction");
+}
+
+fn pushTrue(self: *VM) void {
+    self.push(.{ .bool = true });
+}
+
+fn pushFalse(self: *VM) void {
+    self.push(.{ .bool = false });
+}
+
+fn pushNull(self: *VM) void {
+    self.push(.null);
+}
+
+fn popSilent(self: *VM) void {
+    _ = self.pop();
+}
+
+fn addInt(self: *VM) void {
+    const rhs = self.pop().int;
+    const lhs = self.pop().int;
+    self.push(.{ .int = lhs + rhs });
+}
+fn subInt(self: *VM) void {
+    const rhs = self.pop().int;
+    const lhs = self.pop().int;
+    self.push(.{ .int = lhs - rhs });
+}
+fn mulInt(self: *VM) void {
+    const rhs = self.pop().int;
+    const lhs = self.pop().int;
+    self.push(.{ .int = lhs * rhs });
+}
+fn divInt(self: *VM) void {
+    const rhs = self.pop().int;
+    const lhs = self.pop().int;
+    self.push(.{ .int = @divTrunc(lhs, rhs) });
+}
+fn modInt(self: *VM) void {
+    const rhs = self.pop().int;
+    const lhs = self.pop().int;
+    self.push(.{ .int = @mod(lhs, rhs) });
+}
+
+fn addFloat(self: *VM) void {
+    const rhs = self.pop().float;
+    const lhs = self.pop().float;
+    self.push(.{ .float = lhs + rhs });
+}
+fn subFloat(self: *VM) void {
+    const rhs = self.pop().float;
+    const lhs = self.pop().float;
+    self.push(.{ .float = lhs - rhs });
+}
+fn mulFloat(self: *VM) void {
+    const rhs = self.pop().float;
+    const lhs = self.pop().float;
+    self.push(.{ .float = lhs * rhs });
+}
+fn divFloat(self: *VM) void {
+    const rhs = self.pop().float;
+    const lhs = self.pop().float;
+    self.push(.{ .float = @divTrunc(lhs, rhs) });
+}
+fn modFloat(self: *VM) void {
+    const rhs = self.pop().float;
+    const lhs = self.pop().float;
+    self.push(.{ .float = @mod(lhs, rhs) });
+}
+
+fn lower(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+
+    const is_float = lhs == .float or rhs == .float;
+    const res = blk: {
+        if (is_float) {
+            break :blk lhs.float < rhs.float;
+        }
+        break :blk lhs.int < rhs.int;
+    };
+    self.push(.{ .bool = res });
+}
+fn lowerEqual(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+
+    const is_float = lhs == .float or rhs == .float;
+    const res = blk: {
+        if (is_float) {
+            break :blk lhs.float <= rhs.float;
+        }
+        break :blk lhs.int <= rhs.int;
+    };
+    self.push(.{ .bool = res });
+}
+fn greater(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+
+    const is_float = lhs == .float or rhs == .float;
+    const res = blk: {
+        if (is_float) {
+            break :blk lhs.float > rhs.float;
+        }
+        break :blk lhs.int > rhs.int;
+    };
+    self.push(.{ .bool = res });
+}
+fn greaterEqual(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+
+    const is_float = lhs == .float or rhs == .float;
+    const res = blk: {
+        if (is_float) {
+            break :blk lhs.float >= rhs.float;
+        }
+        break :blk lhs.int >= rhs.int;
+    };
+    self.push(.{ .bool = res });
+}
+
+fn concat(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
 
@@ -279,75 +544,7 @@ inline fn concat(self: *VM) void {
     self.push(.{ .string = result });
 }
 
-inline fn arithmeticInt(self: *VM, op: OpCode) void {
-    const rhs = self.pop();
-    const lhs = self.pop();
-
-    const right: Integer = rhs.int;
-    const left: Integer = lhs.int;
-
-    const result: FlowValue = switch (op) {
-        .add_i => .{ .int = left + right },
-        .sub_i => .{ .int = left - right },
-        .mul_i => .{ .int = left * right },
-        .div_i => .{ .int = @divTrunc(left, right) },
-        .mod_i => .{ .int = @mod(left, right) },
-        else => unreachable,
-    };
-
-    self.push(result);
-}
-
-inline fn arithmeticFloat(self: *VM, op: OpCode) void {
-    const rhs = self.pop();
-    const lhs = self.pop();
-
-    const right: Float = rhs.float;
-    const left: Float = lhs.float;
-
-    const result: FlowValue = switch (op) {
-        .add_f => .{ .float = left + right },
-        .sub_f => .{ .float = left - right },
-        .mul_f => .{ .float = left * right },
-        .div_f => .{ .float = left / right },
-        .mod_f => .{ .float = @mod(left, right) },
-        else => unreachable,
-    };
-
-    self.push(result);
-}
-
-inline fn comparison(self: *VM, op: OpCode) void {
-    const rhs = self.pop();
-    const lhs = self.pop();
-
-    const is_float = rhs == .float or lhs == .float;
-    if (is_float) {
-        const right: Float = if (rhs == .float) rhs.float else @floatFromInt(rhs.int);
-        const left: Float = if (lhs == .float) lhs.float else @floatFromInt(lhs.int);
-
-        switch (op) {
-            .lower => self.push(.{ .bool = left < right }),
-            .lower_equal => self.push(.{ .bool = left <= right }),
-            .greater => self.push(.{ .bool = left > right }),
-            .greater_equal => self.push(.{ .bool = left >= right }),
-            else => unreachable,
-        }
-        return;
-    }
-
-    const left = lhs.int;
-    const right = rhs.int;
-    switch (op) {
-        .lower => self.push(.{ .bool = left < right }),
-        .lower_equal => self.push(.{ .bool = left <= right }),
-        .greater => self.push(.{ .bool = left > right }),
-        .greater_equal => self.push(.{ .bool = left >= right }),
-        else => unreachable,
-    }
-}
-
-inline fn array(self: *VM) void {
+fn array(self: *VM) void {
     const len = self.byte();
     const cap = std.math.ceilPowerOfTwoAssert(usize, if (len == 0) 1 else len);
     const items = self.gc.alloc(FlowValue, cap) catch oom();
@@ -361,12 +558,12 @@ inline fn array(self: *VM) void {
     self.push(.{ .array = arr });
 }
 
-inline fn clone(self: *VM) void {
+fn clone(self: *VM) void {
     const value = self.pop();
     self.push(value.clone(self.gc));
 }
 
-inline fn index(self: *VM) void {
+fn index(self: *VM) void {
     const idx = self.pop().int;
     const arr = self.pop().array;
     if (idx < 0) {
@@ -379,7 +576,7 @@ inline fn index(self: *VM) void {
     self.push(arr.items[@intCast(idx)]);
 }
 
-inline fn append(self: *VM) void {
+fn append(self: *VM) void {
     const value = self.pop();
     var arr = &self.value_stack.stack[self.value_stack.stack_top - 1];
 
@@ -397,54 +594,54 @@ inline fn append(self: *VM) void {
     }
 }
 
-inline fn constant(self: *VM) void {
+fn constant(self: *VM) void {
     const c = self.constants[self.byte()];
     self.push(c);
 }
 
-inline fn negateInt(self: *VM) void {
+fn negateInt(self: *VM) void {
     const value = self.pop();
     const negated: FlowValue = .{ .int = -value.int };
     self.push(negated);
 }
 
-inline fn negateFloat(self: *VM) void {
+fn negateFloat(self: *VM) void {
     const value = self.pop();
     const negated: FlowValue = .{ .float = -value.float };
     self.push(negated);
 }
 
-inline fn not(self: *VM) void {
+fn not(self: *VM) void {
     const value = self.pop();
     self.push(.{ .bool = !value.isTrue() });
 }
 
-inline fn equal(self: *VM) void {
+fn equal(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
     const res = lhs.equals(&rhs);
     self.push(.{ .bool = res });
 }
 
-inline fn unequal(self: *VM) void {
+fn unequal(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
     const res = lhs.equals(&rhs);
     self.push(.{ .bool = !res });
 }
 
-inline fn getBuiltin(self: *VM) void {
+fn getBuiltin(self: *VM) void {
     const name = self.pop();
     self.push(.{ .builtin_fn = builtins.get(name.string).? });
 }
 
-inline fn getGlobal(self: *VM) void {
+fn getGlobal(self: *VM) void {
     const idx = self.byte();
     const value = self.globals[idx];
     self.push(value);
 }
 
-inline fn setGlobal(self: *VM) void {
+fn setGlobal(self: *VM) void {
     const idx = self.byte();
     const value = self.value_stack.at(0);
     self.globals[idx] = value;
@@ -454,7 +651,7 @@ inline fn setGlobal(self: *VM) void {
     }
 }
 
-inline fn setGlobalArray(self: *VM) void {
+fn setGlobalArray(self: *VM) void {
     const global_idx = self.byte();
     const index_amount = self.byte();
     assert(index_amount > 0);
@@ -477,21 +674,21 @@ inline fn setGlobalArray(self: *VM) void {
     arr.array.items[@intCast(last_idx)] = self.value_stack.at(0);
 }
 
-inline fn getLocal(self: *VM) void {
+fn getLocal(self: *VM) void {
     const idx = self.byte();
     const frame = self.call_stack.at(0);
     const value = self.value_stack.stack[frame.stack_bottom + idx];
     self.push(value);
 }
 
-inline fn setLocal(self: *VM) void {
+fn setLocal(self: *VM) void {
     const idx = self.byte();
     const value = self.value_stack.at(0);
     const frame = self.call_stack.at(0);
     self.value_stack.stack[frame.stack_bottom + idx] = value;
 }
 
-inline fn setLocalArray(self: *VM) void {
+fn setLocalArray(self: *VM) void {
     const local_idx = self.byte();
     const index_amount = self.byte();
     assert(index_amount > 0);
@@ -515,29 +712,29 @@ inline fn setLocalArray(self: *VM) void {
     arr.array.items[@intCast(last_idx)] = self.value_stack.at(0);
 }
 
-inline fn jump(self: *VM) void {
+fn jump(self: *VM) void {
     const distance = self.short();
     self.ip += distance;
 }
 
-inline fn jumpBack(self: *VM) void {
+fn jumpBack(self: *VM) void {
     const distance = self.short();
     self.ip -= distance;
 }
 
-inline fn jumpIfTrue(self: *VM) void {
+fn jumpIfTrue(self: *VM) void {
     const distance = self.short();
     const value = self.value_stack.at(0);
     self.ip += distance * @intFromBool(value.isTrue());
 }
 
-inline fn jumpIfFalse(self: *VM) void {
+fn jumpIfFalse(self: *VM) void {
     const distance = self.short();
     const value = self.value_stack.at(0);
     self.ip += distance * @intFromBool(!value.isTrue());
 }
 
-inline fn call(self: *VM) void {
+fn call(self: *VM) void {
     const value = self.pop();
     switch (value) {
         .builtin_fn => self.callBuiltin(value),
@@ -546,7 +743,7 @@ inline fn call(self: *VM) void {
     }
 }
 
-inline fn callBuiltin(self: *VM, value: FlowValue) void {
+fn callBuiltin(self: *VM, value: FlowValue) void {
     const arg_count = value.builtin_fn.arg_types.len;
     const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
 
@@ -563,7 +760,7 @@ inline fn callBuiltin(self: *VM, value: FlowValue) void {
     self.push(result);
 }
 
-inline fn callFlowFunction(self: *VM, value: FlowValue) void {
+fn callFlowFunction(self: *VM, value: FlowValue) void {
     const arg_count = value.function.arg_count;
     const stack_bottom = self.value_stack.stack_top - arg_count;
     self.call_stack.push(.{
@@ -576,7 +773,7 @@ inline fn callFlowFunction(self: *VM, value: FlowValue) void {
     self.ip = value.function.start_ip;
 }
 
-inline fn returnInstr(self: *VM) void {
+fn returnInstr(self: *VM) void {
     const ret_value = self.pop();
     const frame = self.call_stack.pop();
     self.ip = frame.ret_addr;
@@ -584,7 +781,7 @@ inline fn returnInstr(self: *VM) void {
     self.push(ret_value);
 }
 
-inline fn function(self: *VM) void {
+fn function(self: *VM) void {
     const argc = self.byte();
     const closed_values_count = self.byte();
     const end = self.short();
@@ -605,17 +802,17 @@ inline fn function(self: *VM) void {
     self.ip += end - 1;
 }
 
-inline fn push(self: *VM, value: FlowValue) void {
+fn push(self: *VM, value: FlowValue) void {
     self.value_stack.push(value);
 }
 
-inline fn pop(self: *VM) FlowValue {
+fn pop(self: *VM) FlowValue {
     return self.value_stack.pop();
 }
 
-inline fn instruction(self: *VM) OpCode {
-    const op: OpCode = @enumFromInt(self.code[self.ip]);
+fn instruction(self: *VM) OpCode {
     defer self.ip += 1;
+    const op: OpCode = @enumFromInt(self.code[self.ip]);
 
     if (comptime debug_options.stack) {
         self.value_stack.dump();
@@ -627,11 +824,16 @@ inline fn instruction(self: *VM) OpCode {
     return op;
 }
 
-inline fn short(self: *VM) u16 {
+fn instructionNumber(self: *VM) u8 {
+    defer self.ip += 1;
+    return self.code[self.ip];
+}
+
+fn short(self: *VM) u16 {
     return std.mem.bytesToValue(u16, &.{ self.byte(), self.byte() });
 }
 
-inline fn byte(self: *VM) u8 {
+fn byte(self: *VM) u8 {
     defer self.ip += 1;
     return self.code[self.ip];
 }
