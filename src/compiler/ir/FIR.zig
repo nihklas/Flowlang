@@ -577,8 +577,9 @@ fn traverseExpr(self: *FIR, expr: *const ast.Expr) usize {
             }
 
             var maybe_body = self.traverseBlock(function.body);
-            if (maybe_body) |body| {
-                if (self.nodes.items[body].kind != .@"return") {
+
+            {
+                if (maybe_body == null or self.nodes.items[maybe_body.?].kind != .@"return") {
                     const ret_expr = self.addExpr(.{ .op = .null, .type = .null });
                     self.nodes.append(self.alloc, .{ .kind = .@"return", .index = ret_expr }) catch oom();
                     self.patchNodesTogether(&maybe_body, self.nodes.items.len - 1);
