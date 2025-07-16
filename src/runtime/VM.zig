@@ -37,7 +37,7 @@ pub fn run(self: *VM) void {
         .ret_addr = self.ip,
     });
 
-    switch (@import("vm_options").run_mode) {
+    switch (comptime @import("vm_options").run_mode) {
         .loop => self.runWhileSwitch(),
         .@"switch" => self.runSwitchContinue(),
     }
