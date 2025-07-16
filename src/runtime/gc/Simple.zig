@@ -2,7 +2,6 @@ child_alloc: Allocator,
 vtable: std.mem.Allocator.VTable,
 managed_objects: std.AutoHashMapUnmanaged(usize, ManagedObject),
 vm: *VM,
-initialized: bool,
 next_gc: usize,
 bytes_allocated: usize,
 enabled: bool,
@@ -10,7 +9,6 @@ enabled: bool,
 pub const pre_init: GC = .{
     .managed_objects = .empty,
     .vm = undefined,
-    .initialized = false,
     .child_alloc = undefined,
     .bytes_allocated = 0,
     .next_gc = initial_gc_theshold,
@@ -26,16 +24,11 @@ pub const pre_init: GC = .{
 pub fn init(self: *GC, child_alloc: Allocator, vm: *VM) void {
     self.child_alloc = child_alloc;
     self.vm = vm;
-    self.initialized = true;
     // TODO: add compiler option to start managed_objects with initialCapacity
 }
 
 /// Frees all still managed objects
 pub fn deinit(self: *GC) void {
-    if (!self.initialized) {
-        @panic("GC was never initialized");
-    }
-
     if (comptime trace) {
         std.debug.print("[DEBUG] Deinit GC, freeing all managed objects\n", .{});
     }
@@ -66,7 +59,6 @@ pub fn allocator(self: *GC) Allocator {
 
 pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize) ?[*]u8 {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    assert(self.initialized);
 
     self.gc();
 
@@ -96,7 +88,6 @@ pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize)
 
 pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, ret_addr: usize) bool {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    assert(self.initialized);
 
     const old_len = buf.len;
 
@@ -126,7 +117,6 @@ pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, 
 
 pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    assert(self.initialized);
 
     const old_len = buf.len;
 
@@ -160,7 +150,6 @@ pub fn remap(ctx: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, r
 
 pub fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) void {
     const self: *GC = @ptrCast(@alignCast(ctx));
-    assert(self.initialized);
 
     if (comptime trace) {
         std.debug.print("[DEBUG] free {d} bytes at {*}\n", .{ buf.len, buf.ptr });
