@@ -1,0 +1,7 @@
+function_calls.flow: 305.44925ms
+int_to_string.flow: 6.13158ms
+addition_loop.flow: 300.84908ms
+fibonacci.flow: 83.19596ms
+closure.flow: 323.44183ms
+append.flow: 336.37875ms
+strings.flow: 8.13733ms

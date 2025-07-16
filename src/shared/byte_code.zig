@@ -37,10 +37,16 @@ pub const OpCode = enum(u8) {
 
     equal,
     unequal,
-    greater,
-    greater_equal,
-    lower,
-    lower_equal,
+
+    greater_i,
+    greater_equal_i,
+    lower_i,
+    lower_equal_i,
+
+    greater_f,
+    greater_equal_f,
+    lower_f,
+    lower_equal_f,
 
     // variables
     get_global,

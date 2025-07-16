@@ -318,13 +318,15 @@ fn compileBinary(self: *Compiler, expr: FIR.Node.Expr) void {
         else => {},
     }
 
+    const operands_type = self.fir.exprs.items[expr.operands[0]].type;
+
     switch (expr.op) {
         .equal => self.emitOpcode(.equal),
         .unequal => self.emitOpcode(.unequal),
-        .less => self.emitOpcode(.lower),
-        .less_equal => self.emitOpcode(.lower_equal),
-        .greater => self.emitOpcode(.greater),
-        .greater_equal => self.emitOpcode(.greater_equal),
+        .less => self.emitOpcode(if (operands_type.isPrimitive(.int)) .lower_i else .lower_f),
+        .less_equal => self.emitOpcode(if (operands_type.isPrimitive(.int)) .lower_equal_i else .lower_equal_f),
+        .greater => self.emitOpcode(if (operands_type.isPrimitive(.int)) .greater_i else .greater_f),
+        .greater_equal => self.emitOpcode(if (operands_type.isPrimitive(.int)) .greater_equal_i else .greater_equal_f),
         .concat => self.emitOpcode(.concat),
         .add => self.emitOpcode(if (expr.type.isPrimitive(.int)) .add_i else .add_f),
         .sub => self.emitOpcode(if (expr.type.isPrimitive(.int)) .sub_i else .sub_f),

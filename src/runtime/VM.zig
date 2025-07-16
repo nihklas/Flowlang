@@ -107,11 +107,15 @@ fn runWhileSwitch(self: *VM) void {
             .equal => self.equal(),
             .unequal => self.unequal(),
 
-            .greater => self.greater(),
-            .greater_equal => self.greaterEqual(),
+            .greater_i => self.greaterInt(),
+            .greater_equal_i => self.greaterEqualInt(),
+            .lower_i => self.lowerInt(),
+            .lower_equal_i => self.lowerEqualInt(),
 
-            .lower => self.lower(),
-            .lower_equal => self.lowerEqual(),
+            .greater_f => self.greaterFloat(),
+            .greater_equal_f => self.greaterEqualFloat(),
+            .lower_f => self.lowerFloat(),
+            .lower_equal_f => self.lowerEqualFloat(),
 
             .concat => self.concat(),
             .array => self.array(),
@@ -214,20 +218,36 @@ fn runSwitchContinue(self: *VM) void {
             self.unequal();
             continue :loop self.instruction();
         },
-        .greater => {
-            self.greater();
+        .greater_i => {
+            self.greaterInt();
             continue :loop self.instruction();
         },
-        .greater_equal => {
-            self.greaterEqual();
+        .greater_equal_i => {
+            self.greaterEqualInt();
             continue :loop self.instruction();
         },
-        .lower => {
-            self.lower();
+        .lower_i => {
+            self.lowerInt();
             continue :loop self.instruction();
         },
-        .lower_equal => {
-            self.lowerEqual();
+        .lower_equal_i => {
+            self.lowerEqualInt();
+            continue :loop self.instruction();
+        },
+        .greater_f => {
+            self.greaterFloat();
+            continue :loop self.instruction();
+        },
+        .greater_equal_f => {
+            self.greaterEqualFloat();
+            continue :loop self.instruction();
+        },
+        .lower_f => {
+            self.lowerFloat();
+            continue :loop self.instruction();
+        },
+        .lower_equal_f => {
+            self.lowerEqualFloat();
             continue :loop self.instruction();
         },
         .concat => {
@@ -369,10 +389,16 @@ fn runJumpTable(self: *VM) void {
 
         equal,
         unequal,
-        greater,
-        greaterEqual,
-        lower,
-        lowerEqual,
+
+        greaterInt,
+        greaterEqualInt,
+        lowerInt,
+        lowerEqualInt,
+
+        greaterFloat,
+        greaterEqualFloat,
+        lowerFloat,
+        lowerEqualFloat,
 
         getGlobal,
         setGlobal,
@@ -483,57 +509,45 @@ fn modFloat(self: *VM) void {
     self.push(.{ .float = @mod(lhs, rhs) });
 }
 
-fn lower(self: *VM) void {
+fn lowerInt(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
-
-    const is_float = lhs == .float or rhs == .float;
-    const res = blk: {
-        if (is_float) {
-            break :blk lhs.float < rhs.float;
-        }
-        break :blk lhs.int < rhs.int;
-    };
-    self.push(.{ .bool = res });
+    self.push(.{ .bool = lhs.int < rhs.int });
 }
-fn lowerEqual(self: *VM) void {
+fn lowerEqualInt(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
-
-    const is_float = lhs == .float or rhs == .float;
-    const res = blk: {
-        if (is_float) {
-            break :blk lhs.float <= rhs.float;
-        }
-        break :blk lhs.int <= rhs.int;
-    };
-    self.push(.{ .bool = res });
+    self.push(.{ .bool = lhs.int <= rhs.int });
 }
-fn greater(self: *VM) void {
+fn greaterInt(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
-
-    const is_float = lhs == .float or rhs == .float;
-    const res = blk: {
-        if (is_float) {
-            break :blk lhs.float > rhs.float;
-        }
-        break :blk lhs.int > rhs.int;
-    };
-    self.push(.{ .bool = res });
+    self.push(.{ .bool = lhs.int > rhs.int });
 }
-fn greaterEqual(self: *VM) void {
+fn greaterEqualInt(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
-
-    const is_float = lhs == .float or rhs == .float;
-    const res = blk: {
-        if (is_float) {
-            break :blk lhs.float >= rhs.float;
-        }
-        break :blk lhs.int >= rhs.int;
-    };
-    self.push(.{ .bool = res });
+    self.push(.{ .bool = lhs.int >= rhs.int });
+}
+fn lowerFloat(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+    self.push(.{ .bool = lhs.float < rhs.float });
+}
+fn lowerEqualFloat(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+    self.push(.{ .bool = lhs.float <= rhs.float });
+}
+fn greaterFloat(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+    self.push(.{ .bool = lhs.float > rhs.float });
+}
+fn greaterEqualFloat(self: *VM) void {
+    const rhs = self.pop();
+    const lhs = self.pop();
+    self.push(.{ .bool = lhs.float >= rhs.float });
 }
 
 fn concat(self: *VM) void {
