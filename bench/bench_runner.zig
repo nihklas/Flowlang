@@ -125,12 +125,13 @@ fn runSingleBenchmark(alloc: std.mem.Allocator, bench_path: []const u8, compiler
 
     std.mem.sort(u64, &times, .{}, lessThan);
 
+    const factor: u64, const time_notation = getFactorAndNotation(times[0]);
+
     if (options.small_output) {
-        printStdOut("{s}: {d}\n", .{ basename, total_time / times.len });
+        const median = calcTiming(times[times.len / 2], factor);
+        printStdOut("{s}: {d:.5}{s}\n", .{ basename, median, time_notation });
         return;
     }
-
-    const factor: u64, const time_notation = getFactorAndNotation(times[0]);
 
     const average = calcTiming(total_time / times.len, factor);
     const median = calcTiming(times[times.len / 2], factor);

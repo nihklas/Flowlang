@@ -85,16 +85,15 @@ fn loadConstants(self: *VM) void {
 
 fn runWhileSwitch(self: *VM) void {
     while (self.ip < self.code.len) {
-        const op = self.instruction();
-        switch (op) {
+        switch (self.instruction()) {
             .true => self.push(.{ .bool = true }),
             .false => self.push(.{ .bool = false }),
             .null => self.push(.null),
             .pop => _ = self.pop(),
-            .add_i, .sub_i, .mul_i, .div_i, .mod_i => self.arithmeticInt(op),
-            .add_f, .sub_f, .mul_f, .div_f, .mod_f => self.arithmeticFloat(op),
+            .add_i, .sub_i, .mul_i, .div_i, .mod_i => |op| self.arithmeticInt(op),
+            .add_f, .sub_f, .mul_f, .div_f, .mod_f => |op| self.arithmeticFloat(op),
+            .lower, .lower_equal, .greater, .greater_equal => |op| self.comparison(op),
             .concat => self.concat(),
-            .lower, .lower_equal, .greater, .greater_equal => self.comparison(op),
             .array => self.array(),
             .clone => self.clone(),
             .index => self.index(),
@@ -126,7 +125,7 @@ fn runWhileSwitch(self: *VM) void {
             .integer,
             .float,
             .constants_done,
-            => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
+            => unreachable,
         }
     }
 }
@@ -268,7 +267,7 @@ fn runSwitchContinue(self: *VM) void {
         .integer,
         .float,
         .constants_done,
-        => |op| panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
+        => unreachable,
     }
 }
 
@@ -371,8 +370,10 @@ inline fn index(self: *VM) void {
     const idx = self.pop().int;
     const arr = self.pop().array;
     if (idx < 0) {
+        @branchHint(.unlikely);
         std.debug.panic("IndexUnderflow: {d}\n", .{idx});
     } else if (idx > arr.len) {
+        @branchHint(.unlikely);
         std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, arr.len });
     }
     self.push(arr.items[@intCast(idx)]);
@@ -463,8 +464,10 @@ inline fn setGlobalArray(self: *VM) void {
     for (0..index_amount - 1) |_| {
         const idx = self.pop().int;
         if (idx < 0) {
+            @branchHint(.unlikely);
             std.debug.panic("IndexUnderflow: {d}\n", .{idx});
         } else if (idx > arr.array.len) {
+            @branchHint(.unlikely);
             std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, arr.array.len });
         }
         arr = arr.array.items[@intCast(idx)];
@@ -499,8 +502,10 @@ inline fn setLocalArray(self: *VM) void {
     for (0..index_amount - 1) |_| {
         const idx = self.pop().int;
         if (idx < 0) {
+            @branchHint(.unlikely);
             std.debug.panic("IndexUnderflow: {d}\n", .{idx});
         } else if (idx > arr.array.len) {
+            @branchHint(.unlikely);
             std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, arr.array.len });
         }
         arr = arr.array.items[@intCast(idx)];
