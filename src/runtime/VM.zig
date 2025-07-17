@@ -599,8 +599,7 @@ fn append(self: *VM) void {
         arr.array.len += 1;
     } else {
         if (arr.array.cap == 0) arr.array.cap = 1;
-        const new_values = self.gc.alloc(FlowValue, arr.array.cap * 2) catch oom();
-        @memcpy(new_values[0..arr.array.len], arr.array.items[0..arr.array.len]);
+        const new_values = self.gc.realloc(arr.array.items[0..arr.array.len], arr.array.cap * 2) catch oom();
         new_values[arr.array.len] = value;
         arr.array.len += 1;
         arr.array.cap *= 2;

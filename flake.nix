@@ -29,6 +29,7 @@
         packages = [
           zls.packages.${system}.default
           pkgs.zig
+          pkgs.valgrind
         ];
       };
 
