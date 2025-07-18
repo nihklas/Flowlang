@@ -4,7 +4,7 @@ gpa: Allocator,
 gc: Allocator,
 code: []const u8,
 ip: usize,
-value_stack: Stack(FlowValue),
+value_stack: Stack(FlowValueRef),
 call_stack: Stack(CallFrame),
 constants: [256]FlowValue,
 globals: [256]FlowValue,
@@ -16,7 +16,7 @@ pub fn init(gpa: Allocator, gc: Allocator, code: []const u8) VM {
         .gc = gc,
         .code = code,
         .ip = 0,
-        .value_stack = .init(gpa.alloc(FlowValue, STACK_SIZE) catch oom()),
+        .value_stack = .init(gpa.alloc(FlowValueRef, STACK_SIZE) catch oom()),
         .call_stack = .init(gpa.alloc(CallFrame, STACK_SIZE) catch oom()),
         .constants = undefined,
         .globals = undefined,
@@ -40,7 +40,6 @@ pub fn run(self: *VM) void {
     switch (comptime @import("vm_options").run_mode) {
         .loop => self.runWhileSwitch(),
         .@"switch" => self.runSwitchContinue(),
-        .jumpTable => self.runJumpTable(),
     }
 }
 
@@ -353,104 +352,21 @@ fn runSwitchContinue(self: *VM) void {
     }
 }
 
-fn runJumpTable(self: *VM) void {
-    const table: []const *const fn (*VM) void = &.{
-        pushTrue,
-        pushFalse,
-        pushNull,
-
-        array,
-        index,
-        illegalInstruction, // integer
-        illegalInstruction, // float
-        illegalInstruction, // string
-        illegalInstruction, // string_long
-
-        popSilent,
-        constant,
-
-        negateInt,
-        negateFloat,
-        not,
-
-        concat,
-
-        addInt,
-        subInt,
-        divInt,
-        mulInt,
-        modInt,
-
-        addFloat,
-        subFloat,
-        divFloat,
-        mulFloat,
-        modFloat,
-
-        equal,
-        unequal,
-
-        greaterInt,
-        greaterEqualInt,
-        lowerInt,
-        lowerEqualInt,
-
-        greaterFloat,
-        greaterEqualFloat,
-        lowerFloat,
-        lowerEqualFloat,
-
-        getGlobal,
-        setGlobal,
-        setGlobalArray,
-
-        getLocal,
-        setLocal,
-        setLocalArray,
-
-        append,
-        clone,
-
-        function,
-        getBuiltin,
-        call,
-        returnInstr,
-
-        jump,
-        jumpBack,
-        jumpIfTrue,
-        jumpIfFalse,
-
-        illegalInstruction,
-        noop,
-    };
-
-    while (true) {
-        table[self.instructionNumber()](self);
-        if (self.ip >= self.code.len) {
-            @branchHint(.unlikely);
-            break;
-        }
-    }
-}
-
-fn noop(_: *VM) void {}
-
-fn illegalInstruction(_: *VM) void {
+fn illegalInstruction(self: *VM) void {
     @branchHint(.cold);
-    @panic("Illegal Instruction");
+    panic("Illegal Instruction at {x:0>4}\n", .{self.ip});
 }
 
 fn pushTrue(self: *VM) void {
-    self.push(.{ .bool = true });
+    self.pushValue(.{ .bool = true });
 }
 
 fn pushFalse(self: *VM) void {
-    self.push(.{ .bool = false });
+    self.pushValue(.{ .bool = false });
 }
 
 fn pushNull(self: *VM) void {
-    self.push(.null);
+    self.pushValue(.null);
 }
 
 fn popSilent(self: *VM) void {
@@ -458,104 +374,104 @@ fn popSilent(self: *VM) void {
 }
 
 fn addInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.int += rhs.int;
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .int = lhs.int + rhs.int });
 }
 fn subInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.int -= rhs.int;
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .int = lhs.int - rhs.int });
 }
 fn mulInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.int *= rhs.int;
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .int = lhs.int * rhs.int });
 }
 fn divInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.int = @divTrunc(lhs.int, rhs.int);
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .int = @divTrunc(lhs.int, rhs.int) });
 }
 fn modInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.int = @mod(lhs.int, rhs.int);
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .int = @mod(lhs.int, rhs.int) });
 }
 
 fn addFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.float += rhs.float;
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .float = lhs.float + rhs.float });
 }
 fn subFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.float -= rhs.float;
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .float = lhs.float - rhs.float });
 }
 fn mulFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.float *= rhs.float;
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .float = lhs.float * rhs.float });
 }
 fn divFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.float /= rhs.float;
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .float = lhs.float / rhs.float });
 }
 fn modFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.float = @mod(lhs.float, rhs.float);
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .float = @mod(lhs.float, rhs.float) });
 }
 
 fn lowerInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.int < rhs.int };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.int < rhs.int });
 }
 fn lowerEqualInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.int <= rhs.int };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.int <= rhs.int });
 }
 fn greaterInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.int > rhs.int };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.int > rhs.int });
 }
 fn greaterEqualInt(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.int >= rhs.int };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.int >= rhs.int });
 }
 fn lowerFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.float < rhs.float };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.float < rhs.float });
 }
 fn lowerEqualFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.float <= rhs.float };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.float <= rhs.float });
 }
 fn greaterFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.float > rhs.float };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.float > rhs.float });
 }
 fn greaterEqualFloat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.top();
-    lhs.* = .{ .bool = lhs.float >= rhs.float };
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
+    self.pushValue(.{ .bool = lhs.float >= rhs.float });
 }
 
 fn concat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.pop();
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
 
     const result = std.fmt.allocPrint(self.gc, "{}{}", .{ lhs, rhs }) catch oom();
-    self.push(.{ .string = result });
+    self.pushValue(.{ .string = result });
 }
 
 fn array(self: *VM) void {
@@ -564,22 +480,22 @@ fn array(self: *VM) void {
     const items = self.gc.alloc(FlowValue, cap) catch oom();
     const arr = self.gc.create(definitions.FlowArray) catch oom();
     for (0..len) |i| {
-        items[len - 1 - i] = self.pop();
+        items[len - 1 - i] = self.pop().deref();
     }
     arr.items = items.ptr;
     arr.cap = cap;
     arr.len = len;
-    self.push(.{ .array = arr });
+    self.pushValue(.{ .array = arr });
 }
 
 fn clone(self: *VM) void {
-    const value = self.pop();
-    self.push(value.clone(self.gc));
+    const value = self.pop().deref();
+    self.pushValue(value.clone(self.gc));
 }
 
 fn index(self: *VM) void {
-    const idx = self.pop().int;
-    const arr = self.pop().array;
+    const idx = self.pop().deref().int;
+    const arr = self.pop().deref().array;
     if (idx < 0) {
         @branchHint(.unlikely);
         std.debug.panic("IndexUnderflow: {d}\n", .{idx});
@@ -587,12 +503,12 @@ fn index(self: *VM) void {
         @branchHint(.unlikely);
         std.debug.panic("IndexOverflow: {d}, array len: {d}\n", .{ idx, arr.len });
     }
-    self.push(arr.items[@intCast(idx)]);
+    self.pushValue(arr.items[@intCast(idx)]);
 }
 
 fn append(self: *VM) void {
-    const value = self.pop();
-    var arr = self.top();
+    const value = self.pop().deref();
+    var arr = self.top().deref();
 
     if (arr.array.cap >= arr.array.len + 1) {
         arr.array.items[arr.array.len] = value;
@@ -608,56 +524,55 @@ fn append(self: *VM) void {
 }
 
 fn constant(self: *VM) void {
-    const c = self.constants[self.byte()];
-    self.push(c);
+    self.pushRef(&self.constants[self.byte()]);
 }
 
 fn negateInt(self: *VM) void {
-    const value = self.pop();
+    const value = self.pop().deref();
     const negated: FlowValue = .{ .int = -value.int };
-    self.push(negated);
+    self.pushValue(negated);
 }
 
 fn negateFloat(self: *VM) void {
-    const value = self.pop();
+    const value = self.pop().deref();
     const negated: FlowValue = .{ .float = -value.float };
-    self.push(negated);
+    self.pushValue(negated);
 }
 
 fn not(self: *VM) void {
-    const value = self.pop();
-    self.push(.{ .bool = !value.isTrue() });
+    const value = self.pop().deref();
+    self.pushValue(.{ .bool = !value.isTrue() });
 }
 
 fn equal(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.pop();
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
     const res = lhs.equals(&rhs);
-    self.push(.{ .bool = res });
+    self.pushValue(.{ .bool = res });
 }
 
 fn unequal(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.pop();
+    const rhs = self.pop().deref();
+    const lhs = self.pop().deref();
     const res = lhs.equals(&rhs);
-    self.push(.{ .bool = !res });
+    self.pushValue(.{ .bool = !res });
 }
 
 fn getBuiltin(self: *VM) void {
-    const name = self.pop();
-    self.push(.{ .builtin_fn = builtins.get(name.string).? });
+    const name = self.pop().deref();
+    self.pushValue(.{ .builtin_fn = builtins.get(name.string).? });
 }
 
 fn getGlobal(self: *VM) void {
     const idx = self.byte();
     const value = self.globals[idx];
-    self.push(value);
+    self.pushValue(value);
 }
 
 fn setGlobal(self: *VM) void {
     const idx = self.byte();
-    const value = self.value_stack.at(0);
-    self.globals[idx] = value;
+    const value = self.top();
+    self.globals[idx] = value.deref();
 
     if (self.globals_count <= idx) {
         self.globals_count = idx + 1;
@@ -672,7 +587,7 @@ fn setGlobalArray(self: *VM) void {
     var arr = self.globals[global_idx];
 
     for (0..index_amount - 1) |_| {
-        const idx = self.pop().int;
+        const idx = self.pop().deref().int;
         if (idx < 0) {
             @branchHint(.unlikely);
             std.debug.panic("IndexUnderflow: {d}\n", .{idx});
@@ -683,15 +598,15 @@ fn setGlobalArray(self: *VM) void {
         arr = arr.array.items[@intCast(idx)];
     }
 
-    const last_idx = self.pop().int;
-    arr.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+    const last_idx = self.pop().deref().int;
+    arr.array.items[@intCast(last_idx)] = self.top().deref();
 }
 
 fn getLocal(self: *VM) void {
     const idx = self.byte();
     const frame = self.call_stack.at(0);
     const value = self.value_stack.stack[frame.stack_bottom + idx];
-    self.push(value);
+    self.pushValue(value.deref());
 }
 
 fn setLocal(self: *VM) void {
@@ -707,10 +622,10 @@ fn setLocalArray(self: *VM) void {
     assert(index_amount > 0);
 
     const frame = self.call_stack.at(0);
-    var arr = self.value_stack.stack[frame.stack_bottom + local_idx];
+    var arr = self.value_stack.stack[frame.stack_bottom + local_idx].deref();
 
     for (0..index_amount - 1) |_| {
-        const idx = self.pop().int;
+        const idx = self.pop().deref().int;
         if (idx < 0) {
             @branchHint(.unlikely);
             std.debug.panic("IndexUnderflow: {d}\n", .{idx});
@@ -721,8 +636,8 @@ fn setLocalArray(self: *VM) void {
         arr = arr.array.items[@intCast(idx)];
     }
 
-    const last_idx = self.pop().int;
-    arr.array.items[@intCast(last_idx)] = self.value_stack.at(0);
+    const last_idx = self.pop().deref().int;
+    arr.array.items[@intCast(last_idx)] = self.top().deref();
 }
 
 fn jump(self: *VM) void {
@@ -737,18 +652,18 @@ fn jumpBack(self: *VM) void {
 
 fn jumpIfTrue(self: *VM) void {
     const distance = self.short();
-    const value = self.value_stack.at(0);
+    const value = self.top().deref();
     self.ip += distance * @intFromBool(value.isTrue());
 }
 
 fn jumpIfFalse(self: *VM) void {
     const distance = self.short();
-    const value = self.value_stack.at(0);
+    const value = self.top().deref();
     self.ip += distance * @intFromBool(!value.isTrue());
 }
 
 fn call(self: *VM) void {
-    const value = self.pop();
+    const value = self.pop().deref();
     switch (value) {
         .builtin_fn => self.callBuiltin(value),
         .function => self.callFlowFunction(value),
@@ -758,7 +673,13 @@ fn call(self: *VM) void {
 
 fn callBuiltin(self: *VM, value: FlowValue) void {
     const arg_count = value.builtin_fn.arg_types.len;
-    const args = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
+    const args = self.gpa.alloc(FlowValue, arg_count) catch oom();
+    defer self.gpa.free(args);
+
+    const stack_view = self.value_stack.stack[self.value_stack.stack_top - arg_count .. self.value_stack.stack_top];
+    for (args, stack_view) |*a, v| {
+        a.* = v.deref();
+    }
 
     // NOTE: Running a builtin function should not trigger a GC
     const gc: *GC = @ptrCast(@alignCast(self.gc.ptr));
@@ -770,7 +691,7 @@ fn callBuiltin(self: *VM, value: FlowValue) void {
         _ = self.pop();
     }
 
-    self.push(result);
+    self.pushValue(result);
 }
 
 fn callFlowFunction(self: *VM, value: FlowValue) void {
@@ -781,17 +702,17 @@ fn callFlowFunction(self: *VM, value: FlowValue) void {
         .stack_bottom = stack_bottom,
     });
     for (value.function.closed_values) |closed_value| {
-        self.push(closed_value);
+        self.pushValue(closed_value);
     }
     self.ip = value.function.start_ip;
 }
 
 fn returnInstr(self: *VM) void {
-    const ret_value = self.pop();
+    const ret_value = self.pop().deref();
     const frame = self.call_stack.pop();
     self.ip = frame.ret_addr;
     self.value_stack.stack_top = frame.stack_bottom;
-    self.push(ret_value);
+    self.pushValue(ret_value);
 }
 
 fn function(self: *VM) void {
@@ -801,10 +722,10 @@ fn function(self: *VM) void {
 
     const closed_values = self.gc.alloc(FlowValue, closed_values_count) catch oom();
     for (closed_values) |*value| {
-        value.* = self.pop();
+        value.* = self.pop().deref();
     }
 
-    self.push(.{
+    self.pushValue(.{
         .function = .{
             .arg_count = argc,
             .closed_values = closed_values,
@@ -815,16 +736,20 @@ fn function(self: *VM) void {
     self.ip += end - 1;
 }
 
-fn push(self: *VM, value: FlowValue) void {
-    self.value_stack.push(value);
+fn pushValue(self: *VM, value: FlowValue) void {
+    self.value_stack.push(.{ .direct = value });
 }
 
-fn pop(self: *VM) FlowValue {
+fn pushRef(self: *VM, ref: *FlowValue) void {
+    self.value_stack.push(.{ .pointer = ref });
+}
+
+fn pop(self: *VM) FlowValueRef {
     return self.value_stack.pop();
 }
 
-fn top(self: *VM) *FlowValue {
-    return &self.value_stack.stack[self.value_stack.stack_top - 1];
+fn top(self: *VM) FlowValueRef {
+    return self.value_stack.at(0);
 }
 
 fn instruction(self: *VM) OpCode {
@@ -858,6 +783,25 @@ fn byte(self: *VM) u8 {
 const CallFrame = struct {
     ret_addr: usize,
     stack_bottom: usize,
+};
+
+const FlowValueRef = union(enum) {
+    direct: FlowValue,
+    pointer: *FlowValue,
+
+    pub fn deref(self: FlowValueRef) FlowValue {
+        return switch (self) {
+            .direct => |v| v,
+            .pointer => |p| p.*,
+        };
+    }
+
+    pub fn format(self: FlowValueRef, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (self) {
+            .direct => |v| try writer.print("{}", .{v}),
+            .pointer => |p| try writer.print("{}", .{p.*}),
+        }
+    }
 };
 
 const VM = @This();

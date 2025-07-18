@@ -195,7 +195,7 @@ fn gc(self: *GC) void {
 
 fn mark(self: *GC) void {
     for (self.vm.globals[0..self.vm.globals_count]) |global| self.markFlowValue(global);
-    for (self.vm.value_stack.stack[0..self.vm.value_stack.stack_top]) |value| self.markFlowValue(value);
+    for (self.vm.value_stack.stack[0..self.vm.value_stack.stack_top]) |value| self.markFlowValue(value.deref());
 }
 
 fn markFlowValue(self: *GC, value: FlowValue) void {

@@ -16,7 +16,7 @@ pub fn build(b: *Build) !void {
     const stress_gc = b.option(bool, "gc-stress", "Enable Garbage Collection on every Allocation") orelse false;
     const initial_gc_threshold = b.option(usize, "gc-thresh", "Initial Threshold on which the GC kicks in (bytes)") orelse 1024 * 1024;
     const gc_growth_factor = b.option(u8, "gc-growth", "Factor by which the threshold is determined") orelse 2;
-    const run_mode = b.option(RunMode, "run-mode", "Choose which main-loop strategy the VM uses") orelse .loop;
+    const run_mode = b.option(RunMode, "run-mode", "Choose which main-loop strategy the VM uses") orelse .@"switch";
 
     const compiler = buildCompiler(b, .{
         .target = target,
@@ -84,7 +84,7 @@ const CompilerOptions = struct {
         run_mode: RunMode = .loop,
     } = .{},
 };
-const RunMode = enum { loop, @"switch", jumpTable };
+const RunMode = enum { loop, @"switch" };
 
 pub fn buildCompiler(flow_builder: *Build, compile_options: CompilerOptions) *Compile {
     const shared = buildShared(flow_builder, compile_options);
