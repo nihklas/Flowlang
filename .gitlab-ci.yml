@@ -1,7 +1,6 @@
 stages:
   - build
   - test
-  - benchmark
 
 compile:
   stage: build
@@ -24,17 +23,6 @@ tests:
   script:
     - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
     - nix develop .#pipeline --command bash -c "zig build integration -Dintegration-verbose"
-  cache:
-    key: build-cache
-    paths:
-      - .zig-cache/
-
-bench:
-  stage: benchmark
-  tags:
-    - nix
-  script:
-    - nix develop .#pipeline --command bash -c "zig build benchmark -Dbench-setting=Fast"
   cache:
     key: build-cache
     paths:
