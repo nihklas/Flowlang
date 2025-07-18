@@ -29,8 +29,7 @@
         packages = [
           zls.packages.${system}.default
           pkgs.zig
-          pkgs.valgrind
-        ];
+        ] ++ (if system == "x86_64-linux" then [pkgs.valgrind] else []);
       };
 
       pipeline = pkgs.mkShellNoCC {
