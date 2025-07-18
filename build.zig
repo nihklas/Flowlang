@@ -43,7 +43,6 @@ pub fn build(b: *Build) !void {
     // Integration tests
     @import("tests/integration_tests.zig").addIntegrationTests(b, .{
         .target = target,
-        .optimize = optimize,
         .compiler = compiler,
     });
 

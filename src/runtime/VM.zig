@@ -458,96 +458,96 @@ fn popSilent(self: *VM) void {
 }
 
 fn addInt(self: *VM) void {
-    const rhs = self.pop().int;
-    const lhs = self.pop().int;
-    self.push(.{ .int = lhs + rhs });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.int += rhs.int;
 }
 fn subInt(self: *VM) void {
-    const rhs = self.pop().int;
-    const lhs = self.pop().int;
-    self.push(.{ .int = lhs - rhs });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.int -= rhs.int;
 }
 fn mulInt(self: *VM) void {
-    const rhs = self.pop().int;
-    const lhs = self.pop().int;
-    self.push(.{ .int = lhs * rhs });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.int *= rhs.int;
 }
 fn divInt(self: *VM) void {
-    const rhs = self.pop().int;
-    const lhs = self.pop().int;
-    self.push(.{ .int = @divTrunc(lhs, rhs) });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.int = @divTrunc(lhs.int, rhs.int);
 }
 fn modInt(self: *VM) void {
-    const rhs = self.pop().int;
-    const lhs = self.pop().int;
-    self.push(.{ .int = @mod(lhs, rhs) });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.int = @mod(lhs.int, rhs.int);
 }
 
 fn addFloat(self: *VM) void {
-    const rhs = self.pop().float;
-    const lhs = self.pop().float;
-    self.push(.{ .float = lhs + rhs });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.float += rhs.float;
 }
 fn subFloat(self: *VM) void {
-    const rhs = self.pop().float;
-    const lhs = self.pop().float;
-    self.push(.{ .float = lhs - rhs });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.float -= rhs.float;
 }
 fn mulFloat(self: *VM) void {
-    const rhs = self.pop().float;
-    const lhs = self.pop().float;
-    self.push(.{ .float = lhs * rhs });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.float *= rhs.float;
 }
 fn divFloat(self: *VM) void {
-    const rhs = self.pop().float;
-    const lhs = self.pop().float;
-    self.push(.{ .float = @divTrunc(lhs, rhs) });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.float /= rhs.float;
 }
 fn modFloat(self: *VM) void {
-    const rhs = self.pop().float;
-    const lhs = self.pop().float;
-    self.push(.{ .float = @mod(lhs, rhs) });
+    const rhs = self.pop();
+    const lhs = self.top();
+    lhs.float = @mod(lhs.float, rhs.float);
 }
 
 fn lowerInt(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.int < rhs.int });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.int < rhs.int };
 }
 fn lowerEqualInt(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.int <= rhs.int });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.int <= rhs.int };
 }
 fn greaterInt(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.int > rhs.int });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.int > rhs.int };
 }
 fn greaterEqualInt(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.int >= rhs.int });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.int >= rhs.int };
 }
 fn lowerFloat(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.float < rhs.float });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.float < rhs.float };
 }
 fn lowerEqualFloat(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.float <= rhs.float });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.float <= rhs.float };
 }
 fn greaterFloat(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.float > rhs.float });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.float > rhs.float };
 }
 fn greaterEqualFloat(self: *VM) void {
     const rhs = self.pop();
-    const lhs = self.pop();
-    self.push(.{ .bool = lhs.float >= rhs.float });
+    const lhs = self.top();
+    lhs.* = .{ .bool = lhs.float >= rhs.float };
 }
 
 fn concat(self: *VM) void {
@@ -592,7 +592,7 @@ fn index(self: *VM) void {
 
 fn append(self: *VM) void {
     const value = self.pop();
-    var arr = &self.value_stack.stack[self.value_stack.stack_top - 1];
+    var arr = self.top();
 
     if (arr.array.cap >= arr.array.len + 1) {
         arr.array.items[arr.array.len] = value;
@@ -821,6 +821,10 @@ fn push(self: *VM, value: FlowValue) void {
 
 fn pop(self: *VM) FlowValue {
     return self.value_stack.pop();
+}
+
+fn top(self: *VM) *FlowValue {
+    return &self.value_stack.stack[self.value_stack.stack_top - 1];
 }
 
 fn instruction(self: *VM) OpCode {

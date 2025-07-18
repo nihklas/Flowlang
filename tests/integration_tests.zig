@@ -2,7 +2,6 @@ const cases_dir = "tests/cases";
 
 const IntegrationConfig = struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
     compiler: *std.Build.Step.Compile,
 };
 
@@ -14,7 +13,7 @@ pub fn addIntegrationTests(b: *std.Build, config: IntegrationConfig) void {
     const runner_mod = b.addModule("integration_test", .{
         .root_source_file = b.path("tests/test_runner.zig"),
         .target = config.target,
-        .optimize = config.optimize,
+        .optimize = .ReleaseSafe,
     });
 
     const runner_exe = b.addExecutable(.{
