@@ -131,7 +131,7 @@ pub fn buildCompiler(flow_builder: *Build, compile_options: CompilerOptions) *Co
     compiler_mod.addImport("runtime", runtime_mod);
 
     const compiler = flow_builder.addExecutable(.{
-        .name = "compiler",
+        .name = "flowc",
         .root_module = compiler_mod,
     });
 

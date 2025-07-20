@@ -60,7 +60,7 @@
         '';
         installPhase = ''
           mkdir -p $out/bin
-          mv zig-out/bin/compiler $out/bin/flowc
+          mv zig-out/bin/* $out/bin/
         '';
       };
     in {

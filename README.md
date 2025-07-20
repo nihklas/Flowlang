@@ -47,8 +47,9 @@ nix shell gitlab:flowlang/flowlang
 ```
 
 Otherwise, you need to install Flow from source, by cloning this Repository and
-running `zig build`. After that, the compiler is located at
-`zig-out/bin/compiler`.
+running `zig build -Doptimize=ReleaseFast`. After that, the compiler is located 
+at `zig-out/bin/compiler`. You can also add `-p <path>` to install the binary to
+an alternative location.
 
 ### Extensions
 
