@@ -101,7 +101,7 @@ pub fn buildCompiler(flow_builder: *Build, compile_options: CompilerOptions) *Co
     vm_options.addOption(RunMode, "run_mode", compile_options.vm.run_mode);
 
     const flow_std = flow_builder.addModule("flow_std", .{
-        .root_source_file = flow_builder.path("src/std/stdlib.zig"),
+        .root_source_file = flow_builder.path("src/std/root.zig"),
         .target = compile_options.target,
         .optimize = compile_options.optimize,
     });

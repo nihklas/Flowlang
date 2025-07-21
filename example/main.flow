@@ -1,0 +1,20 @@
+const input = readline("Enter however many integers you like, separated by a space:");
+const list = split(input, " ");
+const lazy_sum = sum(list);
+print("Sum of your input is: " . lazy_sum());
+
+func sum(list: []string) func() int {
+    return func() use (list) int {
+        var result = 0;
+        for var i = 0; i < len(list); i += 1 {
+            const value = intval(list[i]);
+            if value == null {
+                print("'" . list[i] . "' could not be converted to an integer");
+                continue;
+            }
+            result += value;
+        }
+        return result;
+    };
+}
+

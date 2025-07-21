@@ -198,13 +198,18 @@ fn analyseExpr(self: *Sema, expr: *const Expr) void {
                 if (arr.len == 0) {
                     self.putType(expr, .{ .order = 1, .type = .null });
                 } else {
-                    const first_entry = self.getType(arr[0]).?;
-                    self.putType(expr, .{ .order = first_entry.order + 1, .type = first_entry.type });
+                    const inner_type = for (arr) |value| {
+                        if (self.getType(value)) |t| {
+                            break t;
+                        }
+                    } else return;
+
+                    self.putType(expr, .{ .order = inner_type.order + 1, .type = inner_type.type });
 
                     for (1..arr.len) |idx| {
                         const value_type = self.getType(arr[idx]).?;
-                        if (!first_entry.equals(&value_type)) {
-                            self.pushError(TypeError.UnexpectedType, arr[idx].getToken(), .{ first_entry, value_type });
+                        if (!inner_type.equals(&value_type)) {
+                            self.pushError(TypeError.UnexpectedType, arr[idx].getToken(), .{ inner_type, value_type });
                         }
                     }
                 }
