@@ -22,7 +22,7 @@ tests:
     - nix
   script:
     - nix develop .#pipeline --command bash -c "zig build unit-test --summary all"
-    - nix develop .#pipeline --command bash -c "zig build integration -Dintegration-verbose"
+    - nix develop .#pipeline --command bash -c "zig build integration -Dgc-stress -Dintegration-verbose"
   cache:
     key: build-cache
     paths:
