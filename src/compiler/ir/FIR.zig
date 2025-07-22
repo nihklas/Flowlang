@@ -278,7 +278,6 @@ fn traverseHoistedStmt(self: *FIR, stmt: *ast.Stmt) ?usize {
 
             self.putVariableHoisted(
                 function.token.lexeme,
-                null,
                 .function(self.arena(), function.ret_type.type, param_types),
             );
             return self.nodes.items.len - 1;
@@ -749,8 +748,8 @@ fn updateLocalStack(self: *FIR) void {
     self.locals_stack = &self.stack_list.items[self.stack_list.items.len - 1];
 }
 
-fn putVariableHoisted(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
-    self.putVariableRaw(name, expr, var_type, true);
+fn putVariableHoisted(self: *FIR, name: []const u8, var_type: FlowType) void {
+    self.putVariableRaw(name, null, var_type, true);
 }
 
 fn putVariable(self: *FIR, name: []const u8, expr: ?usize, var_type: FlowType) void {
