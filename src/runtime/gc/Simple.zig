@@ -230,7 +230,6 @@ fn sweep(self: *GC) void {
 
         const buf = @as([*]u8, @ptrFromInt(entry.key_ptr.*));
         self.allocator().rawFree(buf[0..obj.len], obj.alignment, @returnAddress());
-        _ = self.managed_objects.remove(entry.key_ptr.*);
     }
 }
 
