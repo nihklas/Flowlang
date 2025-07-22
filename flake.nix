@@ -9,7 +9,7 @@
   outputs = {
     nixpkgs,
     zls,
-    ...
+    self,
   }: let
     systems = ["aarch64-darwin" "x86_64-linux"];
     eachSystem = function:
@@ -26,10 +26,16 @@
       ...
     }: {
       default = pkgs.mkShellNoCC {
-        packages = [
-          zls.packages.${system}.default
-          pkgs.zig
-        ] ++ (if system == "x86_64-linux" then [pkgs.valgrind] else []);
+        packages =
+          [
+            zls.packages.${system}.default
+            pkgs.zig
+          ]
+          ++ (
+            if system == "x86_64-linux"
+            then [pkgs.valgrind]
+            else []
+          );
       };
 
       pipeline = pkgs.mkShellNoCC {
@@ -40,20 +46,38 @@
     packages = eachSystem ({
       pkgs,
       target,
-      ...
-    }: {
-      default = pkgs.stdenvNoCC.mkDerivation {
-        name = "flowc";
+      system,
+    }: let
+      defaultConfig = {
+        name,
+        mode,
+      }: {
+        name = name;
         src = ./.;
         nativeBuildInputs = [pkgs.zig];
         buildPhase = ''
-          zig build -Doptimize=ReleaseSafe -Dtarget=${target} --global-cache-dir "$(mktemp -d)"
+          zig build -Doptimize=${mode} -Dtarget=${target} --global-cache-dir "$(mktemp -d)"
         '';
         installPhase = ''
           mkdir -p $out/bin
           mv zig-out/bin/compiler $out/bin/flowc
         '';
       };
+    in {
+      safe = pkgs.stdenvNoCC.mkDerivation (defaultConfig {
+        name = "flow-safe";
+        mode = "ReleaseSafe";
+      });
+      fast = pkgs.stdenvNoCC.mkDerivation (defaultConfig {
+        name = "flow-fast";
+        mode = "ReleaseFast";
+      });
+      small = pkgs.stdenvNoCC.mkDerivation (defaultConfig {
+        name = "flow-small";
+        mode = "ReleaseSmall";
+      });
+
+      default = self.packages.${system}.fast;
     });
   };
 }
