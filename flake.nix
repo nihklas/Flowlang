@@ -1,14 +1,10 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-
-    zls.url = "github:nihklas/zls/0.14.0";
-    zls.inputs.nixpkgs.follows = "nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs = {
     nixpkgs,
-    zls,
     self,
   }: let
     systems = ["aarch64-darwin" "x86_64-linux"];
@@ -28,8 +24,8 @@
       default = pkgs.mkShellNoCC {
         packages =
           [
-            zls.packages.${system}.default
-            pkgs.zig
+            pkgs.zls
+            pkgs.zig_0_14
           ]
           ++ (
             if system == "x86_64-linux"
@@ -39,7 +35,7 @@
       };
 
       pipeline = pkgs.mkShellNoCC {
-        packages = [pkgs.zig];
+        packages = [pkgs.zig_0_14];
       };
     });
 
@@ -54,7 +50,7 @@
       }: {
         name = name;
         src = ./.;
-        nativeBuildInputs = [pkgs.zig];
+        nativeBuildInputs = [pkgs.zig_0_14];
         buildPhase = ''
           zig build -Doptimize=${mode} -Dtarget=${target} --global-cache-dir "$(mktemp -d)"
         '';
