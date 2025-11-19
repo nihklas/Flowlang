@@ -111,7 +111,7 @@ pub fn compile(gpa: Allocator, flow_source: []const u8, cli_opts: cli.Options) !
 }
 
 fn dump(output: []const u8) !void {
-    try std.io.getStdOut().writeAll(output);
+    try std.fs.File.stdin().writeAll(output);
 }
 
 fn readFile(alloc: Allocator, path: []const u8) ![]const u8 {

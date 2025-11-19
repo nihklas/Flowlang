@@ -80,7 +80,7 @@ pub const OpCode = enum(u8) {
         return @intFromEnum(op);
     }
 
-    pub fn format(self: OpCode, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: OpCode, writer: *std.Io.Writer) !void {
         try writer.writeAll("OP_");
         const name = @tagName(self);
         for (name) |c| {

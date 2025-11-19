@@ -85,7 +85,7 @@ fn loadConstants(self: *VM) void {
                 self.ip += len;
             },
             .constants_done => break,
-            else => panic("Illegal Instruction at {x:0>4}: {}\n", .{ self.ip, op }),
+            else => panic("Illegal Instruction at {x:0>4}: {f}\n", .{ self.ip, op }),
         }
     }
 }
@@ -477,7 +477,7 @@ fn concat(self: *VM) void {
     const rhs = self.pop();
     const lhs = self.pop();
 
-    const result = std.fmt.allocPrint(self.gc, "{}{}", .{ lhs, rhs }) catch oom();
+    const result = std.fmt.allocPrint(self.gc, "{f}{f}", .{ lhs, rhs }) catch oom();
     self.pushValue(.{ .string = result });
 }
 
@@ -776,7 +776,7 @@ fn instruction(self: *VM) OpCode {
         self.value_stack.dump();
     }
     if (comptime debug_options.bytecode) {
-        std.debug.print("{x:0>4} {}\n", .{ self.ip, op });
+        std.debug.print("{x:0>4} {f}\n", .{ self.ip, op });
     }
 
     return op;
@@ -812,10 +812,10 @@ const FlowValueRef = union(enum) {
         };
     }
 
-    pub fn format(self: FlowValueRef, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: FlowValueRef, writer: *std.Io.Writer) !void {
         switch (self) {
-            .direct => |v| try writer.print("{}", .{v}),
-            .pointer => |p| try writer.print("{}", .{p.*}),
+            .direct => |v| try writer.print("{f}", .{v}),
+            .pointer => |p| try writer.print("{f}", .{p.*}),
         }
     }
 };

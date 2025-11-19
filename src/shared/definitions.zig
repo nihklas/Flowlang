@@ -145,7 +145,7 @@ pub const FlowType = struct {
         return true;
     }
 
-    pub fn format(self: FlowType, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: FlowType, writer: *std.Io.Writer) !void {
         for (0..self.order) |_| {
             try writer.writeAll("[]");
         }
@@ -155,12 +155,12 @@ pub const FlowType = struct {
                 if (i > 0) {
                     try writer.writeAll(", ");
                 }
-                try writer.print("{}", .{arg});
+                try writer.print("{f}", .{arg});
             }
             try writer.writeAll(")");
 
             if (!self.function_type.ret_type.isNull()) {
-                try writer.print(" {}", .{self.function_type.ret_type});
+                try writer.print(" {f}", .{self.function_type.ret_type});
             }
 
             return;
@@ -272,10 +272,10 @@ pub const FlowValue = union(enum) {
         };
     }
 
-    pub fn format(self: FlowValue, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: FlowValue, writer: *std.Io.Writer) !void {
         switch (self) {
             .null => try writer.writeAll("null"),
-            .bool => try writer.print("{}", .{self.bool}),
+            .bool => try writer.print("{any}", .{self.bool}),
             .int => try writer.print("{d}", .{self.int}),
             .float => try writer.print("{d}", .{self.float}),
             .string => try writer.print("{s}", .{self.string}),
@@ -284,7 +284,7 @@ pub const FlowValue = union(enum) {
             .array => {
                 try writer.writeAll("[");
                 for (self.array.items[0..self.array.len], 0..) |item, i| {
-                    try writer.print("{}", .{item});
+                    try writer.print("{f}", .{item});
                     if (i < self.array.len - 1) {
                         try writer.writeAll(", ");
                     }

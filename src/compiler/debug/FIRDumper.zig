@@ -2,7 +2,7 @@ pub fn dump(writer: anytype, fir: *const FIR) WriterError!void {
     if (fir.nodes.items.len == 0) return;
 
     for (fir.constants.items, 0..) |constant, idx| {
-        try writer.print("Constant: <{d}> | {s} = {}\n", .{ idx, @tagName(constant), constant });
+        try writer.print("Constant: <{d}> | {s} = {f}\n", .{ idx, @tagName(constant), constant });
     }
     try writer.writeAll("\n");
 
@@ -49,7 +49,7 @@ fn dumpStmt(writer: anytype, fir: *const FIR, node_idx: usize, depth: usize) Wri
 fn dumpExpr(writer: anytype, fir: *const FIR, expr_idx: usize, depth: usize) WriterError!void {
     const expr = fir.exprs.items[expr_idx];
     switch (expr.op) {
-        .builtin_fn => try writer.print("{}", .{fir.constants.items[expr.operands[0]]}),
+        .builtin_fn => try writer.print("{f}", .{fir.constants.items[expr.operands[0]]}),
         .literal => try writer.print("<{d}>", .{expr.operands[0]}),
         .true => try writer.writeAll("true"),
         .false => try writer.writeAll("false"),

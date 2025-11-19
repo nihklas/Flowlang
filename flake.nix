@@ -24,8 +24,8 @@
       default = pkgs.mkShellNoCC {
         packages =
           [
-            pkgs.zls
-            pkgs.zig_0_14
+            pkgs.zls_0_15
+            pkgs.zig_0_15
           ]
           ++ (
             if system == "x86_64-linux"
@@ -35,7 +35,7 @@
       };
 
       pipeline = pkgs.mkShellNoCC {
-        packages = [pkgs.zig_0_14];
+        packages = [pkgs.zig_0_15];
       };
     });
 
@@ -50,7 +50,7 @@
       }: {
         name = name;
         src = ./.;
-        nativeBuildInputs = [pkgs.zig_0_14];
+        nativeBuildInputs = [pkgs.zig_0_15];
         buildPhase = ''
           zig build -Doptimize=${mode} -Dtarget=${target} --global-cache-dir "$(mktemp -d)"
         '';

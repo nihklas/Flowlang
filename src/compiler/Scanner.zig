@@ -13,9 +13,9 @@ pub fn scan(alloc: Allocator, input: []const u8) ![]const Token {
     var scanner: Scanner = .{
         .input = input,
         .alloc = alloc,
-        .tokens = .init(alloc),
+        .tokens = .empty,
     };
-    errdefer scanner.tokens.deinit();
+    errdefer scanner.tokens.deinit(alloc);
 
     scanner.scanTokens();
 
@@ -23,7 +23,7 @@ pub fn scan(alloc: Allocator, input: []const u8) ![]const Token {
         return error.SyntaxError;
     }
 
-    return scanner.tokens.toOwnedSlice() catch oom();
+    return scanner.tokens.toOwnedSlice(alloc) catch oom();
 }
 
 fn scanTokens(self: *Scanner) void {
@@ -33,12 +33,12 @@ fn scanTokens(self: *Scanner) void {
         self.nextToken();
     }
 
-    self.tokens.append(.{
+    self.appendToken(.{
         .type = .EOF,
         .lexeme = "",
         .line = self.line,
         .column = self.column,
-    }) catch oom();
+    });
 }
 
 fn nextToken(self: *Scanner) void {
@@ -208,21 +208,25 @@ fn isAtEnd(self: *Scanner) bool {
 
 fn makeToken(self: *Scanner, token_type: Token.Type) void {
     const lexeme = self.input[self.start..self.current];
-    self.tokens.append(.{
+    self.appendToken(.{
         .type = token_type,
         .lexeme = lexeme,
         .line = self.line,
         .column = self.lexeme_column,
-    }) catch oom();
+    });
 }
 
 fn makeTokenWithValue(self: *Scanner, token_type: Token.Type, value: []const u8) void {
-    self.tokens.append(.{
+    self.appendToken(.{
         .type = token_type,
         .lexeme = value,
         .line = self.line,
         .column = self.lexeme_column,
-    }) catch oom();
+    });
+}
+
+fn appendToken(self: *Scanner, token: Token) void {
+    self.tokens.append(self.alloc, token) catch oom();
 }
 
 test "scan variable with string, constant with float" {

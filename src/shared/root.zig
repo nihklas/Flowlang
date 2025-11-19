@@ -7,8 +7,7 @@ pub const debug = struct {
 };
 
 pub fn oom() noreturn {
-    std.io.getStdErr().writeAll("Out Of Memory! Proceeding to panic") catch {};
-    std.debug.panic("OOM", .{});
+    std.debug.panic("Out Of Memory! Proceeding to panic", .{});
 }
 
 pub const builtins: std.StaticStringMap(definitions.BuiltinFunction) = blk: {

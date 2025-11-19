@@ -29,7 +29,7 @@ fn dumpStmt(writer: anytype, stmt: *const ast.Stmt, depth: usize) WriterError!vo
             try writer.print("Stmt '{s}'", .{variable.name.lexeme});
 
             if (variable.type_hint) |type_hint| {
-                try writer.print(" '{}'", .{type_hint.type});
+                try writer.print(" '{f}'", .{type_hint.type});
             }
 
             try writer.writeAll("]\n");
@@ -150,7 +150,7 @@ fn dumpExpr(writer: anytype, expr: *const ast.Expr, depth: usize) WriterError!vo
             try dumpExpr(writer, append.value, depth + 1);
         },
         .function => |function| {
-            try writer.print("(Function Expr '{}')\n", .{function.ret_type.type});
+            try writer.print("(Function Expr '{f}')\n", .{function.ret_type.type});
 
             try writeIndent(writer, depth + 1);
             try writer.writeAll("(Parameters)\n");

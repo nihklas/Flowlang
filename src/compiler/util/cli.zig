@@ -54,7 +54,10 @@ pub fn parse() Options {
         } else if (std.mem.eql(u8, argument, "--help")) {
             printHelpAndQuit(0);
         } else {
-            std.io.getStdErr().writer().print("Unrecognized option: {s}\n\n", .{argument}) catch {};
+            var buf: [128]u8 = undefined;
+            var writer = std.fs.File.stderr().writer(&buf).interface;
+            writer.print("Unrecognized option: {s}\n\n", .{argument}) catch {};
+            writer.flush() catch {};
             printHelpAndQuit(1);
         }
     }
@@ -96,7 +99,7 @@ pub fn printHelpAndQuit(exit_code: u8) noreturn {
         \\
     ;
 
-    std.io.getStdErr().writeAll(help) catch {};
+    std.fs.File.stderr().writeAll(help) catch {};
 
     std.posix.exit(exit_code);
 }

@@ -68,7 +68,7 @@ pub const string: BuiltinFunction = .{
 
 fn _string(gc: Allocator, args: []FlowValue) FlowValue {
     assert(args.len == 1);
-    const str = std.fmt.allocPrint(gc, "{}", .{args[0]}) catch oom();
+    const str = std.fmt.allocPrint(gc, "{f}", .{args[0]}) catch oom();
     return .{ .string = str };
 }
 

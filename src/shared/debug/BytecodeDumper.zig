@@ -26,7 +26,7 @@ fn runDump(self: *Dumper) void {
             .constant => {
                 const idx = self.byte();
                 const value = self.constants[idx];
-                self.printInstruction("OP_CONSTANT", "{d: <10}{}", .{ idx, value });
+                self.printInstruction("OP_CONSTANT", "{d: <10}{f}", .{ idx, value });
             },
             .function => {
                 defer self.ip += 2;
@@ -138,7 +138,7 @@ fn constantInstruction(self: *Dumper, op: []const u8, flow_type: enum { int, flo
             self.ip += len;
         },
     }
-    self.printInstruction(op, "{d: <10}{}", .{ self.constant_counter, self.constants[self.constant_counter] });
+    self.printInstruction(op, "{d: <10}{f}", .{ self.constant_counter, self.constants[self.constant_counter] });
 }
 
 fn instruction(self: *Dumper) OpCode {

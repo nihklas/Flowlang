@@ -552,27 +552,27 @@ fn getType(self: *Sema, expr: *const Expr) ?FlowType {
 
 fn pushError(self: *Sema, comptime err: SemaError, token: Token, args: anytype) void {
     const fmt = switch (err) {
-        TypeError.EqualityCheckOfUnequalTypes => "Operands of Equality-Check (== and !=) have to be of the same type, got '{}' and '{}'",
-        TypeError.ArithmeticWithNonNumeric => "Operand of Arithmetic Operations has to be either int or float, got '{}'",
-        TypeError.ArithmeticWithUnequalTypes => "Operands of Arithmetic Operations have to be of the same numeric type, got '{}' and '{}'",
-        TypeError.NegateWithNonNumeric => "Operand of Negate Operations has to be either int or float, got '{}'",
+        TypeError.EqualityCheckOfUnequalTypes => "Operands of Equality-Check (== and !=) have to be of the same type, got '{f}' and '{f}'",
+        TypeError.ArithmeticWithNonNumeric => "Operand of Arithmetic Operations has to be either int or float, got '{f}'",
+        TypeError.ArithmeticWithUnequalTypes => "Operands of Arithmetic Operations have to be of the same numeric type, got '{f}' and '{f}'",
+        TypeError.NegateWithNonNumeric => "Operand of Negate Operations has to be either int or float, got '{f}'",
         TypeError.NotACallable => "'{s}' is not a callable",
         TypeError.NotAssignable => "'{s}' is not assignable. Can only assign to Variables, got '{s}'",
-        TypeError.UnexpectedType => "Unexpected type, expected '{}', got '{}'",
+        TypeError.UnexpectedType => "Unexpected type, expected '{f}', got '{f}'",
 
         VariableError.UnresolvableType => "Type of Variable could not be resolved. Consider adding an explicit Typehint",
         VariableError.UnknownVariable => "Variable '{s}' is not defined",
         VariableError.VariableAlreadyExists => "Variable '{s}' already exists",
         VariableError.ConstantMutation => "Constant '{s}' cannot be modified",
         VariableError.ConstantWithoutValue => "Constant '{s}' must have an initial value",
-        VariableError.IndexOnNonArray => "Can only index on arrays, got '{}'",
-        VariableError.IndexNotAnInt => "Index has to be an integer, got '{}'",
-        VariableError.AppendOnNonArray => "Can only append to arrays, got '{}'",
+        VariableError.IndexOnNonArray => "Can only index on arrays, got '{f}'",
+        VariableError.IndexNotAnInt => "Index has to be an integer, got '{f}'",
+        VariableError.AppendOnNonArray => "Can only append to arrays, got '{f}'",
 
         ContextError.NotInALoop => "'{s}' is only allowed inside a loop",
         ContextError.NotInAFunction => "'{s}' is only allowed inside a function",
 
-        FunctionError.ArgumentTypeMismatch => "Unexpected argument type, expected '{}', got '{}'",
+        FunctionError.ArgumentTypeMismatch => "Unexpected argument type, expected '{f}', got '{f}'",
         FunctionError.ArgumentCountMismatch => "Argument count mismatch, found {d} but expected {d}",
     };
 

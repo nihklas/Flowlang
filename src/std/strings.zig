@@ -62,7 +62,6 @@ fn _charAt(gc: Allocator, args: []FlowValue) FlowValue {
     assert(args.len == 2);
     assert(args[0] == .string);
     assert(args[1] == .int);
-    std.debug.print("{}\n", .{args[1].int});
     assert(args[1].int >= 0 and args[1].int < std.math.maxInt(usize));
 
     const str = args[0].string;

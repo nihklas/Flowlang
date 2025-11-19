@@ -96,7 +96,7 @@ pub const ReservedKeywords = std.StaticStringMap(Type).initComptime(.{
     .{ "use", .use },
 });
 
-pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
     try writer.print("Token[{{{s}}} \"{s}\" {d}/{d}]", .{
         @tagName(self.type),
         self.lexeme,

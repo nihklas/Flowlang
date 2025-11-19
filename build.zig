@@ -187,9 +187,11 @@ fn buildUnitTests(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin
 
     // Unit tests in compiler and runtime
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/testing.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/testing.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     exe_unit_tests.root_module.addImport("shared", buildShared(b, .{ .target = target, .optimize = optimize }));
     exe_unit_tests.root_module.addOptions("testing_options", test_options);

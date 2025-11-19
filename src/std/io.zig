@@ -5,7 +5,10 @@ pub const print: BuiltinFunction = .{
 };
 
 fn _print(_: Allocator, args: []FlowValue) FlowValue {
-    stdout.print("{}\n", .{args[0]}) catch |err| panic("IO Error: {s}", .{@errorName(err)});
+    var buffer: [1024]u8 = undefined;
+    var writer = stdout.writer(&buffer).interface;
+    writer.print("{f}\n", .{args[0]}) catch |err| panic("IO Error: {s}", .{@errorName(err)});
+    writer.flush() catch |err| panic("IO Error: {s}", .{@errorName(err)});
     return .null;
 }
 
@@ -17,12 +20,23 @@ pub const readline: BuiltinFunction = .{
 
 fn _readline(gc_alloc: Allocator, args: []FlowValue) FlowValue {
     const prompt = args[0].string;
-    stdout.writeAll(prompt) catch |err| panic("IO Error: {s}", .{@errorName(err)});
-    stdout.writeByte(' ') catch |err| panic("IO Error: {s}", .{@errorName(err)});
     var buf: [1024]u8 = undefined;
-    const read = stdin.readUntilDelimiter(&buf, '\n') catch |err| panic("IO Error: {s}", .{@errorName(err)});
+    var writer = stdout.writer(&buf).interface;
 
-    return .{ .string = gc_alloc.dupe(u8, read) catch oom() };
+    writer.writeAll(prompt) catch |err| panic("IO Error: {s}", .{@errorName(err)});
+    writer.writeByte(' ') catch |err| panic("IO Error: {s}", .{@errorName(err)});
+    writer.flush() catch |err| panic("IO Error: {s}", .{@errorName(err)});
+
+    // we wrote and flushed everything, so we can reuse the buffer
+    buf = undefined;
+    var reader = stdin.reader(&buf).interface;
+
+    var input = std.Io.Writer.Allocating.initCapacity(gc_alloc, 1024) catch oom();
+    defer input.deinit();
+
+    _ = reader.streamDelimiter(&input.writer, '\n') catch |err| panic("IO Error: {s}", .{@errorName(err)});
+
+    return .{ .string = gc_alloc.dupe(u8, input.written()) catch oom() };
 }
 
 pub const readfile: BuiltinFunction = .{
@@ -53,13 +67,16 @@ pub const writefile: BuiltinFunction = .{
 fn _writefile(_: Allocator, args: []FlowValue) FlowValue {
     const path = args[0].string;
     const content = args[1];
+    var buffer: [1024]u8 = undefined;
 
     const cwd = std.fs.cwd();
 
     var file = cwd.createFile(path, .{}) catch |err| panic("Error on File Write: {s}", .{@errorName(err)});
     defer file.close();
 
-    file.writer().print("{}", .{content}) catch |err| panic("Error on File Write: {s}", .{@errorName(err)});
+    var writer = file.writer(&buffer).interface;
+    writer.print("{f}", .{content}) catch |err| panic("Error on File Write: {s}", .{@errorName(err)});
+    writer.flush() catch |err| panic("Error on File Write: {s}", .{@errorName(err)});
 
     return .null;
 }
@@ -68,8 +85,8 @@ const BuiltinFunction = @import("shared").definitions.BuiltinFunction;
 const FlowValue = @import("shared").definitions.FlowValue;
 const oom = @import("shared").oom;
 
-const stdout = std.io.getStdOut().writer();
-const stdin = std.io.getStdIn().reader();
+const stdout = std.fs.File.stdout();
+const stdin = std.fs.File.stdin();
 
 const std = @import("std");
 const assert = std.debug.assert;

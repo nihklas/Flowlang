@@ -55,9 +55,15 @@ fn getLineAt(line_num: usize) ?[]const u8 {
     return line_iter.next();
 }
 
+var stderr_buf: [1024]u8 = undefined;
+var stderr =
+    if (builtin.is_test and !testing_options.use_stderr)
+        std.io.Writer.Discarding.init(&stderr_buf).writer
+    else
+        std.fs.File.stderr().writer(&stderr_buf).interface;
+
 const std = @import("std");
 const assert = std.debug.assert;
 const builtin = @import("builtin");
 const testing_options = @import("testing_options");
-const stderr = if (builtin.is_test and !testing_options.use_stderr) std.io.null_writer else std.io.getStdErr().writer();
 const Token = @import("../ir/Token.zig");

@@ -12,11 +12,11 @@ pub fn createAST(arena: Allocator, tokens: []const Token) ![]const *Stmt {
 }
 
 fn parse(self: *Parser) ![]const *Stmt {
-    var stmt_list: std.ArrayList(*Stmt) = .init(self.arena);
+    var stmt_list: std.ArrayList(*Stmt) = .empty;
 
     while (!self.isAtEnd()) {
         if (self.declaration()) |stmt| {
-            stmt_list.append(stmt) catch oom();
+            stmt_list.append(self.arena, stmt) catch oom();
         } else |_| {
             self.has_error = true;
             self.recover();
@@ -29,7 +29,7 @@ fn parse(self: *Parser) ![]const *Stmt {
         return error.ParseError;
     }
 
-    return stmt_list.toOwnedSlice() catch oom();
+    return stmt_list.toOwnedSlice(self.arena) catch oom();
 }
 
 fn declaration(self: *Parser) ParserError!*Stmt {
@@ -92,12 +92,12 @@ fn funcDeclaration(self: *Parser) ParserError!*Stmt {
 fn parameters(self: *Parser) ParserError![]*Stmt {
     if (self.check(.@")")) return &.{};
 
-    var params: std.ArrayList(*Stmt) = .init(self.arena);
-    defer params.deinit();
+    var params: std.ArrayList(*Stmt) = .empty;
+    defer params.deinit(self.arena);
 
     while (!self.check(.@")") and !self.isAtEnd()) {
         if (self.param()) |parameter| {
-            params.append(parameter) catch oom();
+            params.append(self.arena, parameter) catch oom();
         }
 
         if (self.match(.@",") == null) {
@@ -105,7 +105,7 @@ fn parameters(self: *Parser) ParserError![]*Stmt {
         }
     }
 
-    return params.toOwnedSlice() catch oom();
+    return params.toOwnedSlice(self.arena) catch oom();
 }
 
 fn param(self: *Parser) ?*Stmt {
@@ -161,16 +161,16 @@ fn statement(self: *Parser) ParserError!*Stmt {
 }
 
 fn block(self: *Parser) ParserError![]*Stmt {
-    var stmt_list: std.ArrayList(*Stmt) = .init(self.arena);
+    var stmt_list: std.ArrayList(*Stmt) = .empty;
 
     while (!self.check(.@"}") and !self.isAtEnd()) {
         const stmt = try self.declaration();
-        stmt_list.append(stmt) catch oom();
+        stmt_list.append(self.arena, stmt) catch oom();
     }
 
     try self.consume(.@"}", "Expected '}' at the end of block");
 
-    return stmt_list.toOwnedSlice() catch oom();
+    return stmt_list.toOwnedSlice(self.arena) catch oom();
 }
 
 fn ifStatement(self: *Parser) ParserError!*Stmt {
@@ -256,20 +256,20 @@ fn forStatement(self: *Parser) ParserError!*Stmt {
     try self.consume(.@"{", "Expected '{' before loop body");
     const body = try self.block();
 
-    var outer_scope: std.ArrayList(*Stmt) = .init(self.arena);
+    var outer_scope: std.ArrayList(*Stmt) = .empty;
 
     if (first_expr) |initializer| {
-        outer_scope.append(initializer) catch oom();
+        outer_scope.append(self.arena, initializer) catch oom();
     }
 
     const loop = Stmt.createLoop(self.arena, condition, body);
-    outer_scope.append(loop) catch oom();
+    outer_scope.append(self.arena, loop) catch oom();
 
     if (maybe_increment) |increment| {
         loop.loop.inc = increment;
     }
 
-    const outer_scope_stmts = outer_scope.toOwnedSlice() catch oom();
+    const outer_scope_stmts = outer_scope.toOwnedSlice(self.arena) catch oom();
     return Stmt.createBlock(self.arena, outer_scope_stmts);
 }
 
@@ -401,16 +401,16 @@ fn call(self: *Parser) ParserError!*Expr {
 
     while (self.match(.@"(")) |_| {
         const params: []*Expr = blk: {
-            var params_list: std.ArrayList(*Expr) = .init(self.arena);
-            defer params_list.deinit();
+            var params_list: std.ArrayList(*Expr) = .empty;
+            defer params_list.deinit(self.arena);
 
             while (!self.check(.@")") and !self.isAtEnd()) {
-                params_list.append(try self.expression()) catch oom();
+                params_list.append(self.arena, try self.expression()) catch oom();
 
                 if (self.match(.@",") == null) break;
             }
 
-            break :blk params_list.toOwnedSlice() catch oom();
+            break :blk params_list.toOwnedSlice(self.arena) catch oom();
         };
 
         try self.consume(.@")", "Expected ')' after parameters");
@@ -441,16 +441,16 @@ fn primary(self: *Parser) ParserError!*Expr {
 
     if (self.match(.@"[")) |open_bracket| {
         const items: []*Expr = blk: {
-            var items_list: std.ArrayList(*Expr) = .init(self.arena);
-            defer items_list.deinit();
+            var items_list: std.ArrayList(*Expr) = .empty;
+            defer items_list.deinit(self.arena);
 
             while (!self.check(.@"]") and !self.isAtEnd()) {
-                items_list.append(try self.expression()) catch oom();
+                items_list.append(self.arena, try self.expression()) catch oom();
 
                 if (self.match(.@",") == null) break;
             }
 
-            break :blk items_list.toOwnedSlice() catch oom();
+            break :blk items_list.toOwnedSlice(self.arena) catch oom();
         };
         try self.consume(.@"]", "Expected ']' after array literal");
 
@@ -534,14 +534,14 @@ fn typeHintType(self: *Parser) ?struct { Token, definitions.FlowType } {
         self.consume(.@"(", "Expected '(' after 'func'") catch return null;
 
         const params: []const definitions.FlowType = blk: {
-            var params_list: std.ArrayList(definitions.FlowType) = .init(self.arena);
-            defer params_list.deinit();
+            var params_list: std.ArrayList(definitions.FlowType) = .empty;
+            defer params_list.deinit(self.arena);
 
             while (!self.check(.@")") and !self.isAtEnd()) {
                 if (self.typeHintType()) |hint_type| {
-                    params_list.append(hint_type[1]) catch oom();
+                    params_list.append(self.arena, hint_type[1]) catch oom();
                 } else {
-                    error_reporter.reportError(self.peek(), "Expected typehint, got {}", .{self.peek()});
+                    error_reporter.reportError(self.peek(), "Expected typehint, got {f}", .{self.peek()});
                     self.has_error = true;
                     return null;
                 }
@@ -549,7 +549,7 @@ fn typeHintType(self: *Parser) ?struct { Token, definitions.FlowType } {
                 if (self.match(.@",") == null) break;
             }
 
-            break :blk params_list.toOwnedSlice() catch oom();
+            break :blk params_list.toOwnedSlice(self.arena) catch oom();
         };
         self.consume(.@")", "Expected ')' after parameter types") catch return null;
 
@@ -581,18 +581,18 @@ fn parseFunction(self: *Parser) ParserError!struct {
 
         try self.consume(.@"(", "Expected '(' after 'use'");
 
-        var closed_list: std.ArrayList(*Expr) = .init(self.arena);
-        defer closed_list.deinit();
+        var closed_list: std.ArrayList(*Expr) = .empty;
+        defer closed_list.deinit(self.arena);
 
         while (!self.check(.@")") and !self.isAtEnd()) {
-            closed_list.append(try self.expression()) catch oom();
+            closed_list.append(self.arena, try self.expression()) catch oom();
 
             if (self.match(.@",") == null) break;
         }
 
         try self.consume(.@")", "Expected ')' after parameters");
 
-        break :blk closed_list.toOwnedSlice() catch oom();
+        break :blk closed_list.toOwnedSlice(self.arena) catch oom();
     };
 
     const type_hint: ast.TypeHint = blk: {

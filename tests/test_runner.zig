@@ -229,11 +229,10 @@ fn workerFn(dir: std.fs.Dir, case_name: []const u8, compiler: []const u8, state:
     var timer = std.time.Timer.start() catch unreachable;
     defer state.setThreadTime(case_name, timer.read() / std.time.ns_per_ms);
 
-    var error_buf: std.ArrayListUnmanaged(u8) = .empty;
-    defer error_buf.deinit(state.alloc);
-    const error_writer = error_buf.writer(state.alloc);
+    var error_writer = std.Io.Writer.Allocating.init(state.alloc);
+    defer error_writer.deinit();
 
-    doTest(error_writer, dir, case_name, compiler, state) catch |err| {
+    doTest(&error_writer.writer, dir, case_name, compiler, state) catch |err| {
         const result: Result = switch (err) {
             TestError.TestFailed => .failure,
             else => .crash,
@@ -251,7 +250,7 @@ fn workerFn(dir: std.fs.Dir, case_name: []const u8, compiler: []const u8, state:
                 if (result == .failure) "failed" else "crashed",
             });
             printStdErr("\n======================================\n", .{});
-            printStdErr("{s}\n", .{error_buf.items});
+            printStdErr("{s}\n", .{error_writer.written()});
             if (result == .crash) {
                 printStdErr("{s}\n", .{@errorName(err)});
             }
@@ -266,7 +265,7 @@ const TestError = error{
     ExecutionInterrupted,
 };
 
-fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compiler: []const u8, state: *SharedState) !void {
+fn doTest(error_writer: *std.Io.Writer, dir: std.fs.Dir, case_name: []const u8, compiler: []const u8, state: *SharedState) !void {
     var file = try dir.openFile(case_name, .{});
     defer file.close();
 
@@ -384,14 +383,20 @@ fn doTest(error_writer: anytype, dir: std.fs.Dir, case_name: []const u8, compile
 }
 
 fn printStdOut(comptime fmt: []const u8, args: anytype) void {
-    stdout_writer.print(fmt, args) catch unreachable;
+    var buf: [1024]u8 = undefined;
+    var writer = std.fs.File.stdout().writer(&buf).interface;
+    writer.print(fmt, args) catch unreachable;
+    writer.flush() catch unreachable;
 }
 
 fn printStdErr(comptime fmt: []const u8, args: anytype) void {
-    stderr_writer.print(fmt, args) catch unreachable;
+    var buf: [1024]u8 = undefined;
+    var writer = std.fs.File.stderr().writer(&buf).interface;
+    writer.print(fmt, args) catch unreachable;
+    writer.flush() catch unreachable;
 }
 
-fn printTo(writer: anytype, comptime fmt: []const u8, args: anytype) void {
+fn printTo(writer: *std.Io.Writer, comptime fmt: []const u8, args: anytype) void {
     writer.print(fmt, args) catch unreachable;
 }
 
