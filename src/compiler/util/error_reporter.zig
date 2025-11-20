@@ -3,6 +3,9 @@ pub var colored_output: bool = true;
 
 pub fn reportError(token: Token, comptime fmt: []const u8, args: anytype) void {
     reportErrorFailing(token, fmt, args) catch {};
+
+    var stderr = &stderr_container.interface;
+    stderr.flush() catch unreachable;
 }
 
 fn reportErrorFailing(token: Token, comptime fmt: []const u8, args: anytype) !void {
@@ -62,7 +65,6 @@ fn writeError(comptime fmt: []const u8, args: anytype) void {
 
     var stderr = &stderr_container.interface;
     stderr.print(fmt, args) catch unreachable;
-    stderr.flush() catch unreachable;
 }
 
 var stderr_buf: [1024]u8 = undefined;
