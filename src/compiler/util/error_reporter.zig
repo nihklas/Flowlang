@@ -14,37 +14,37 @@ fn reportErrorFailing(token: Token, comptime fmt: []const u8, args: anytype) !vo
 }
 
 fn reportErrorFailingColored(token: Token, comptime fmt: []const u8, args: anytype) !void {
-    try stderr.writeAll("\x1b[1;31merror:\x1b[0m ");
-    try stderr.print(fmt, args);
-    try stderr.print(" at {d}:{d}\n", .{ token.line, token.column });
+    writeError("\x1b[1;31merror:\x1b[0m ", .{});
+    writeError(fmt, args);
+    writeError(" at {d}:{d}\n", .{ token.line, token.column });
 
     const line_text = getLineAt(token.line) orelse "";
-    try stderr.print("\x1b[34m{d: >4} |\x1b[0m {s}\n", .{ token.line, line_text });
-    try stderr.writeAll("       ");
+    writeError("\x1b[34m{d: >4} |\x1b[0m {s}\n", .{ token.line, line_text });
+    writeError("       ", .{});
 
     assert(token.column > 0);
     for (0..token.column - 1) |_| {
-        try stderr.writeByte(' ');
+        writeError(" ", .{});
     }
-    try stderr.writeAll("\x1b[36m^~~~~\x1b[0m Here\n");
-    try stderr.writeByte('\n');
+    writeError("\x1b[36m^~~~~\x1b[0m Here\n", .{});
+    writeError("\n", .{});
 }
 
 fn reportErrorFailingBasic(token: Token, comptime fmt: []const u8, args: anytype) !void {
-    try stderr.writeAll("error: ");
-    try stderr.print(fmt, args);
-    try stderr.print(" at {d}:{d}\n", .{ token.line, token.column });
+    writeError("error: ", .{});
+    writeError(fmt, args);
+    writeError(" at {d}:{d}\n", .{ token.line, token.column });
 
     const line_text = getLineAt(token.line) orelse "";
-    try stderr.print("{d: >4} | {s}\n", .{ token.line, line_text });
-    try stderr.writeAll("       ");
+    writeError("{d: >4} | {s}\n", .{ token.line, line_text });
+    writeError("       ", .{});
 
     assert(token.column > 0);
     for (0..token.column - 1) |_| {
-        try stderr.writeByte(' ');
+        writeError(" ", .{});
     }
-    try stderr.writeAll("^~~~~ Here\n");
-    try stderr.writeByte('\n');
+    writeError("^~~~~ Here\n", .{});
+    writeError("\n", .{});
 }
 
 fn getLineAt(line_num: usize) ?[]const u8 {
@@ -55,13 +55,18 @@ fn getLineAt(line_num: usize) ?[]const u8 {
     return line_iter.next();
 }
 
-var stderr_buf: [1024]u8 = undefined;
-var stderr =
-    if (builtin.is_test and !testing_options.use_stderr)
-        std.io.Writer.Discarding.init(&stderr_buf).writer
-    else
-        std.fs.File.stderr().writer(&stderr_buf).interface;
+fn writeError(comptime fmt: []const u8, args: anytype) void {
+    if (builtin.is_test and !testing_options.use_stderr) {
+        return;
+    }
 
+    var stderr = &stderr_container.interface;
+    stderr.print(fmt, args) catch unreachable;
+    stderr.flush() catch unreachable;
+}
+
+var stderr_buf: [1024]u8 = undefined;
+var stderr_container = std.fs.File.stderr().writer(&stderr_buf);
 const std = @import("std");
 const assert = std.debug.assert;
 const builtin = @import("builtin");
