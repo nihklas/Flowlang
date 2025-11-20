@@ -175,18 +175,19 @@ fn lessThan(_: @TypeOf(.{}), lhs: u64, rhs: u64) bool {
 }
 
 fn printStdOut(comptime fmt: []const u8, args: anytype) void {
-    stdout_writer.print(fmt, args) catch unreachable;
+    var buf: [1024]u8 = undefined;
+    var stdout = std.fs.File.stdout().writer(&buf);
+    var writer = &stdout.interface;
+    writer.print(fmt, args) catch unreachable;
+    writer.flush() catch unreachable;
 }
 
 fn printStdErr(comptime fmt: []const u8, args: anytype) void {
-    stderr_writer.print(fmt, args) catch unreachable;
-}
-
-fn printTo(writer: anytype, comptime fmt: []const u8, args: anytype) void {
+    var buf: [1024]u8 = undefined;
+    var stderr = std.fs.File.stderr().writer(&buf);
+    var writer = &stderr.interface;
     writer.print(fmt, args) catch unreachable;
+    writer.flush() catch unreachable;
 }
-
-const stdout_writer = std.io.getStdOut().writer();
-const stderr_writer = std.io.getStdErr().writer();
 
 const std = @import("std");
