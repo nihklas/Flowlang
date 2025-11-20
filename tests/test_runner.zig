@@ -384,14 +384,16 @@ fn doTest(error_writer: *std.Io.Writer, dir: std.fs.Dir, case_name: []const u8, 
 
 fn printStdOut(comptime fmt: []const u8, args: anytype) void {
     var buf: [1024]u8 = undefined;
-    var writer = std.fs.File.stdout().writer(&buf).interface;
+    var stdout = std.fs.File.stdout().writer(&buf);
+    var writer = &stdout.interface;
     writer.print(fmt, args) catch unreachable;
     writer.flush() catch unreachable;
 }
 
 fn printStdErr(comptime fmt: []const u8, args: anytype) void {
     var buf: [1024]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buf).interface;
+    var stderr = std.fs.File.stderr().writer(&buf);
+    var writer = &stderr.interface;
     writer.print(fmt, args) catch unreachable;
     writer.flush() catch unreachable;
 }
