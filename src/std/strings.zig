@@ -31,7 +31,7 @@ fn _split(gc: Allocator, args: []FlowValue) FlowValue {
     assert(args[0] == .string);
     assert(args[1] == .string);
 
-    var arr = gc.alloc(FlowValue, args[0].string.len / 2) catch oom();
+    var arr = gc.alloc(FlowValue, (args[0].string.len / 2) + 1) catch oom();
 
     var iter = std.mem.splitSequence(u8, args[0].string, args[1].string);
 
