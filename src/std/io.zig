@@ -6,7 +6,8 @@ pub const print: BuiltinFunction = .{
 
 fn _print(_: Allocator, args: []FlowValue) FlowValue {
     var buffer: [1024]u8 = undefined;
-    var writer = stdout.writer(&buffer).interface;
+    var stdout_writer = stdout.writer(&buffer);
+    var writer = &stdout_writer.interface;
     writer.print("{f}\n", .{args[0]}) catch |err| panic("IO Error: {s}", .{@errorName(err)});
     writer.flush() catch |err| panic("IO Error: {s}", .{@errorName(err)});
     return .null;
@@ -21,7 +22,8 @@ pub const readline: BuiltinFunction = .{
 fn _readline(gc_alloc: Allocator, args: []FlowValue) FlowValue {
     const prompt = args[0].string;
     var buf: [1024]u8 = undefined;
-    var writer = stdout.writer(&buf).interface;
+    var stdout_writer = stdout.writer(&buf);
+    var writer = &stdout_writer.interface;
 
     writer.writeAll(prompt) catch |err| panic("IO Error: {s}", .{@errorName(err)});
     writer.writeByte(' ') catch |err| panic("IO Error: {s}", .{@errorName(err)});
@@ -29,7 +31,8 @@ fn _readline(gc_alloc: Allocator, args: []FlowValue) FlowValue {
 
     // we wrote and flushed everything, so we can reuse the buffer
     buf = undefined;
-    var reader = stdin.reader(&buf).interface;
+    var stdin_reader = stdin.reader(&buf);
+    var reader = &stdin_reader.interface;
 
     var input = std.Io.Writer.Allocating.initCapacity(gc_alloc, 1024) catch oom();
     defer input.deinit();
