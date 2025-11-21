@@ -70,7 +70,7 @@ pub const writefile: BuiltinFunction = .{
 fn _writefile(_: Allocator, args: []FlowValue) FlowValue {
     const path = args[0].string;
     const content = args[1];
-    var buffer: [1024]u8 = undefined;
+    var buffer: [4096]u8 = undefined;
 
     const cwd = std.fs.cwd();
 
