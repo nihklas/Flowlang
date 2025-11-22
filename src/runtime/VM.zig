@@ -474,10 +474,16 @@ fn greaterEqualFloat(self: *VM) void {
 }
 
 fn concat(self: *VM) void {
-    const rhs = self.pop();
-    const lhs = self.pop();
+    const lhs = self.top();
+    const rhs = self.topAt(1);
 
-    const result = std.fmt.allocPrint(self.gc, "{f}{f}", .{ lhs, rhs }) catch oom();
+    var aw = std.Io.Writer.Allocating.init(self.gpa);
+    defer aw.deinit();
+
+    aw.writer.print("{f}{f}", .{ rhs, lhs }) catch oom();
+    const result = self.gc.dupe(u8, aw.written()) catch oom();
+
+    self.popAmount(2);
     self.pushValue(.{ .string = result });
 }
 
@@ -765,7 +771,11 @@ fn popAmount(self: *VM, count: u8) void {
 }
 
 fn top(self: *VM) FlowValueRef {
-    return self.value_stack.at(0);
+    return self.topAt(0);
+}
+
+fn topAt(self: *VM, idx: u8) FlowValueRef {
+    return self.value_stack.at(idx);
 }
 
 fn instruction(self: *VM) OpCode {
