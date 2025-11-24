@@ -2,7 +2,8 @@ test "Compiler" {
     _ = @import("compiler/Compiler.zig");
     _ = @import("compiler/Parser.zig");
     _ = @import("compiler/Scanner.zig");
-    _ = @import("compiler/Sema.zig");
+    _ = @import("compiler/sema/AstSema.zig");
+    _ = @import("compiler/sema/FirSema.zig");
     _ = @import("compiler/ir/Token.zig");
     _ = @import("compiler/ir/ast.zig");
     _ = @import("compiler/main.zig");
