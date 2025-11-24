@@ -59,16 +59,28 @@ pub fn compile(gpa: Allocator, flow_source: []const u8, cli_opts: cli.Options) !
         return null;
     }
 
-    var sema: Sema = .init(gpa, ast);
-    defer sema.deinit();
-    try sema.analyse();
+    var fir = fir: {
+        {
+            var sema: AstSema = .init(gpa, ast);
+            defer sema.deinit();
+            try sema.analyse();
+        }
+
+        var fir: FIR = .fromAST(gpa, ast);
+
+        {
+            var sema: FirSema = .init(gpa, &fir);
+            defer sema.deinit();
+            try sema.analyse();
+        }
+
+        break :fir fir;
+    };
+    defer fir.deinit();
 
     if (cli_opts.check) {
         return null;
     }
-
-    var fir: FIR = .fromAST(gpa, ast);
-    defer fir.deinit();
 
     var optimizer: Optimizer = .init(gpa, &fir);
     defer optimizer.deinit();
@@ -129,7 +141,8 @@ const Token = @import("ir/Token.zig");
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
 const Compiler = @import("Compiler.zig");
-const Sema = @import("Sema.zig");
+const AstSema = @import("sema/AstSema.zig");
+const FirSema = @import("sema/FirSema.zig");
 const FIR = @import("ir/FIR.zig");
 const Optimizer = @import("Optimizer.zig");
 

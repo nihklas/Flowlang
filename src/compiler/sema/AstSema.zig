@@ -729,7 +729,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
-const ast = @import("ir/ast.zig");
+const ast = @import("../ir/ast.zig");
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
 
@@ -737,6 +737,6 @@ const shared = @import("shared");
 const oom = shared.oom;
 const FlowType = shared.definitions.FlowType;
 const builtins = shared.builtins;
-const error_reporter = @import("util/error_reporter.zig");
+const error_reporter = @import("../util/error_reporter.zig");
 
-const Token = @import("ir/Token.zig");
+const Token = @import("../ir/Token.zig");

@@ -1,3 +1,7 @@
-const concatted = 42 . " is the number";
+func test() int {
+    print("This is all i do");
+}
 
-print(concatted);
+const retVal = test();
+
+print(retVal);
